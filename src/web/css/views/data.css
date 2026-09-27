@@ -1,0 +1,7 @@
+.v-data-icon { width: 30px; height: 30px; border-radius: 9px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; }
+.v-data-conn p { margin-top: 8px; }
+.v-data-persona { text-align: left; display: flex; flex-direction: column; gap: 6px; cursor: pointer; border: 2px solid transparent; }
+.v-data-persona.chosen { border-color: var(--accent); }
+.v-data-persona .avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--card-3); display: grid; place-items: center; font-weight: 700; }
+.v-data-pre { background: var(--card-2); border-radius: 10px; padding: 12px; font-size: 12px; overflow-x: auto; }
+.v-data-list { padding-left: 18px; margin: 8px 0 0; }

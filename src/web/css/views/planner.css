@@ -1,0 +1,13 @@
+.v-planner-grid { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 16px; align-items: start; }
+.v-planner-hero { display: flex; flex-direction: column; gap: 6px; }
+.v-planner-delta { font-size: 56px; font-weight: 700; letter-spacing: -0.03em; line-height: 1; }
+.v-planner-pred { margin-top: 6px; }
+.v-planner-event { display: flex; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--card-2); margin-bottom: 8px; align-items: flex-start; }
+.v-planner-event.removed { opacity: 0.5; text-decoration: line-through; }
+.v-planner-event.removed .btn { text-decoration: none; }
+.v-planner-swatch { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; color: #fff; flex: none; }
+.v-planner-event-body { flex: 1; min-width: 0; }
+.v-planner-title { font-weight: 600; }
+.v-planner-controls { margin-top: 6px; gap: 6px; }
+.v-planner-added { color: var(--status-good); font-weight: 600; }
+@media (max-width: 1200px) { .v-planner-grid { grid-template-columns: 1fr; } }

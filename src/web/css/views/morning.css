@@ -1,0 +1,33 @@
+.v-morning { display: flex; flex-direction: column; gap: 16px; }
+.v-morning-sources { gap: 8px; }
+.v-morning-hero { display: grid; grid-template-columns: 260px 250px minmax(0, 1fr); gap: 16px; align-items: start; }
+.v-morning-watch { display: flex; flex-direction: column; gap: 10px; min-height: 250px; }
+.v-morning-watch-face { display: flex; align-items: center; gap: 14px; padding: 8px 0; }
+.v-morning-watch-score { font-size: 56px; font-weight: 700; letter-spacing: -0.03em; line-height: 1; }
+.v-morning-watch-rating { font-weight: 700; font-size: 18px; }
+.v-morning-watch-rows { gap: 12px; color: var(--ink-secondary); }
+.v-morning-watch-rows span { display: inline-flex; align-items: center; gap: 4px; }
+.v-morning-watch-quote { margin-top: auto; color: var(--ink-muted); font-style: italic; }
+.v-morning-ring { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 250px; }
+.v-morning-delta { font-weight: 600; }
+.v-morning-causes { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.v-morning-causes.veiled .v-morning-why { min-height: 250px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
+.v-morning-why-text { font-size: 20px; color: var(--ink-secondary); margin: 0; }
+.v-morning-why-btn { font-size: 22px; padding: 14px 36px; border-radius: 14px; }
+.v-morning-stagger { animation: v-morning-in 0.45s ease both; }
+@keyframes v-morning-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.v-morning-cause .title { font-size: 15px; }
+.v-morning-evidence { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.v-morning-evidence-row { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--ink-secondary); }
+.v-morning-evidence-row .icon { color: var(--accent); margin-top: 2px; }
+.v-morning-spark { background: var(--card); border-radius: 8px; padding: 6px 4px 2px; }
+.v-morning-toggle { padding: 2px 6px; }
+.v-morning-sugg h3 { font-size: 18px; margin: 4px 0 6px; }
+.v-morning-sugg .eyebrow { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 700; opacity: 0.85; }
+.v-morning-sugg .btn-primary { background: #1B1F3B; border-color: #1B1F3B; color: #fff; }
+.v-morning-sugg .btn { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.35); color: inherit; }
+.v-morning-added { font-weight: 700; }
+.v-morning-tile .value { font-size: 24px; }
+.v-morning-nightfacts { margin-bottom: 8px; }
+.v-morning-footer { padding: 12px 18px; }
+@media (max-width: 1200px) { .v-morning-hero { grid-template-columns: 1fr 1fr; } .v-morning-causes { grid-column: span 2; } }

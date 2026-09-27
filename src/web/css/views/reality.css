@@ -1,0 +1,6 @@
+.v-reality-intro { display: flex; align-items: center; gap: 6px; }
+.v-reality-question { font-size: 17px; margin: 8px 0 10px; }
+.v-reality-evidence { gap: 6px; margin-bottom: 12px; }
+.v-reality-evidence .chip { white-space: normal; }
+.v-reality-shift { display: inline-flex; align-items: center; gap: 6px; }
+.v-reality-resolved .small { font-size: 13px; }

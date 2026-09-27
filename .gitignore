@@ -11,3 +11,9 @@ wheels/
 
 # personal files related to the course
 personal/
+
+data/
+__pycache__/
+*.pyc
+.DS_Store
+docs/screenshots/*.png

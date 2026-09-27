@@ -1,0 +1,30 @@
+/* charts.js styles — all classes prefixed .c-* */
+.c-ring-value { font-weight: 700; fill: var(--ink-primary); letter-spacing: -0.03em; }
+.c-ring-label { font-size: 12px; fill: var(--ink-secondary); }
+.c-ring-sub { font-size: 12px; fill: var(--ink-muted); font-weight: 600; }
+.c-ring-arc { transition: stroke-dasharray 0.6s ease; }
+.c-axis { font-size: 11px; fill: var(--ink-muted); }
+.c-label { font-size: 12px; fill: var(--ink-secondary); }
+.c-label.small { font-size: 11px; }
+.c-value { font-size: 12px; font-weight: 700; fill: var(--ink-primary); }
+.c-bar { transition: opacity 0.15s; } .c-bar:hover { opacity: 0.8; }
+.c-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 8px; font-size: 12px; color: var(--ink-secondary); }
+.c-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.c-legend-swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.c-legend-line { width: 14px; height: 2px; border-radius: 1px; display: inline-block; }
+.c-legend-diamond { width: 9px; height: 9px; border: 1.5px solid var(--ink-primary); transform: rotate(45deg); display: inline-block; }
+.c-legend-whisker { width: 14px; height: 2px; background: var(--ink-secondary); display: inline-block; position: relative; }
+.c-legend-whisker::before, .c-legend-whisker::after { content: ""; position: absolute; top: -3px; width: 2px; height: 8px; background: var(--ink-secondary); }
+.c-legend-whisker::before { left: 0; } .c-legend-whisker::after { right: 0; }
+.c-hatch { background: repeating-linear-gradient(45deg, var(--card-3) 0 2px, var(--hairline-strong) 2px 4px); }
+.c-empty { padding: 12px; text-align: center; }
+.c-effect-row.clickable { cursor: pointer; } .c-effect-row.clickable:hover rect { filter: brightness(1.15); }
+.c-conf-high { fill: var(--status-good); font-weight: 700; } .c-conf-medium { fill: var(--status-warning); font-weight: 700; } .c-conf-low { fill: var(--ink-muted); }
+.c-timeline text.c-evt-label { font-size: 11px; font-weight: 600; pointer-events: none; }
+.c-timeline .c-loc-label { font-size: 10px; fill: var(--ink-primary); opacity: 0.85; pointer-events: none; }
+.c-timeline .c-evt { cursor: default; }
+.c-timeline .c-cursor { transition: none; }
+.c-heat-cell.clickable { cursor: pointer; } .c-heat-cell.clickable:hover { stroke: var(--ink-primary); stroke-width: 1.5; }
+.c-heat-value { font-size: 9px; fill: #fff; font-weight: 600; pointer-events: none; }
+:root[data-theme="light"] .c-heat-value { fill: #1B1F3B; }
+.c-table { margin-top: 8px; }

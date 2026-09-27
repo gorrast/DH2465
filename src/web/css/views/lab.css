@@ -1,0 +1,7 @@
+.v-lab-pipeline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.v-lab-step { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 12px; background: var(--card-2); }
+.v-lab-step-icon { width: 30px; height: 30px; border-radius: 9px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; }
+.v-lab-arrow { color: var(--ink-muted); }
+.v-lab-stat .value { font-size: 22px; }
+.v-lab-list { padding-left: 18px; margin: 6px 0; }
+.v-lab-list li { margin-bottom: 4px; }

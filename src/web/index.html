@@ -18,8 +18,8 @@
   <link rel="stylesheet" href="css/views/lab.css">
   <link rel="stylesheet" href="css/views/tour.css">
 </head>
-<body>
-  <div class="app">
+<body data-page="dashboard">
+  <div id="app-shell" class="app">
     <aside class="rail" aria-label="Primary">
       <div class="brand">
         <span class="pulse-mark" aria-hidden="true">
@@ -38,6 +38,7 @@
       <div id="history-pill" class="history-pill" hidden></div>
       <div class="spacer"></div>
       <button id="tour-button" class="btn btn-sm" type="button" title="Presenter tour (t)">Tour <kbd>t</kbd></button>
+      <button id="sign-out" class="btn btn-sm btn-ghost" type="button">Sign out</button>
       <button id="theme-toggle" class="btn btn-icon btn-ghost" type="button" aria-label="Toggle theme"></button>
     </header>
     <main id="view" tabindex="-1"></main>
@@ -48,6 +49,8 @@
   <div id="busy-root"></div>
   <div id="sl-errors" aria-hidden="true"></div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/auth.js"></script>
   <script src="js/core.js"></script>
   <script src="js/charts.js"></script>
   <script src="js/views/morning.js"></script>

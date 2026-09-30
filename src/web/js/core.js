@@ -341,6 +341,11 @@
     }
     const reason = document.getElementById('reasoner-chip');
     if (reason) { SL.clear(reason); reason.appendChild(SL.icon('brain', { size: 14 })); reason.appendChild(SL.el('span', null, meta.reasoning_mode === 'claude' ? 'Reasoning: Claude' : 'Reasoning: on-device rules')); }
+    const signOut = document.getElementById('sign-out');
+    if (signOut && !signOut.dataset.bound) {
+      signOut.dataset.bound = '1';
+      signOut.addEventListener('click', () => window.StressLessAuth && window.StressLessAuth.signOut());
+    }
     renderHistoryPill();
   }
 
@@ -478,8 +483,12 @@
     buildTopbar();
     return meta;
   };
-  SL.ready = new Promise((resolve) => {
-    document.addEventListener('DOMContentLoaded', async () => {
+  let appBooted = false;
+  async function bootApp() {
+    if (appBooted) return SL;
+    appBooted = true;
+    const shell = document.getElementById('app-shell');
+    if (shell) shell.hidden = false;
       store.historyDays = null;
       try {
         await SL.refreshMeta();
@@ -492,8 +501,17 @@
       if (!location.hash) location.hash = '#/morning/' + SL.date.today();
       await render();
       if (params.get('tour') === '1' && SL.tour && SL.tour.start) setTimeout(() => SL.tour.start(), 400);
-      resolve(SL);
-    });
+    return SL;
+  }
+  SL.ready = new Promise((resolve) => {
+    const start = async () => {
+      const auth = window.StressLessAuth;
+      if (auth) await auth.ready;
+      if (!auth || !auth.session) return;
+      resolve(await bootApp());
+    };
+    document.addEventListener('DOMContentLoaded', start);
+    document.addEventListener('stressless-authenticated', async () => resolve(await bootApp()), { once: true });
   });
 
   window.SL = SL;

@@ -25,6 +25,20 @@ your browser. Nothing leaves your machine. Press `Ctrl+C` to stop.
 Requirements: macOS with Python 3.9 or newer (`xcode-select --install` provides it) and Chrome or
 Safari. No packages to install, no network needed.
 
+## Supabase authentication
+
+The website starts with a Supabase sign-in/register screen. Create a Supabase project, enable email/password authentication, and set the project URL and publishable anon key before starting it:
+
+```powershell
+$env:SUPABASE_URL = "https://your-project-ref.supabase.co"
+$env:SUPABASE_ANON_KEY = "your-supabase-anon-key"
+python src/run.py --no-browser
+```
+
+The anon key is intended for browser use when Row Level Security is configured. Never put a Supabase service-role key in this repository or in frontend code. The auth gate is connected now; the existing demo dataset remains local and shared by the running demo until user-scoped Supabase data storage is added.
+
+For team setup, copy `.env.example` to `.env`, fill in the two Supabase values, and run the website normally. `.env` is ignored by Git and is loaded automatically by `src/run.py`.
+
 Before presenting, run the pre-flight check. It builds the engine and asserts that the demo path
 exists (a worn last night, three causes, a suggestion, open reality checks, a late meeting today):
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 import sys
 import traceback
@@ -59,6 +60,12 @@ def meta_payload(state) -> Dict[str, Any]:
 @route("GET", "/api/meta")
 def get_meta(state, m, q, body):
     return 200, meta_payload(state)
+
+
+@route("GET", "/api/config")
+def get_config(state, m, q, body):
+    return 200, {"supabase_url": os.environ.get("SUPABASE_URL", ""),
+                 "supabase_anon_key": os.environ.get("SUPABASE_ANON_KEY", "")}
 
 
 @route("GET", "/api/health")

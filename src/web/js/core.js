@@ -242,6 +242,7 @@
     { name: 'planner', label: 'Planner', icon: 'planner', key: '6' },
     { name: 'data', label: 'Data & privacy', icon: 'lock', key: '7' },
     { name: 'lab', label: 'Under the hood', icon: 'lab', key: '8' },
+    { name: 'calendar', label: 'Calendar', icon: 'calendar', key: '9' },
   ];
   SL.NAV = NAV;
   let current = { name: null, cleanup: null };
@@ -498,7 +499,7 @@
         buildRail(); buildTopbar();
         SL.toast('Could not reach the StressLess server', { kind: 'error' });
       }
-      if (!location.hash) location.hash = '#/morning/' + SL.date.today();
+      if (!location.hash) location.hash = location.pathname === '/dashboard/connections' ? '#/calendar' : '#/morning/' + SL.date.today();
       await render();
       if (params.get('tour') === '1' && SL.tour && SL.tour.start) setTimeout(() => SL.tour.start(), 400);
     return SL;

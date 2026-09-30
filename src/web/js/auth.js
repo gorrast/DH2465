@@ -1,6 +1,6 @@
 'use strict';
 (function () {
-  const auth = { session: null, client: null };
+  const auth = { session: null, client: null, anonKey: null };
   const isAuthPage = document.body.dataset.page === 'auth';
   const root = () => document.getElementById('auth-screen');
   const message = (text, kind) => {
@@ -56,6 +56,7 @@
     const response = await fetch('/api/config');
     const config = await response.json();
     if (!config.supabase_url || !config.supabase_anon_key || !window.supabase) { showSetup(); return; }
+    auth.anonKey = config.supabase_anon_key;
     auth.client = window.supabase.createClient(config.supabase_url, config.supabase_anon_key);
     const current = await auth.client.auth.getSession();
     auth.session = current.data.session;

@@ -196,6 +196,8 @@ class Handler(BaseHTTPRequestHandler):
             return 403
         if os.path.isdir(full):
             full = os.path.join(full, "index.html")
+        if not os.path.isfile(full) and path.startswith("/dashboard/"):
+            full = os.path.join(web_root, "index.html")
         if not os.path.isfile(full):
             self._send(404, "text/plain; charset=utf-8", b"not found")
             return 404

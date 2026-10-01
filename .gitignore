@@ -17,3 +17,7 @@ __pycache__/
 *.pyc
 .DS_Store
 docs/screenshots/*.png
+
+
+# Environment files
+.env*

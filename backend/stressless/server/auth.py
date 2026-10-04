@@ -39,10 +39,10 @@ def supabase_url() -> str:
 
 
 def supabase_key() -> str:
-    key = (os.environ.get("SUPABASE_PUBLISHABLE_KEY") or os.environ.get("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY")
+    key = (os.environ.get("SUPABASE_PUBLISHABLE_KEY") or os.environ.get("SUPABASE_ANON_KEY")
            or os.environ.get("SUPABASE_ANON_KEY") or os.environ.get("NEXT_PUBLIC_SUPABASE_ANON_KEY"))
     if not key:
-        raise EngineError("Server misconfigured: NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY is not set")
+        raise EngineError("Server misconfigured: SUPABASE_ANON_KEY is not set")
     return key
 
 

@@ -1,0 +1,30 @@
+{
+  "name": "stressless",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n next,api -c magenta,cyan \"next dev\" \"npm run dev:api\"",
+    "dev:next": "next dev",
+    "dev:api": "uv run --env-file .env.local uvicorn api.index:app --reload --reload-dir backend --port 8000",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test:api": "cd backend && uv run python -m unittest discover -s tests -t .",
+    "screenshots": "node tools/screenshots.mjs"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.117.2",
+    "next": "16.3.8",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "concurrently": "^10.0.5",
+    "playwright": "^1.63.0",
+    "typescript": "^5.9.3"
+  }
+}

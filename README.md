@@ -6,31 +6,59 @@
 > StressLess connects your calendar and your location history to the biometrics your watch already
 > collects, and explains what in your day shaped your body and your sleep.
 
-This repository is a **self-contained, offline demo** of the StressLess product. It runs on a Mac with
-nothing but the system Python and a browser. Because there is no Apple Watch in the loop yet, the demo
-uses a **digital twin**: a simulated person whose calendar, Google Maps history and watch data are
-generated from a known causal model. Everything downstream — the explanation engine, the morning
-report, reality checks, habits, the planner — is the real product logic, and it runs unchanged on
-imported real data (Apple Health export, Google Calendar `.ics`, Google Takeout).
+This repository is a **web demo** of the StressLess product: a Next.js frontend and a FastAPI backend,
+deployed together on Vercel, with Supabase for sign-in and per-user storage. Because there is no Apple
+Watch in the loop yet, the demo uses a **digital twin**: a simulated person whose calendar, Google Maps
+history and watch data are generated from a known causal model. Everything downstream — the explanation
+engine, the morning report, reality checks, habits, the planner — is the real product logic, and it runs
+unchanged on imported real data (Apple Health export, Google Calendar `.ics`, Google Takeout).
 
-## Quick start
+Every account gets its own demo. The dataset itself is never stored: the API regenerates it from the
+account's persona, seed and date (about 0.15 s, cached on warm instances) and replays the user's own
+answers, added events and accepted suggestions on top. Only those few rows live in Supabase, protected by
+row-level security.
 
-```bash
-python3 run.py
+## Architecture
+
+```
+browser ──► Next.js (app/, components/)          React views, charts, tour; Supabase Auth session in cookies
+   │            proxy.ts                         refreshes the session, sends signed-out visitors to /login
+   └─ /api/* ─► FastAPI (api/index.py → backend/stressless)
+                    verifies the Supabase JWT, regenerates the user's dataset, runs the engine
+                    └─► Supabase Postgres (PostgREST, as the user)   profiles, answers, user_events,
+                                                                      accepted, narratives — RLS per user
 ```
 
-That generates ten weeks of data on first run, starts a local server on `127.0.0.1:8765`, and opens
-your browser. Nothing leaves your machine. Press `Ctrl+C` to stop.
+## Setup
 
-Requirements: macOS with Python 3.9 or newer (`xcode-select --install` provides it) and Chrome or
-Safari. No packages to install, no network needed.
+Requirements: Node.js 20+, [uv](https://docs.astral.sh/uv/) (Python 3.12) and a Supabase project.
 
-Before presenting, run the pre-flight check. It builds the engine and asserts that the demo path
-exists (a worn last night, three causes, a suggestion, open reality checks, a late meeting today):
+1. **Supabase.** Create a project, then run `supabase/migrations/20261004000000_stressless_user_state.sql`
+   in the SQL editor (or `supabase db push` with the Supabase CLI). Under Authentication → URL
+   Configuration, set the Site URL to your deployed URL and add `http://localhost:3000/**` and
+   `https://<your-app>.vercel.app/**` to the redirect URLs. Email confirmation stays on: new accounts
+   confirm their address through the link in the email, which lands on `/auth/confirm`.
+2. **Environment.** `cp .env.example .env.local` and fill in `NEXT_PUBLIC_SUPABASE_URL` and
+   `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (Project Settings → API). Projects that still use the legacy
+   JWT secret also need `SUPABASE_JWT_SECRET`; projects on asymmetric signing keys (the default) do not.
+3. **Install and run.**
 
-```bash
-python3 run.py --demo-check
-```
+   ```bash
+   npm install
+   uv sync
+   npm run dev          # Next.js on http://localhost:3000 and FastAPI on :8000 (proxied under /api)
+   ```
+
+4. **Tests.** `npm run test:api` runs the Python suite (engine, simulator, connectors, API with an
+   in-memory store); `npm run typecheck` checks the frontend.
+
+## Deploy to Vercel
+
+Import the repository in Vercel (framework: Next.js). `api/index.py` becomes a Python function serving
+`/api/*` with the packages from `requirements.txt`; `vercel.json` keeps the frontend out of its bundle.
+Set the same environment variables as in `.env.local` for Production and Preview, then deploy. To freeze
+"today" for a presentation, set `STRESSLESS_ANCHOR=2026-09-27` — every account then sees the same
+dates, and the screenshots and numbers below stay reproducible.
 
 ## The demo in eight beats
 
@@ -75,7 +103,8 @@ bright projector), `?` help.
 |---|---|
 | ![Lab](docs/screenshots/lab.png) | ![Tour](docs/screenshots/tour.png) |
 
-Regenerate them with `python3 run.py --screenshots` (needs Google Chrome).
+Regenerate them against a running instance with `STRESSLESS_EMAIL=… STRESSLESS_PASSWORD=… npm run screenshots`
+(add `-- --url https://<your-app>.vercel.app` for a deployment; needs `npx playwright install chromium` once).
 
 ## What you are looking at
 
@@ -87,7 +116,7 @@ Regenerate them with `python3 run.py --screenshots` (needs Google Chrome).
 | Habits | Every recurring pattern ranked by effect, with intervals, sample sizes and the adjusted (model) effect next to the simple comparison |
 | Reality check | Questions asked only when calendar, location and body disagree — booked but not seen, seen but not booked |
 | Planner | What-if for today or the coming week; accepted suggestions land in the calendar and as `.ics` |
-| Data & privacy | What is connected, which data classes are read and why, persona and seed, importing your own data, delete everything |
+| Data & privacy | What is connected, which data classes are read and why, persona and seed, importing your own data (coming soon), delete everything |
 | Under the hood | Pipeline, model card (in-sample vs out-of-sample fit), validation against planted truth, hidden factors, why this is not circular, cold-start slider, open challenges |
 
 ## How the engine works (and what it does not claim)
@@ -119,66 +148,61 @@ with", never "caused".
 | | Product lead who lives by the calendar | Consultant: eight meetings and a flight | Founder: late nights and late workouts |
 | Signature bad day | Six meetings, four back-to-back, a call until 20:15 | Flight home plus a client dinner | Investor update at 19:00, gym at 20:45 |
 
-Same seed, same anchor date, same data — every time. Change them with `--seed` and `--anchor`.
+Same seed, same anchor date, same data — every time. Change persona and seed under Data & privacy; freeze
+the date with `STRESSLESS_ANCHOR`.
 
 ## Bring your own data
 
-```bash
-python3 run.py --import-health ~/Downloads/apple_health_export/export.xml \
-               --import-ics ~/Downloads/calendar.ics \
-               --import-timeline ~/Downloads/Takeout/Location\ History \
-               --persona-name "Nima"
-```
-
-Apple Health: Settings → Health → Export All Health Data. Google Calendar: Settings → Import & export
-→ Export. Google Maps: Google Takeout → Location History (both the monthly Semantic Location History
-files and the newer `Timeline.json` are supported). The engine, views and reality checks work exactly
-as in the demo; the Lab's planted-truth panels are hidden because there is no planted truth.
+Uploading your own exports to the web app is coming soon. The importers already exist and are tested
+(`backend/stressless/connectors/`): Apple Health (Settings → Health → Export All Health Data), Google
+Calendar (Settings → Import & export → Export) and Google Maps (Google Takeout → Location History, both the
+monthly Semantic Location History files and the newer `Timeline.json`). Note that Vercel limits request
+bodies to 4.5 MB, so large Apple Health exports will need direct-to-storage uploads.
 
 ## Optional: Claude writes the narrative
 
-The narrative on the Morning view is written by an on-device rule-based reasoner by default. If you
-have a Python with the `anthropic` package and credentials configured, you can let Claude write it:
-
-```bash
-STRESSLESS_REASONER=claude /path/to/python3 run.py
-```
+The narrative on the Morning view is written by a rule-based reasoner by default. To let Claude write it,
+set `STRESSLESS_REASONER=claude` and `ANTHROPIC_API_KEY` (in `.env.local`, or in the Vercel project).
 
 Only a de-identified summary is sent (score, causes, evidence text, sample size — never event ids,
 times, locations or attendees). The model defaults to `claude-opus-5`; override with
 `STRESSLESS_CLAUDE_MODEL`. Server-side refusal fallbacks are enabled by default. On any error the app
 falls back to the rule-based reasoner, and the reasoner badge in the top bar always tells you which one
-wrote the text.
+wrote the text. Claude-written narratives are cached per user in Supabase.
 
-## Command line
+## Scripts
 
 ```bash
-python3 run.py                                  # run the demo
-python3 run.py --persona sam --seed 3 --regenerate
-python3 run.py --anchor 2026-09-27              # freeze "today"
-python3 run.py --report today                   # print this morning's report in the terminal
-python3 run.py --demo-check                     # pre-flight checklist
-python3 run.py --test                           # run the test suite
-python3 run.py --screenshots                    # render every view with headless Chrome into docs/screenshots
-python3 run.py --no-browser --port 9000         # serve without opening a browser
+npm run dev            # Next.js + FastAPI with reload
+npm run dev:next       # only Next.js (expects the API on :8000)
+npm run dev:api        # only FastAPI (uv run uvicorn api.index:app --port 8000)
+npm run build          # production build of the frontend
+npm run typecheck      # TypeScript
+npm run test:api       # Python test suite
+npm run screenshots    # render every view with headless Chromium into docs/screenshots
 ```
 
 ## Project layout
 
 ```
-run.py                 entry point and CLI
-stressless/
+app/                   Next.js App Router: login, /auth/confirm, and one route per view
+components/            React views, SVG charts, app shell, presenter tour, overlays
+lib/                   API client, Supabase clients, formatting, icons, navigation
+styles/                the design system and per-view CSS
+proxy.ts               session refresh and sign-in gate (Next.js 16 proxy)
+api/index.py           Vercel entrypoint for the FastAPI app
+backend/stressless/
   models.py            shared data model (dataclasses, JSON round-trip)
   timeutil.py          time conventions (nights, day-relative hours)
   sim/                 the digital twin: personas, calendar, location, physiology, sleep score, showcase
   connectors/          Apple Health, .ics and Google Takeout importers; demo sources
-  store/               sqlite persistence for the dataset, answers and accepted suggestions
+  store/               per-user state: Supabase (PostgREST) and in-memory stores
   engine/              features, baselines, matching, reality checks, attribution, habits, what-if,
                        suggestions, reasoning, pipeline
-  server/              localhost HTTP server and JSON API
-web/                   vanilla HTML/CSS/JS frontend (no build step)
-tests/                 unittest suite
-tools/                 headless-Chrome screenshots and palette validation
+  server/              FastAPI app, Supabase JWT auth, per-request engine sessions
+backend/tests/         unittest suite
+supabase/migrations/   tables, row-level security and RPCs for per-user state
+tools/                 screenshots (Playwright) and palette validation
 ```
 
 ## Known limitations
@@ -187,5 +211,8 @@ tools/                 headless-Chrome screenshots and palette validation
 * The simulator is a caricature of a life. It is honest about its causal model (see Under the hood),
   but it is not a physiological model.
 * The DST change night is off by one hour in durations.
+* The demo dataset follows the calendar: when the day changes, each account gets a fresh dataset for
+  the new date and its reality-check answers and accepted suggestions are cleared (set
+  `STRESSLESS_ANCHOR` to keep one date).
 * The calendar misses coffee, alcohol, screens and unbooked stress; the demo shows how the product
   copes with that rather than pretending otherwise.

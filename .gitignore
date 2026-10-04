@@ -1,23 +1,29 @@
-# Python-generated files
+# Python
 __pycache__/
 *.py[oc]
 build/
 dist/
 wheels/
 *.egg-info
-
-# Virtual environments
 .venv
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# Vercel
+.vercel
 
 # personal files related to the course
 personal/
 
 data/
-__pycache__/
-*.pyc
 .DS_Store
-docs/screenshots/*.png
-
+docs/screenshots/*.dom.html
 
 # Environment files
 .env*
+!.env.example

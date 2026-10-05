@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Correlate</title>
+<style>
+  :root {
+    --bg: #12151a;
+    --panel: #1b1f26;
+    --panel-2: #222731;
+    --line: #2a2f38;
+    --ink: #eef0f3;
+    --dim: #8b93a1;
+    --pulse: #6ee7b7;
+    --warn: #f2a65a;
+    --err: #f2726a;
+    --blue: #7aa7ff;
+    --violet: #b79cff;
+    font-size: 16px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  header { padding: 26px 20px 16px; }
+  header h1 { margin: 0; font-size: 1.4rem; font-weight: 600; letter-spacing: -0.01em; }
+  header p { margin: 4px 0 0; color: var(--dim); font-size: 0.9rem; }
+  main {
+    padding: 4px 16px 48px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    max-width: 640px;
+    margin: 0 auto;
+  }
+
+  /* summary tiles */
+  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .tile {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 14px 16px;
+  }
+  .tile .num { font-size: 1.55rem; font-weight: 650; letter-spacing: -0.02em; }
+  .tile .cap { color: var(--dim); font-size: 0.78rem; margin-top: 2px; }
+  .tile.blue .num { color: var(--blue); }
+  .tile.green .num { color: var(--pulse); }
+  .tile.violet .num { color: var(--violet); }
+  .tile.amber .num { color: var(--warn); }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 18px;
+  }
+  .card-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .card h2 { margin: 0; font-size: 0.95rem; font-weight: 600; }
+  .card .status { font-size: 0.85rem; color: var(--dim); margin-bottom: 12px; line-height: 1.5; }
+  .sub { color: var(--dim); font-size: 0.78rem; }
+
+  button {
+    background: var(--ink);
+    color: var(--bg);
+    border: none;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:disabled { opacity: 0.4; cursor: default; }
+  .clear-btn { background: transparent; border: 1px solid var(--line); color: var(--dim); }
+
+  .seg { display: inline-flex; background: var(--panel-2); border-radius: 9px; padding: 3px; }
+  .seg button {
+    background: transparent;
+    color: var(--dim);
+    padding: 5px 11px;
+    font-size: 0.75rem;
+    border-radius: 7px;
+  }
+  .seg button.active { background: var(--ink); color: var(--bg); }
+
+  .row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 0.9rem;
+  }
+  .row:last-child { border-bottom: none; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; }
+  .dot.on { background: var(--pulse); }
+  .dot.off { background: var(--warn); }
+  .dot.err { background: var(--err); }
+  .empty { color: var(--dim); font-size: 0.85rem; font-style: italic; }
+
+  /* stat strip */
+  .stats { display: flex; gap: 18px; flex-wrap: wrap; margin: 4px 0 12px; }
+  .stat .v { font-size: 1.1rem; font-weight: 600; }
+  .stat .k { color: var(--dim); font-size: 0.72rem; }
+
+  /* charts */
+  svg.bars { width: 100%; height: 96px; display: block; }
+  svg.bars rect { fill: var(--blue); opacity: 0.9; }
+  svg.bars.green rect { fill: var(--pulse); }
+  svg.bars.violet rect { fill: var(--violet); }
+  .axis { display: flex; justify-content: space-between; color: var(--dim); font-size: 0.7rem; margin-top: 4px; }
+  svg.spark { width: 100%; height: 34px; display: block; }
+  svg.spark polyline { fill: none; stroke: var(--err); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+  svg.path { width: 100%; height: 180px; display: block; background: var(--panel-2); border-radius: 10px; }
+  svg.path polyline { fill: none; stroke: var(--blue); stroke-width: 1.5; opacity: 0.7; vector-effect: non-scaling-stroke; }
+  svg.path circle { fill: var(--blue); }
+  svg.path circle.latest { fill: var(--pulse); }
+
+  /* agenda */
+  .day-head { color: var(--dim); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; margin: 14px 0 6px; }
+  .day-head:first-child { margin-top: 0; }
+  .ev { display: flex; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+  .ev:last-child { border-bottom: none; }
+  .ev .t { min-width: 76px; color: var(--dim); font-size: 0.78rem; padding-top: 1px; }
+  .ev .b { flex: 1; min-width: 0; }
+  .ev .title { font-size: 0.9rem; overflow-wrap: anywhere; }
+  .ev .meta { color: var(--dim); font-size: 0.74rem; margin-top: 2px; overflow-wrap: anywhere; }
+  .chip {
+    display: inline-block; background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 999px; padding: 1px 8px; font-size: 0.68rem; color: var(--dim); margin-right: 6px;
+  }
+
+  /* horizontal bars */
+  .hbar { margin: 8px 0; }
+  .hbar .lbl { display: flex; justify-content: space-between; font-size: 0.78rem; margin-bottom: 3px; }
+  .hbar .track { background: var(--panel-2); border-radius: 6px; height: 8px; overflow: hidden; }
+  .hbar .fill { height: 100%; background: var(--violet); border-radius: 6px; }
+
+  /* workouts */
+  .wk { padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .wk:last-child { border-bottom: none; }
+  .wk .top { display: flex; justify-content: space-between; font-size: 0.9rem; }
+  .wk .top .type { font-weight: 600; }
+  .wk .meta { color: var(--dim); font-size: 0.75rem; margin: 3px 0 6px; }
+
+  #log {
+    max-height: 340px; overflow-y: auto; display: flex; flex-direction: column-reverse; gap: 6px;
+  }
+  .log-entry {
+    font-family: 'SF Mono', Menlo, Consolas, monospace;
+    font-size: 0.72rem; line-height: 1.5; padding: 8px 10px; border-radius: 8px;
+    background: #0f1216; border: 1px solid var(--line);
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .log-entry.error { border-color: var(--err); color: #ffb3ae; }
+  .log-entry.ok { border-color: rgba(110,231,183,0.3); }
+  .log-time { color: var(--dim); margin-right: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Correlate</h1>
+  <p>Calendar, movement, and health — laid side by side.</p>
+</header>
+
+<main>
+  <section class="tiles" id="tiles"></section>
+
+  <section class="card" id="permissions-card">
+    <h2 style="margin-bottom:8px">Connect your data</h2>
+    <div class="status">Every attempt, success and error is also written to the debug log at the bottom.</div>
+    <div class="row"><span><span class="dot off" id="dot-calendar"></span>Calendar</span>
+      <button id="btn-calendar">Connect</button></div>
+    <div class="row"><span><span class="dot off" id="dot-health"></span>Steps &amp; workouts</span>
+      <button id="btn-health">Connect</button></div>
+    <div class="row"><span><span class="dot off" id="dot-sleep"></span>Sleep</span>
+      <button id="btn-sleep">Connect</button></div>
+    <div class="row"><span><span class="dot off" id="dot-location"></span>Background location</span>
+      <button id="btn-location">Connect</button></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Today</h2><span class="sub" id="today-date"></span></div>
+    <div id="today-body" class="empty">Connect calendar and location to see today's plan next to where you've actually been.</div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>Calendar</h2>
+      <div class="seg" id="seg-cal">
+        <button class="active" data-seg="cal:upcoming">Upcoming</button>
+        <button data-seg="cal:past">Past</button>
+      </div>
+    </div>
+    <div id="cal-body" class="empty">Connect your calendar to see events here.</div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Location</h2><span class="sub" id="loc-sub"></span></div>
+    <div id="loc-body" class="empty">Connect background location to see your movement here.</div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>Steps this year</h2>
+      <div class="seg" id="seg-steps">
+        <button data-seg="steps:day">Daily</button>
+        <button class="active" data-seg="steps:week">Weekly</button>
+      </div>
+    </div>
+    <div id="steps-body" class="empty">Connect steps &amp; workouts to see your year so far.</div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Workouts</h2><span class="sub">last 30 days</span></div>
+    <div id="workouts-body" class="empty">Workouts with heart rate appear here.</div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Sleep</h2><span class="sub">last 30 days</span></div>
+    <div id="sleep-body" class="empty">Connect sleep to see your nights here.</div>
+  </section>
+
+  <section class="card">
+    <h2 style="margin-bottom:8px">Live debug log</h2>
+    <div class="status">Raw output from every native call, kept for debugging. Long payloads are truncated.</div>
+    <button class="clear-btn" id="btn-clear-log">Clear log</button>
+    <div id="log" style="margin-top: 12px;"></div>
+  </section>
+</main>
+
+<script src="native.js"></script>
+</body>
+</html>

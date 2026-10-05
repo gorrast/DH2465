@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "type": "object",
+  "properties": {
+    "latitude": {
+      "type": "number"
+    },
+    "longitude": {
+      "type": "number"
+    },
+    "accuracy": {
+      "type": "number"
+    },
+    "altitude": {
+      "type": "number"
+    },
+    "altitudeAccuracy": {
+      "type": "number"
+    },
+    "simulated": {
+      "type": "boolean"
+    },
+    "speed": {
+      "type": "number"
+    },
+    "bearing": {
+      "type": "number"
+    },
+    "time": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "latitude",
+    "longitude",
+    "accuracy",
+    "altitude",
+    "altitudeAccuracy",
+    "simulated",
+    "speed",
+    "bearing",
+    "time"
+  ]
+}

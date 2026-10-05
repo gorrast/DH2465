@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WorkoutExport",
+  "type": "object",
+  "required": ["workouts"],
+  "properties": {
+    "workouts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/workout" }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "workout": {
+      "type": "object",
+      "required": [
+        "id",
+        "sourceName",
+        "sourceBundleId",
+        "startDate",
+        "endDate",
+        "workoutType",
+        "duration",
+        "heartRate"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sourceName": {
+          "type": "string",
+          "description": "Name of the source app/device. May be an empty string."
+        },
+        "sourceBundleId": {
+          "type": "string",
+          "description": "Bundle/package ID of the source app, e.g. com.garmin.android.apps.connectmobile"
+        },
+        "startDate": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "endDate": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "workoutType": {
+          "type": "string",
+          "description": "Activity type (e.g. RUNNING, WALKING, CYCLING).",
+          "examples": ["RUNNING"]
+        },
+        "duration": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Duration in seconds."
+        },
+        "heartRate": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/heartRateSample" }
+        }
+      },
+      "additionalProperties": true
+    },
+    "heartRateSample": {
+      "type": "object",
+      "required": ["timestamp", "bpm"],
+      "properties": {
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "bpm": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 300
+        }
+      }
+    }
+  }
+}

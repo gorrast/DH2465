@@ -1,0 +1,8 @@
+{
+  "appId": "com.DH.stressless",
+  "appName": "StressLess",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  }
+}

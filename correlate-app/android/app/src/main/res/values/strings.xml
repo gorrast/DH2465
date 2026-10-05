@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">StressLess</string>
+    <string name="title_activity_main">StressLess</string>
+    <string name="package_name">com.DH.stressless</string>
+    <string name="custom_url_scheme">com.DH.stressless</string>
+</resources>

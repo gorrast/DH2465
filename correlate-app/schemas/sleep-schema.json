@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SleepSessionExport",
+  "description": "Schema for sleep session records retrieved from Android Health Connect via Capacitor.",
+  "type": "object",
+  "required": ["records"],
+  "properties": {
+    "records": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SleepSessionRecord"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "SleepSessionRecord": {
+      "type": "object",
+      "required": [
+        "type",
+        "metadata",
+        "startTime",
+        "startZoneOffset",
+        "endTime",
+        "endZoneOffset",
+        "stages"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "SleepSession",
+          "description": "Health Connect record type identifier."
+        },
+        "metadata": {
+          "$ref": "#/$defs/RecordMetadata"
+        },
+        "startTime": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Session start timestamp in UTC (ISO 8601)."
+        },
+        "startZoneOffset": {
+          "type": "string",
+          "pattern": "^[+-]\\d{2}:\\d{2}$",
+          "description": "Timezone offset at session start (e.g., +02:00).",
+          "examples": ["+02:00"]
+        },
+        "endTime": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Session end timestamp in UTC (ISO 8601)."
+        },
+        "endZoneOffset": {
+          "type": "string",
+          "pattern": "^[+-]\\d{2}:\\d{2}$",
+          "description": "Timezone offset at session end (e.g., +02:00).",
+          "examples": ["+02:00"]
+        },
+        "title": {
+          "type": ["string", "null"],
+          "description": "Optional title for the sleep session."
+        },
+        "notes": {
+          "type": ["string", "null"],
+          "description": "Optional user notes."
+        },
+        "stages": {
+          "type": "array",
+          "description": "Sequential sleep stage intervals spanning the session.",
+          "items": {
+            "$ref": "#/$defs/SleepStage"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "RecordMetadata": {
+      "type": "object",
+      "required": ["id", "lastModifiedTime", "dataOrigin"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Unique identifier assigned by Health Connect."
+        },
+        "clientRecordId": {
+          "type": ["string", "null"],
+          "description": "Client-defined unique identifier provided by the recording app."
+        },
+        "clientRecordVersion": {
+          "type": "integer",
+          "description": "Version tracking for record updates."
+        },
+        "lastModifiedTime": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the record was written or updated in Health Connect."
+        },
+        "dataOrigin": {
+          "type": "string",
+          "description": "Package name of the source app (e.g., com.garmin.android.apps.connectmobile)."
+        }
+      },
+      "additionalProperties": true
+    },
+    "SleepStage": {
+      "type": "object",
+      "required": ["startTime", "endTime", "stage"],
+      "properties": {
+        "startTime": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Start timestamp of this specific sleep stage."
+        },
+        "endTime": {
+          "type": "string",
+          "format": "date-time",
+          "description": "End timestamp of this specific sleep stage."
+        },
+        "stage": {
+          "type": "integer",
+          "enum": [0, 1, 2, 3, 4, 5, 6],
+          "description": "Android Health Connect STAGE_TYPE enum: 0=UNKNOWN, 1=AWAKE, 2=SLEEPING, 3=OUT_OF_BED, 4=LIGHT, 5=DEEP, 6=REM."
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

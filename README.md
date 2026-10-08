@@ -39,7 +39,7 @@ Requirements: Node.js 20+, [uv](https://docs.astral.sh/uv/) (Python 3.12) and a 
    `https://<your-app>.vercel.app/**` to the redirect URLs. Email confirmation stays on: new accounts
    confirm their address through the link in the email, which lands on `/auth/confirm`.
 2. **Environment.** `cp .env.example .env.local` and fill in `NEXT_PUBLIC_SUPABASE_URL` and
-   `SUPABASE_ANON_KEY` (Project Settings → API). Projects that still use the legacy
+   `NEXT_PUBLIC_SUPABASE_ANON_KEY` (Project Settings → API). Projects that still use the legacy
    JWT secret also need `SUPABASE_JWT_SECRET`; projects on asymmetric signing keys (the default) do not.
 3. **Install and run.**
 

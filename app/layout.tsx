@@ -11,6 +11,7 @@ import '@/styles/views/reality.css';
 import '@/styles/views/planner.css';
 import '@/styles/views/data.css';
 import '@/styles/views/lab.css';
+import '@/styles/views/calendar.css';
 import '@/styles/views/tour.css';
 import '@/styles/views/login.css';
 

@@ -1,0 +1,8 @@
+.v-calendar { max-width: 720px; }
+.v-calendar-content { display: flex; flex-direction: column; gap: 12px; }
+.v-calendar-content .card-title { margin-bottom: 0; }
+.v-calendar-content h2 { margin: 0; font-size: 18px; }
+.v-calendar-field { display: grid; gap: 6px; max-width: 440px; }
+.v-calendar-field .input { width: 100%; }
+.v-calendar-message, .v-calendar-error { margin: 14px 0 0; }
+.v-calendar-error { color: var(--status-critical); }

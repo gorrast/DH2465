@@ -6,12 +6,13 @@ class never sees another user's rows. One RPC call loads the whole state snapsho
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import httpx
 
 from ..models import CalendarEvent, from_dict, to_jsonable
+from ..reports import Report
 from .base import DEFAULT_PROFILE, UserStore
 
 log = logging.getLogger("stressless.store.supabase")
@@ -122,3 +123,32 @@ class SupabaseStore(UserStore):
         self._call("POST", "/rpc/stressless_clear_state", json={})
         snap = self._state()
         snap["answers"], snap["events"], snap["accepted"] = {}, {}, {}
+
+    # ------------------------------------------------------------- reports --
+    @staticmethod
+    def _report_filter(kind: str, period_start: date) -> Dict[str, str]:
+        return {"kind": "eq." + kind, "period_start": "eq." + period_start.isoformat()}
+
+    def report_row(self, kind: str, period_start: date) -> Optional[Dict[str, Any]]:
+        params = dict(self._report_filter(kind, period_start), select="status,report,created_at", limit="1")
+        rows = self._call("GET", "/reports", params=params)
+        if not rows:
+            return None
+        row = rows[0]
+        return {"status": row["status"], "created_at": row["created_at"],
+                "report": Report.model_validate(row["report"]) if row.get("report") else None}
+
+    def claim_report(self, kind: str, period_start: date) -> bool:
+        row = {"user_id": self.user_id, "kind": kind, "period_start": period_start.isoformat()}
+        rows = self._call("POST", "/reports", params={"on_conflict": "user_id,kind,period_start", "select": "kind"}, json=row,
+                          prefer="resolution=ignore-duplicates,return=representation")
+        return bool(rows)
+
+    def save_report(self, report: Report) -> None:
+        body = {"status": "ready", "mode": report.mode, "model": report.model, "report": report.model_dump(mode="json"),
+                "updated_at": _now()}
+        params = dict(self._report_filter(report.kind, report.period_start), status="eq.pending")
+        self._call("PATCH", "/reports", params=params, json=body, prefer="return=minimal")
+
+    def reports_last_day(self) -> int:
+        return int(self._call("POST", "/rpc/stressless_reports_last_day", json={}) or 0)

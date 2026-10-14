@@ -22,7 +22,7 @@ from ..models import to_jsonable
 from ..sim.personas import PERSONA_ORDER, PERSONAS
 from ..store import SupabaseError
 from ..timeutil import parse_date
-from . import session
+from . import calendar, session
 from .auth import Principal, current_principal
 
 log = logging.getLogger("stressless.server")
@@ -30,6 +30,7 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(messag
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 app = FastAPI(title="StressLess API", version=__version__, docs_url="/api/docs", openapi_url="/api/openapi.json", redoc_url=None)
+app.include_router(calendar.router)
 JSON_TYPE = "application/json; charset=utf-8"
 
 

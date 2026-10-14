@@ -21,6 +21,7 @@ next-env.d.ts
 personal/
 
 data/
+!app/(app)/data/
 .DS_Store
 docs/screenshots/*.dom.html
 

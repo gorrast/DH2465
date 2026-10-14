@@ -40,6 +40,7 @@ export function CalendarView() {
   const router = useRouter();
   const search = useSearchParams();
   const syncOnReturn = search.get('sync') === 'google';
+  const failedOnReturn = search.get('error') === 'google';
   const [step, setStep] = useState<Step>('start');
   const [email, setEmail] = useState('');
   const [pending, setPending] = useState(false);
@@ -80,6 +81,12 @@ export function CalendarView() {
     return () => { active = false; };
   }, [router, syncOnReturn]);
 
+  useEffect(() => {
+    if (!failedOnReturn) return;
+    setError('Google Calendar was not connected: access was declined or the request expired. Please try again.');
+    router.replace('/calendar');
+  }, [router, failedOnReturn]);
+
   async function connectGoogle(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPending(true);
@@ -114,9 +121,25 @@ export function CalendarView() {
     }
   }
 
+  async function disconnectCalendar() {
+    setPending(true);
+    setError('');
+    setMessage('');
+    try {
+      await calendarRequest('disconnect');
+      setConnection(null);
+      setStep('start');
+      setMessage('Google Calendar disconnected.');
+    } catch (cause: any) {
+      setError(cause?.message || String(cause));
+    } finally {
+      setPending(false);
+    }
+  }
+
   return (
     <>
-      <ViewHead eyebrow="Under the hood" title="Calendar" />
+      <ViewHead eyebrow="Calendar" title="Connect your calendar" />
       <section className="card v-calendar" aria-live="polite">
         {step === 'start' ? (
           <button className="btn btn-primary" type="button" onClick={() => { setError(''); setStep('providers'); }}>
@@ -166,6 +189,7 @@ export function CalendarView() {
               <button className="btn" type="button" onClick={() => { setError(''); setMessage(''); setStep('providers'); }} disabled={pending}>
                 <Icon name="calendar" size={17} /> Connect another calendar
               </button>
+              <button className="btn btn-danger" type="button" onClick={disconnectCalendar} disabled={pending}>Disconnect</button>
             </div>
           </div>
         ) : null}

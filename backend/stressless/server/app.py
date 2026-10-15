@@ -6,12 +6,14 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sys
 from datetime import date
 from typing import Any, Dict, Optional
 
 from fastapi import Body, Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -22,7 +24,7 @@ from ..models import to_jsonable
 from ..sim.personas import PERSONA_ORDER, PERSONAS
 from ..store import SupabaseError
 from ..timeutil import parse_date
-from . import calendar, session
+from . import calendar, phone_sync, session
 from .auth import Principal, current_principal
 
 log = logging.getLogger("stressless.server")
@@ -31,7 +33,14 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 app = FastAPI(title="StressLess API", version=__version__, docs_url="/api/docs", openapi_url="/api/openapi.json", redoc_url=None)
 app.include_router(calendar.router)
+app.include_router(phone_sync.router)
 JSON_TYPE = "application/json; charset=utf-8"
+
+# The phone app (correlate-app) runs in an Android WebView on https://localhost and calls the API cross-origin with a
+# bearer token, so no cookies: credentials stay off. Add more with STRESSLESS_CORS_ORIGINS.
+CORS_ORIGINS = ["https://localhost", "http://localhost"] + [
+    o.strip() for o in os.environ.get("STRESSLESS_CORS_ORIGINS", "").split(",") if o.strip()]
+app.add_middleware(CORSMiddleware, allow_origins=CORS_ORIGINS, allow_methods=["GET", "POST"], allow_headers=["Authorization", "Content-Type"])
 
 
 # ------------------------------------------------------------------ helpers --

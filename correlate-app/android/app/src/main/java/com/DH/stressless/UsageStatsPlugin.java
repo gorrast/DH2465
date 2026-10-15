@@ -175,8 +175,86 @@ public class UsageStatsPlugin extends Plugin {
         call.resolve(result);
     }
 
+    /**
+     * Raw material for the backend: every foreground session {pkg, start, end} and every screen/lock event in the
+     * window, unfiltered (the launcher, System UI and this app are included; the result names them so the backend
+     * decides). Android keeps only about a week of usage events, so whatever is not sent is lost.
+     */
+    @PluginMethod
+    public void getUsageSessions(PluginCall call) {
+        if (!hasUsageStatsPermission()) {
+            call.reject("Usage stats permission not granted");
+            return;
+        }
+        Long startObj = call.getLong("startTime");
+        Long endObj = call.getLong("endTime");
+        if (startObj == null || endObj == null || endObj <= startObj) {
+            call.reject("startTime and endTime (epoch ms, end after start) are required");
+            return;
+        }
+        UsageStatsManager usm = (UsageStatsManager) getContext().getSystemService(Context.USAGE_STATS_SERVICE);
+        if (usm == null) {
+            call.reject("UsageStatsManager not available");
+            return;
+        }
+
+        List<Session> sessions = new ArrayList<>();
+        JSArray screenEvents = new JSArray();
+        collectSessions(usm, startObj, endObj, sessions, screenEvents);
+
+        JSArray out = new JSArray();
+        for (Session x : sessions) {
+            JSObject o = new JSObject();
+            o.put("pkg", x.pkg);
+            o.put("start", x.start);
+            o.put("end", x.end);
+            out.put(o);
+        }
+        JSObject result = new JSObject();
+        result.put("startTime", startObj);
+        result.put("endTime", endObj);
+        result.put("sessions", out);
+        result.put("screenEvents", screenEvents);
+        result.put("launcherPackage", getDefaultLauncherPackage());
+        result.put("selfPackage", getContext().getPackageName());
+        Logger.info("UsageStatsPlugin", "Usage sessions: " + out.length() + " sessions, " + screenEvents.length() + " screen events");
+        call.resolve(result);
+    }
+
+    private static final class Session {
+        final String pkg;
+        final long start;
+        final long end;
+
+        Session(String pkg, long start, long end) {
+            this.pkg = pkg;
+            this.start = start;
+            this.end = end;
+        }
+    }
+
     private Map<String, Long> computeForegroundTimes(UsageStatsManager usm, long start, long end) {
+        List<Session> sessions = new ArrayList<>();
+        collectSessions(usm, start, end, sessions, null);
         Map<String, Long> totals = new HashMap<>();
+        for (Session x : sessions) totals.put(x.pkg, totals.getOrDefault(x.pkg, 0L) + (x.end - x.start));
+        return totals;
+    }
+
+    private static String screenEventName(int type) {
+        switch (type) {
+            case UsageEvents.Event.SCREEN_INTERACTIVE: return "screen_on";
+            case UsageEvents.Event.SCREEN_NON_INTERACTIVE: return "screen_off";
+            case UsageEvents.Event.KEYGUARD_HIDDEN: return "unlock";
+            case UsageEvents.Event.KEYGUARD_SHOWN: return "lock";
+            case UsageEvents.Event.DEVICE_SHUTDOWN: return "shutdown";
+            case UsageEvents.Event.DEVICE_STARTUP: return "startup";
+            default: return null;
+        }
+    }
+
+    // Foreground sessions per package, clipped to [start, end). screenEvents may be null when only totals are needed.
+    private void collectSessions(UsageStatsManager usm, long start, long end, List<Session> sessions, JSArray screenEvents) {
         Map<String, Set<String>> resumed = new HashMap<>(); // pkg -> currently resumed activities
         Map<String, Long> openSince = new HashMap<>();      // pkg -> when it became visible
 
@@ -193,6 +271,16 @@ public class UsageStatsPlugin extends Plugin {
                 String cls = e.getClassName() != null ? e.getClassName() : "";
                 long ts = e.getTimeStamp();
                 int type = e.getEventType();
+
+                if (screenEvents != null && ts >= start && ts < end) {
+                    String name = screenEventName(type);
+                    if (name != null) {
+                        JSObject se = new JSObject();
+                        se.put("type", name);
+                        se.put("ts", ts);
+                        screenEvents.put(se);
+                    }
+                }
 
                 // TEMPORARY DEBUG: dump raw events for Messenger (verify the package name)
                 if (pkg.equals("com.facebook.orca") && ts >= start && ts < end) {
@@ -215,7 +303,7 @@ public class UsageStatsPlugin extends Plugin {
                         if (set.isEmpty()) {
                             resumed.remove(pkg);
                             Long since = openSince.remove(pkg);
-                            if (since != null) addClipped(totals, pkg, since, ts, start, end);
+                            if (since != null) addClipped(sessions, pkg, since, ts, start, end);
                         }
                         break;
                     }
@@ -224,7 +312,7 @@ public class UsageStatsPlugin extends Plugin {
                     case UsageEvents.Event.DEVICE_SHUTDOWN: {
                         // Screen off closes everything, so a missed PAUSED can't count forever
                         for (Map.Entry<String, Long> o : openSince.entrySet()) {
-                            addClipped(totals, o.getKey(), o.getValue(), ts, start, end);
+                            addClipped(sessions, o.getKey(), o.getValue(), ts, start, end);
                         }
                         openSince.clear();
                         resumed.clear();
@@ -235,19 +323,18 @@ public class UsageStatsPlugin extends Plugin {
 
             // Still open at the end of the window
             for (Map.Entry<String, Long> o : openSince.entrySet()) {
-                addClipped(totals, o.getKey(), o.getValue(), end, start, end);
+                addClipped(sessions, o.getKey(), o.getValue(), end, start, end);
             }
         } catch (Exception ex) {
             Logger.error("UsageStatsPlugin", "Error computing foreground times", ex);
         }
-        return totals;
     }
 
-    private void addClipped(Map<String, Long> totals, String pkg, long from, long to,
+    private void addClipped(List<Session> sessions, String pkg, long from, long to,
                             long winStart, long winEnd) {
         long s = Math.max(from, winStart);
         long t = Math.min(to, winEnd);
-        if (t > s) totals.put(pkg, totals.getOrDefault(pkg, 0L) + (t - s));
+        if (t > s) sessions.add(new Session(pkg, s, t));
     }
 
     // TEMPORARY DEBUG: logs Android's own daily bucket so you can compare it with

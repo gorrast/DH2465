@@ -28,3 +28,6 @@ docs/screenshots/*.dom.html
 # Environment files
 .env*
 !.env.example
+
+# correlate-app: per-developer Supabase/API config (template: correlate-app/www/config.example.js)
+correlate-app/www/config.js

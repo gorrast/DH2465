@@ -80,6 +80,36 @@ To distribute to other testers before a public launch, Play Console's
 **internal testing track** needs only a one-time $25 developer account fee,
 no review.
 
+## Sign in & Sync (sleep, steps, screen time → Supabase)
+
+The **Account & sync** card signs in with the same Supabase email/password account as the web app
+(`www/auth.js`, plain Supabase Auth REST calls). **Sync** re-reads the phone's data and POSTs it to the
+StressLess API (`POST /api/sync`) with the user's access token. The app sends everything it can read
+and the API decides what to keep:
+
+- **Sleep:** Health Connect sessions with their stages (last 30 days).
+- **Steps:** daily totals since 1 January.
+- **Screen time:** every foreground app session and screen/lock event of the last 7 days
+  (`UsageStats.getUsageSessions`). Android only keeps about a week of these, so sync at least weekly.
+
+The API (`backend/stressless/server/phone_sync.py`) follows the ingest flow in `docs/SCHEMA.md`:
+- It checks consent; the first sync asks for it.
+- It records this install as its own connection (`health_connect` and `screen_time`).
+- It upserts the raw `source_records`.
+- It recomputes `sleep_nights` (scored), `daily_activity` and the `screen.*` rows in `daily_metrics`.
+
+Syncing the same days again overwrites instead of duplicating.
+
+1. Apply `supabase/migrations/20261016000000_screen_time.sql` (registers the screen-time source and metrics).
+2. Set `SUPABASE_SERVICE_ROLE_KEY` for the API (`.env.local` / Vercel); without it `/api/sync` answers 503.
+3. `cp www/config.example.js www/config.js` and fill in the Supabase URL, the publishable key and `API_URL`.
+4. `npx cap sync`, then run the app.
+
+Pointing `API_URL` at a local `npm run dev:api` (`http://10.0.2.2:8000` from the emulator) is plain HTTP
+from an `https://localhost` WebView. Android blocks that as mixed content unless you add
+`"android": { "allowMixedContent": true }` to `capacitor.config.json` (dev only). The deployed HTTPS URL
+doesn't need it. Extra allowed origins for the API's CORS go in `STRESSLESS_CORS_ORIGINS`.
+
 ## Running the backend stub
 
 ```bash

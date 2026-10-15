@@ -12,6 +12,7 @@ const S = (window.__app = {
   steps: [], // [{ ms, value }] one per day
   workouts: [],
   sleep: [],
+  sleepSessions: [], // full sessions with stages, normalised for POST /api/sync
   appUsage: [],
   usageDays: [],
   usageSelected: null,
@@ -681,7 +682,6 @@ async function connectHealth() {
 
     dot("dot-health", "on");
     renderAll();
-    await postToBackend("/health/sync", { steps: S.steps, workouts: S.workouts });
   } catch (err) {
     log("Health call threw an error", String(err), "error");
     dot("dot-health", "err");
@@ -756,11 +756,42 @@ async function connectLocation() {
 }
 
 // --- Sleep (separate plugin per platform) --------------------------------------
-// Android -> capacitor-health-connect (raw SleepSessionRecord)
-// iOS     -> @perfood/capacitor-healthkit (SleepData sample type)
+// Android -> capacitor-health-connect (raw SleepSessionRecord). iOS is out of scope for the MVP.
+const sleepArray = (res) => res?.records || res?.resultData || res?.result || res?.data || (Array.isArray(res) ? res : []);
+const isoOrNull = (v) => {
+  const ms = toMs(v);
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+};
+// "+02:00" -> 120; without one, the phone's offset at that moment
+function offsetMin(v, ms) {
+  const m = /^([+-])(\d{2}):(\d{2})$/.exec(typeof v === "string" ? v : "");
+  return m ? (m[1] === "-" ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3])) : -new Date(ms).getTimezoneOffset();
+}
+
+// Health Connect: one SleepSessionRecord per night, stages inside (schemas/sleep-schema.json)
+function sleepSessionsAndroid(res) {
+  return sleepArray(res)
+    .map((r) => {
+      const startMs = toMs(r.startTime ?? r.start), endMs = toMs(r.endTime ?? r.end);
+      if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return null;
+      const stages = (r.stages || [])
+        .map((st) => ({ start: isoOrNull(st.startTime ?? st.start), end: isoOrNull(st.endTime ?? st.end), stage: st.stage }))
+        .filter((st) => st.start && st.end);
+      return {
+        id: r.metadata?.id || String(startMs),
+        start: new Date(startMs).toISOString(),
+        end: new Date(endMs).toISOString(),
+        tzOffsetMin: offsetMin(r.startZoneOffset, startMs),
+        source: r.metadata?.dataOrigin || null,
+        modifiedAt: isoOrNull(r.metadata?.lastModifiedTime),
+        stages,
+      };
+    })
+    .filter(Boolean);
+}
+
 function parseSleep(res) {
-  const arr = res?.records || res?.result || res?.data || (Array.isArray(res) ? res : []);
-  return arr
+  return sleepArray(res)
     .map((r) => {
       const startMs = toMs(r.startTime ?? r.startDate ?? r.start);
       const endMs = toMs(r.endTime ?? r.endDate ?? r.end);
@@ -776,7 +807,7 @@ async function connectSleep() {
     return;
   }
 
-  const platform = window.Capacitor.getPlatform(); // 'android' | 'ios'
+  const platform = window.Capacitor.getPlatform();
   const end = new Date();
   const start = new Date(end.getTime() - 30 * DAY);
 
@@ -802,34 +833,12 @@ async function connectSleep() {
       });
       log("Sleep records (raw response)", res);
       S.sleep = parseSleep(res);
+      S.sleepSessions = sleepSessionsAndroid(res);
       log(`Sleep: ${S.sleep.length} sessions parsed`);
       dot("dot-sleep", "on");
       renderAll();
     } catch (err) {
       log("Sleep (Android) call threw an error", String(err), "error");
-      dot("dot-sleep", "err");
-    }
-  } else if (platform === "ios") {
-    const HealthKit = findPlugin(["CapacitorHealthkit", "CapacitorHealthKit", "HealthKit"]);
-    if (!HealthKit) {
-      log("@perfood/capacitor-healthkit plugin not found", "Registered plugin names: " + registeredNames().join(", "), "error");
-      dot("dot-sleep", "err");
-      return;
-    }
-    try {
-      await HealthKit.requestAuthorization({ all: [""], read: ["sleep"], write: [""] });
-      const res = await HealthKit.queryHKitSampleType({
-        sampleName: "sleep",
-        startDate: start.toISOString(),
-        endDate: end.toISOString(),
-        limit: 0,
-      });
-      log("Sleep records (raw response)", res);
-      S.sleep = parseSleep(res);
-      dot("dot-sleep", "on");
-      renderAll();
-    } catch (err) {
-      log("Sleep (iOS) call threw an error", String(err), "error");
       dot("dot-sleep", "err");
     }
   } else {
@@ -940,12 +949,195 @@ async function connectUsageStats() {
 
     dot("dot-usagestats", days.length ? "on" : "err");
     renderAll();
-    await postToBackend("/usagestats/sync", { days });
   } catch (err) {
     log("UsageStats call threw an error", String(err), "error");
     dot("dot-usagestats", "err");
   }
 }
+
+// --- Account & sync ------------------------------------------------------------
+// Sync re-reads sleep, steps and screen time from the phone, then POSTs them to the StressLess API with the
+// signed-in user's Supabase token. The API scores each night and stores everything under that user (RLS).
+const API_URL = (() => {
+  try {
+    return localStorage.getItem("API_URL") || window.APP_CONFIG?.API_URL || "";
+  } catch {
+    return window.APP_CONFIG?.API_URL || "";
+  }
+})().replace(/\/+$/, "");
+
+function syncStatus(text, level = "") {
+  const el = $("sync-status");
+  el.hidden = !text;
+  el.className = `sync-status ${level}`;
+  el.textContent = text || "";
+}
+
+function renderAccount() {
+  const user = Auth.user();
+  $("signin-form").hidden = Boolean(user);
+  $("signed-in").hidden = !user;
+  $("account-email").textContent = user?.email || "";
+  let last = null;
+  try {
+    last = localStorage.getItem("LAST_SYNC");
+  } catch {}
+  $("last-sync").textContent = user && last ? `last sync ${fmtDay(Number(last))} ${fmtTime(Number(last))}` : "";
+  if (!Auth.configured()) syncStatus("Supabase is not configured: copy www/config.example.js to www/config.js and rebuild.", "err");
+}
+
+async function signIn(e) {
+  e.preventDefault();
+  const btn = $("btn-signin");
+  btn.disabled = true;
+  syncStatus("Signing in…");
+  try {
+    const s = await Auth.signIn($("signin-email").value.trim(), $("signin-password").value);
+    $("signin-password").value = "";
+    log("Signed in", { email: s.user.email });
+    syncStatus("");
+  } catch (err) {
+    log("Sign-in failed", String(err), "error");
+    syncStatus(err.message, "err");
+  } finally {
+    btn.disabled = false;
+    renderAccount();
+  }
+}
+
+// Every foreground session and screen/lock event of the last USAGE_DAYS days up to now, unfiltered: the backend
+// decides what to keep. Re-sending overlapping days is fine, sessions are keyed by package + start.
+async function fetchUsageSessions() {
+  const UsageStats = findPlugin(["UsageStats", "UsageStatsPlugin"]);
+  if (!UsageStats?.getUsageSessions) return null;
+  const perm = await UsageStats.checkPermission();
+  if (!perm.granted && perm.result !== "granted") return null;
+  const startTime = dayRange(USAGE_DAYS).startTime;
+  const res = await UsageStats.getUsageSessions({ startTime, endTime: Date.now() });
+  log(`Usage sessions: ${res.sessions.length} sessions, ${res.screenEvents.length} screen events`);
+  return res;
+}
+
+// A random id for this install: each phone becomes its own connection in provider_connections.
+function installId() {
+  try {
+    let id = localStorage.getItem("INSTALL_ID");
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem("INSTALL_ID", id);
+    }
+    return id;
+  } catch {
+    return (window.__installId ||= crypto.randomUUID());
+  }
+}
+
+function syncPayload(usage) {
+  return {
+    device: {
+      installId: installId(),
+      platform: window.Capacitor?.getPlatform?.() || "web",
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      tzOffsetMin: -new Date().getTimezoneOffset(),
+    },
+    permissions: { app_usage: Boolean(usage) },
+    sleep: S.sleepSessions,
+    steps: S.steps.map((s) => ({ date: dayKey(s.ms), steps: Math.round(s.value) })),
+    screenTime: usage
+      ? {
+          from: usage.startTime,
+          to: usage.endTime,
+          sessions: usage.sessions,
+          screenEvents: usage.screenEvents,
+          launcherPackage: usage.launcherPackage,
+          selfPackage: usage.selfPackage,
+        }
+      : null,
+  };
+}
+
+async function syncToBackend() {
+  const btn = $("btn-sync");
+  btn.disabled = true;
+  try {
+    if (!API_URL || API_URL.includes("your-app")) throw new Error("API_URL is not set in www/config.js");
+    if (window.Capacitor?.isNativePlatform()) {
+      syncStatus("Reading sleep, steps and screen time from the phone…");
+      await connectSleep();
+      await connectHealth();
+      await connectUsageStats();
+    }
+    let usage = null;
+    try {
+      usage = await fetchUsageSessions();
+    } catch (err) {
+      log("Usage sessions failed", String(err), "error");
+    }
+    const payload = syncPayload(usage);
+    if (!payload.sleep.length && !payload.steps.length && !payload.screenTime?.sessions.length) {
+      syncStatus("Nothing to sync yet: no sleep, steps or screen time could be read (check permissions above).", "err");
+      return;
+    }
+
+    syncStatus("Uploading…");
+    const token = await Auth.accessToken();
+    if (!token) throw new Error("Signed out: please sign in again.");
+    const res = await fetch(`${API_URL}/api/sync`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      Auth.invalidate();
+      throw new Error(data.error || "Session expired: please sign in again.");
+    }
+    if (res.status === 403 && String(data.error).startsWith("consent_required")) {
+      $("consent").hidden = false;
+      syncStatus("");
+      return;
+    }
+    if (!res.ok) throw new Error(data.error || `Sync failed (${res.status})`);
+
+    log("Sync stored", data);
+    try {
+      localStorage.setItem("LAST_SYNC", String(Date.now()));
+    } catch {}
+    const n = data.stored;
+    const lastNight = data.nights?.[data.nights.length - 1];
+    syncStatus(
+      `Synced ${n.nights} nights, ${n.step_days} days of steps, ${n.screen_sessions} app sessions (${n.screen_days} days).` +
+        (lastNight ? ` Sleep score ${lastNight.night}: ${lastNight.score} (${lastNight.rating}).` : ""),
+      "ok"
+    );
+  } catch (err) {
+    log("Sync failed", String(err), "error");
+    syncStatus(err.message || String(err), "err");
+  } finally {
+    btn.disabled = false;
+    renderAccount();
+  }
+}
+
+$("signin-form").addEventListener("submit", signIn);
+$("btn-signout").addEventListener("click", async () => {
+  await Auth.signOut();
+  syncStatus("");
+  renderAccount();
+});
+$("btn-sync").addEventListener("click", syncToBackend);
+$("btn-consent").addEventListener("click", async () => {
+  try {
+    await Auth.giveConsent();
+    $("consent").hidden = true;
+    log("Consent saved");
+    await syncToBackend();
+  } catch (err) {
+    log("Saving consent failed", String(err), "error");
+    syncStatus(err.message || String(err), "err");
+  }
+});
+renderAccount();
 
 $("btn-calendar")?.addEventListener("click", connectCalendar);
 $("btn-health")?.addEventListener("click", connectHealth);

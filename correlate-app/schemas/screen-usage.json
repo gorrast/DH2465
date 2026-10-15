@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Generated Schema",
+  "type": "object",
+  "properties": {
+    "stats": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "packageName": {
+            "type": "string"
+          },
+          "totalTimeMillis": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "packageName",
+          "totalTimeMillis"
+        ]
+      }
+    },
+    "startTime": {
+      "type": "integer"
+    },
+    "endTime": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "stats",
+    "startTime",
+    "endTime"
+  ]
+}

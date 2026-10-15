@@ -18,9 +18,10 @@ next-env.d.ts
 .vercel
 
 # personal files related to the course
-personal/
+_personal/
 
 data/
+!app/(app)/data/
 .DS_Store
 docs/screenshots/*.dom.html
 

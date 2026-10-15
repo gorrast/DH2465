@@ -99,7 +99,7 @@ export function Shell({ children }: { children: ReactNode }) {
     return () => document.removeEventListener('click', close);
   }, [menuOpen]);
 
-  // keyboard: 1–8 views, ←/→ change day, t tour, d theme, ? help
+  // keyboard: 1–9 views, ←/→ change day, t tour, d theme, ? help
   const route = parsePath(pathname);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -109,7 +109,7 @@ export function Shell({ children }: { children: ReactNode }) {
       const item = NAV.find((n) => n.key === e.key);
       if (item) { e.preventDefault(); go(defaultHref(item, today)); return; }
       if (e.key === 't' || e.key === 'T') { e.preventDefault(); tour.toggle(); return; }
-      if (e.key === '?') { toast('Keys: 1–8 views · ←/→ change day · t tour · d toggle theme'); return; }
+      if (e.key === '?') { toast('Keys: 1–9 views · ←/→ change day · t tour · d toggle theme'); return; }
       if (e.key === 'd') { toggleTheme(); return; }
       if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
         const item2 = NAV.find((n) => n.name === route.name);

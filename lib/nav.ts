@@ -19,6 +19,7 @@ export const NAV: NavItem[] = [
   { name: 'planner', label: 'Planner', icon: 'planner', key: '6', title: 'Planner' },
   { name: 'data', label: 'Data & privacy', icon: 'lock', key: '7', title: 'Data & privacy' },
   { name: 'lab', label: 'Under the hood', icon: 'lab', key: '8', title: 'Under the hood' },
+  { name: 'calendar', label: 'Calendar', icon: 'calendar', key: '9', title: 'Calendar' },
 ];
 
 export function defaultHref(item: NavItem, today: string): string {

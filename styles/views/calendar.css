@@ -1,4 +1,4 @@
-.v-calendar { max-width: 720px; }
+.v-calendar { max-width: none; }
 .v-calendar-content { display: flex; flex-direction: column; gap: 12px; }
 .v-calendar-content .card-title { margin-bottom: 0; }
 .v-calendar-content h2 { margin: 0; font-size: 18px; }
@@ -6,3 +6,10 @@
 .v-calendar-field .input { width: 100%; }
 .v-calendar-message, .v-calendar-error { margin: 14px 0 0; }
 .v-calendar-error { color: var(--status-critical); }
+.v-calendar-events { margin-top: 20px; min-width: 0; }
+.v-calendar-events .card-title { margin-bottom: 10px; }
+.v-calendar-table-scroll { max-width: 100%; overflow: auto; border: 1px solid var(--hairline); }
+.v-calendar-table { border-collapse: collapse; font-size: 12px; min-width: 100%; }
+.v-calendar-table th, .v-calendar-table td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--hairline); white-space: pre-wrap; overflow-wrap: anywhere; max-width: 420px; }
+.v-calendar-table th { position: sticky; top: 0; background: var(--card-2); color: var(--ink-secondary); font-weight: 650; }
+.v-calendar-table tbody tr:last-child td { border-bottom: 0; }

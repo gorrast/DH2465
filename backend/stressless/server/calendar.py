@@ -80,7 +80,8 @@ def _b64url(raw: bytes) -> str:
 
 def _aes() -> AESGCM:
     try:
-        key = base64.b64decode(_env("GOOGLE_TOKEN_ENCRYPTION_KEY"))
+        encoded_key = _env("GOOGLE_TOKEN_ENCRYPTION_KEY")
+        key = base64.b64decode(encoded_key + "=" * (-len(encoded_key) % 4), validate=True)
     except ValueError:
         key = b""
     if len(key) != 32:
@@ -156,6 +157,23 @@ def _forget(user_id: str, **filters: str) -> None:
 def get_status(p: Principal = Depends(current_principal)):
     c = _connected(p.user_id)
     return _json({"connections": [dict(c, email=c.get("provider_account_id"))] if c else []})
+
+
+@router.get("/events")
+def get_events(p: Principal = Depends(current_principal)):
+    """Return all columns for every calendar event owned by the signed-in user."""
+    rows: List[Dict[str, Any]] = []
+    while True:
+        page = _db("GET", "calendar_events", params={
+            "user_id": "eq." + p.user_id,
+            "select": "*",
+            "order": "starts_at.asc,id.asc",
+            "limit": str(PAGE),
+            "offset": str(len(rows)),
+        }) or []
+        rows.extend(page)
+        if len(page) < PAGE:
+            return _json({"events": rows})
 
 
 @router.post("/authorize")

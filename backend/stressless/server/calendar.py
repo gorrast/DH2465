@@ -242,7 +242,7 @@ def post_sync(p: Principal = Depends(current_principal)):
         _db("PATCH", "provider_connections", params=one, json={"status": "error"})
         raise
     # Write first, then remove what Google no longer has: a failure part-way never leaves the user with fewer events,
-    # and rows that still exist keep their id (event_analytics hangs off it). History before the window is kept.
+    # and rows that still exist keep their id (answers and accepted refer to it). History before the window is kept.
     for i in range(0, len(rows), BATCH):
         _db("POST", "calendar_events", params={"on_conflict": "user_id,provider,provider_event_id"}, json=rows[i:i + BATCH],
             prefer="resolution=merge-duplicates,return=minimal")

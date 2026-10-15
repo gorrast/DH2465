@@ -20,6 +20,8 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
+import org.json.JSONObject;
+
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -153,6 +155,23 @@ public class UsageStatsPlugin extends Plugin {
         result.put("stats", statsArray);
         result.put("startTime", startTime);
         result.put("endTime", endTime);
+
+        // Log complete JSON payload and itemized list in Logcat
+        Logger.info("UsageStatsPlugin", "RETRIEVED USAGE DATA JSON:\n" + result);
+
+        StringBuilder allAppsLog = new StringBuilder("All Retrieved App Usage (" + statsArray.length() + " apps):");
+        for (int i = 0; i < statsArray.length(); i++) {
+            try {
+                JSONObject item = statsArray.getJSONObject(i);
+                if (item != null) {
+                    String pkg = item.optString("packageName");
+                    long ms = item.optLong("totalTimeMillis");
+                    allAppsLog.append(String.format(Locale.US, "\n  [%d] %s -> %d ms (%d mins)", i + 1, pkg, ms, ms / 60000L));
+                }
+            } catch (Exception ignored) {}
+        }
+        Logger.info("UsageStatsPlugin", allAppsLog.toString());
+
         call.resolve(result);
     }
 

@@ -3,7 +3,7 @@
 // background location) and renders everything as cards. Every native call is
 // also written to the on-screen debug log at the bottom of the page.
 
-const BACKEND_URL = "https://your-backend.example.com"; // point at your server/index.js deployment
+const BACKEND_URL = window.localStorage.getItem("BACKEND_URL") || "http://10.0.2.2:3000"; // 10.0.2.2 for Android Emulator, localhost:3000 for adb reverse
 
 // All fetched data lives here so renderers (and you, via the console) can reach it.
 const S = (window.__app = {
@@ -82,16 +82,26 @@ const dot = (id, state) => {
 };
 
 async function postToBackend(path, body) {
-  try {
-    const res = await fetch(`${BACKEND_URL}${path}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    log(`Backend ${path} → ${res.status}`, undefined, res.ok ? "ok" : "error");
-  } catch (err) {
-    log(`Backend ${path} unreachable (fine while testing without a server)`, String(err), "error");
+  const urls = [BACKEND_URL, "http://localhost:3000", "http://10.0.2.2:3000"];
+  const uniqueUrls = [...new Set(urls)];
+  let lastErr = null;
+
+  for (const url of uniqueUrls) {
+    try {
+      const res = await fetch(`${url}${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) {
+        log(`Backend ${url}${path} → ${res.status}`, undefined, "ok");
+        return;
+      }
+    } catch (err) {
+      lastErr = err;
+    }
   }
+  log(`Backend ${path} unreachable on ${uniqueUrls.join(", ")}`, String(lastErr), "error");
 }
 
 // Finds a plugin by trying likely names; the registered name depends on how
@@ -161,7 +171,7 @@ function dayRange(daysAgo) {
 async function fetchScreenTimeDays(numDays = 7) {
   const UsageStats = window.Capacitor.Plugins?.UsageStats;
   const perm = await UsageStats.checkPermission();
-  if (!perm.granted) {
+  if (!perm.granted && perm.result !== "granted") {
     await UsageStats.requestPermission();
     return [];
   }

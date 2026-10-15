@@ -124,16 +124,16 @@ the phone for steps.
 - **`reports`** (from `feat/report-generation`): unchanged, plus a check that `status = 'ready'` exactly when
   `report` is not null.
 
-### Deprecated, left in place
+### Deprecated and dropped tables
 
-Nothing is dropped yet. Table comments mark these:
+`biometric_samples` and `event_analytics` were dropped on 2026-10-15 (`20261015000000_drop_unused_tables.sql`).
+They were empty and unused: `source_records` plus the derived tables replace the first, and per-event analysis is
+out of scope.
 
-| Table | Why |
+| Table | Status |
 |---|---|
-| `biometric_samples` | One reading per row fits neither sleep sessions nor heart-rate series. Replaced by `source_records` plus the derived tables. Note: users can still write to it directly. |
-| `event_analytics` | Per-event analysis is out of scope. |
-| `media_events` | Spotify and Netflix will use `source_records` plus `daily_metrics`. |
-| `user_events`, `narratives` | The simulated demo only. `narratives` is replaced by `reports`. |
+| `media_events`, `media_documents` | Kept. The collaborator's Spotify/Netflix import writes to them from outside this repo (`media_documents` exists only in the dashboard). Moving it to `source_records` + `daily_metrics` is to be agreed with them. |
+| `user_events`, `narratives` | Simulated dataset only. Drop them in the same change that removes the simulation from the API, because `stressless_state()` and `stressless_clear_state()` still use them. |
 
 ### Access rules
 
@@ -213,7 +213,7 @@ A view that needs time spans (a song at 23:40) reads `source_records` for that d
 - Whether the Reality view stays, using the watch only, now that location is out.
 - Per-event analysis, if the collaborator wants it back. It can be computed from `heart_rate_days` with no new
   table.
-- Dropping the deprecated tables once nothing reads them.
+- Dropping `user_events` and `narratives` together with the simulated dataset, and the future of the media tables.
 
 ## Testing and applying
 

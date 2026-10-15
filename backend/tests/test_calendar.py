@@ -172,6 +172,10 @@ class CalendarTests(unittest.TestCase):
         self.assertEqual(calendar.decrypt(calendar.encrypt("rt")), "rt")
         self.assertNotEqual(calendar.encrypt("rt"), calendar.encrypt("rt"))
 
+    def test_accepts_unpadded_base64_encryption_key(self):
+        os.environ["GOOGLE_TOKEN_ENCRYPTION_KEY"] = ENV["GOOGLE_TOKEN_ENCRYPTION_KEY"].rstrip("=")
+        self.assertEqual(calendar.decrypt(calendar.encrypt("rt")), "rt")
+
     def test_not_configured(self):
         del os.environ["GOOGLE_CLIENT_ID"]
         r = self.client.post("/api/calendar/google/authorize")
@@ -250,6 +254,22 @@ class CalendarTests(unittest.TestCase):
         self.assertEqual((rows["me@example.com:gym"]["category"], rows["me@example.com:focus"]["category"]), ("workout", "focus"))
         self.assertNotIn("x@example.com", json.dumps(self.fake.tables["calendar_events"]))
         self.assertIsNotNone(self.connections()[0]["last_synced_at"])
+
+    def test_event_inspection_returns_full_user_rows_only(self):
+        own = {
+            "id": "event-row-1", "user_id": "user-a", "provider": "google_calendar",
+            "provider_event_id": "me@example.com:event-1", "title": "Planning", "category": "meeting",
+            "starts_at": at(1), "ends_at": at(1, 10), "location": "Office", "description": "Agenda",
+            "guests": [{"response_status": "accepted"}], "created_at": at(0),
+        }
+        other_user = dict(own, id="event-row-other", user_id="user-b", title="Private event")
+        self.fake.tables["calendar_events"] += [own, other_user]
+
+        response = self.client.get("/api/calendar/google/events")
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["events"], [own])
+        self.assertIn("guests", response.json()["events"][0])
+        self.assertIn("created_at", response.json()["events"][0])
 
     def test_resync_keeps_ids_drops_stale_and_keeps_history(self):
         self.connect()

@@ -12,6 +12,9 @@ const S = (window.__app = {
   steps: [], // [{ ms, value }] one per day
   workouts: [],
   sleep: [],
+  appUsage: [],
+  usageDays: [],
+  usageSelected: null,
   calView: "upcoming",
   stepsMode: "week",
   range: null,
@@ -27,6 +30,10 @@ const fmtDay = (ms) => new Date(ms).toLocaleDateString(undefined, { weekday: "sh
 const fmtTime = (ms) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 const fmtNum = (n) => Math.round(n).toLocaleString();
 const fmtDur = (ms) => {
+  if (ms > 0 && ms < 60000) {
+    const sec = Math.round(ms / 1000);
+    return `${sec}s`;
+  }
   const m = Math.round(ms / 60000);
   return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m` : `${m}m`;
 };
@@ -139,6 +146,40 @@ function hbarsHtml(entries) {
         `<div class="track"><div class="fill" style="width:${((n / max) * 100).toFixed(1)}%"></div></div></div>`
     )
     .join("");
+}
+
+// Local-midnight boundaries per day; setDate keeps daylight saving days correct
+function dayRange(daysAgo) {
+  const end = new Date();
+  end.setHours(0, 0, 0, 0);
+  end.setDate(end.getDate() - (daysAgo - 1)); // end of that day = start of the next
+  const start = new Date(end);
+  start.setDate(start.getDate() - 1);
+  return { startTime: start.getTime(), endTime: end.getTime(), date: dayKey(start.getTime()) };
+}
+
+async function fetchScreenTimeDays(numDays = 7) {
+  const UsageStats = window.Capacitor.Plugins?.UsageStats;
+  const perm = await UsageStats.checkPermission();
+  if (!perm.granted) {
+    await UsageStats.requestPermission();
+    return [];
+  }
+
+  const days = [];
+  for (let i = 1; i <= numDays; i++) { // 1 = yesterday, 2 = day before, ...
+    const { startTime, endTime, date } = dayRange(i);
+    try {
+      const res = await UsageStats.getUsageStats({ startTime, endTime });
+      const stats = res.stats || [];
+      const totalMs = stats.reduce((a, s) => a + s.totalTimeMillis, 0);
+      days.push({ date, totalMs, apps: stats });
+      log(`Screen time ${date}: ${fmtDur(totalMs)}`, undefined, totalMs ? "ok" : "error");
+    } catch (err) {
+      log(`Screen time ${date} failed`, String(err), "error");
+    }
+  }
+  return days.sort((a, b) => a.date.localeCompare(b.date));
 }
 
 // --- Renderers ---------------------------------------------------------------
@@ -409,6 +450,7 @@ function renderAll() {
   renderSteps();
   renderWorkouts();
   renderSleep();
+  renderAppUsage();
 }
 
 // Segmented controls (Upcoming/Past, Daily/Weekly)
@@ -785,10 +827,121 @@ async function connectSleep() {
   }
 }
 
-$("btn-calendar").addEventListener("click", connectCalendar);
-$("btn-health").addEventListener("click", connectHealth);
-$("btn-sleep").addEventListener("click", connectSleep);
-$("btn-location").addEventListener("click", connectLocation);
+// --- App Usage (UsageStats) --------------------------------------------------
+const USAGE_DAYS = 7; // days of history to fetch; older days may be empty on the phone
+
+function renderAppUsage() {
+  const body = $("usagestats-body");
+  if (!body) return;
+  const sub = $("usage-sub");
+  const chrono = S.usageDays || []; // oldest -> newest, for the chart
+  if (!chrono.length) {
+    body.classList.add("empty");
+    body.innerHTML = "No app usage stats loaded yet.";
+    if (sub) sub.textContent = "";
+    return;
+  }
+  body.classList.remove("empty");
+  const days = [...chrono].reverse(); // newest first, for the slides
+  if (sub) sub.textContent = `last ${days.length} days`;
+
+  const prevScroll = body.querySelector(".usage-swipe")?.scrollLeft || 0;
+  const withData = days.filter((d) => d.totalMs > 0);
+  const avgMs = withData.length ? withData.reduce((a, d) => a + d.totalMs, 0) / withData.length : 0;
+
+  const overview =
+    statHtml([
+      ["avg / day", fmtDur(avgMs)],
+      ["days with data", `${withData.length}/${days.length}`],
+    ]) +
+    barsSvg(chrono.map((d) => d.totalMs / 60000), chrono.map((d) => `${d.date}: ${fmtDur(d.totalMs)}`), "violet") +
+    `<div class="axis"><span>${esc(chrono[0].date)}</span><span>minutes per day</span><span>${esc(chrono[chrono.length - 1].date)}</span></div>`;
+
+  const slides = days
+    .map((d) => {
+      const ms = new Date(`${d.date}T00:00:00`).getTime(); // local midnight
+      const top = [...d.apps].sort((a, b) => b.totalTimeMillis - a.totalTimeMillis).slice(0, 10);
+      const max = top.length ? top[0].totalTimeMillis : 1;
+      const rows = top
+        .map(
+          (s) =>
+            `<div class="hbar"><div class="lbl"><span>${esc(s.packageName)}</span><span>${esc(fmtDur(s.totalTimeMillis))}</span></div>` +
+            `<div class="track"><div class="fill" style="width:${((s.totalTimeMillis / max) * 100).toFixed(1)}%"></div></div></div>`
+        )
+        .join("");
+      return (
+        `<div class="usage-slide">` +
+        `<div class="usage-slide-head"><span class="d">${esc(fmtDay(ms))}</span><span class="tot">${esc(fmtDur(d.totalMs))}</span></div>` +
+        `<div class="sub">${d.apps.length} apps</div>` +
+        (rows || `<div class="empty" style="margin-top:10px">No data for this day (older than the phone keeps events?)</div>`) +
+        `</div>`
+      );
+    })
+    .join("");
+
+  body.innerHTML =
+    overview +
+    `<div class="usage-swipe">${slides}</div>` +
+    `<div class="usage-pos" id="usage-pos">1 / ${days.length} · swipe for older days</div>`;
+
+  const sw = body.querySelector(".usage-swipe");
+  sw.scrollLeft = prevScroll; // keep position when other cards trigger a re-render
+  const update = () => {
+    const i = Math.round(sw.scrollLeft / (sw.clientWidth + 12));
+    const pos = $("usage-pos");
+    if (pos) pos.textContent = `${Math.min(i + 1, days.length)} / ${days.length} · ${days[Math.min(i, days.length - 1)].date}`;
+  };
+  sw.addEventListener("scroll", update, { passive: true });
+  update();
+}
+
+async function connectUsageStats() {
+  if (!window.Capacitor?.isNativePlatform()) {
+    log("UsageStats: not running as a native app (browser tab)", undefined, "error");
+    return;
+  }
+  const UsageStats = findPlugin(["UsageStats", "UsageStatsPlugin"]);
+  if (!UsageStats) {
+    log("UsageStats plugin not found on window.Capacitor.Plugins", "Registered plugin names: " + registeredNames().join(", "), "error");
+    dot("dot-usagestats", "err");
+    return;
+  }
+  try {
+    const perm = await UsageStats.checkPermission();
+    log("UsageStats permission result", perm);
+    if (!perm.granted && perm.result !== "granted") {
+      log("UsageStats permission not granted. Requesting permission...", undefined, "error");
+      await UsageStats.requestPermission();
+      dot("dot-usagestats", "err");
+      alert("Please grant Usage Access permission in Settings, then tap Connect again.");
+      return;
+    }
+
+    // Completed days only: 1 = yesterday ... USAGE_DAYS days ago (today is excluded)
+    const days = await fetchScreenTimeDays(USAGE_DAYS);
+    S.usageDays = days;
+    S.usageSelected = null;
+    S.appUsage = days.length ? days[days.length - 1].apps : []; // yesterday, kept for compatibility
+
+    log(
+      `UsageStats: ${days.length} days fetched`,
+      days.map((d) => `${d.date}: ${fmtDur(d.totalMs)} (${d.apps.length} apps)`)
+    );
+
+    dot("dot-usagestats", days.length ? "on" : "err");
+    renderAll();
+    await postToBackend("/usagestats/sync", { days });
+  } catch (err) {
+    log("UsageStats call threw an error", String(err), "error");
+    dot("dot-usagestats", "err");
+  }
+}
+
+$("btn-calendar")?.addEventListener("click", connectCalendar);
+$("btn-health")?.addEventListener("click", connectHealth);
+$("btn-sleep")?.addEventListener("click", connectSleep);
+$("btn-location")?.addEventListener("click", connectLocation);
+$("btn-usagestats")?.addEventListener("click", connectUsageStats);
 
 renderAll();
 

@@ -157,6 +157,22 @@
   .log-entry.error { border-color: var(--err); color: #ffb3ae; }
   .log-entry.ok { border-color: rgba(110,231,183,0.3); }
   .log-time { color: var(--dim); margin-right: 6px; }
+
+  /* app usage: swipeable day cards */
+  .usage-swipe {
+    display: flex; gap: 12px; overflow-x: auto;
+    scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; margin-top: 12px;
+  }
+  .usage-swipe::-webkit-scrollbar { display: none; }
+  .usage-slide {
+    flex: 0 0 100%; min-width: 0; scroll-snap-align: center;
+    background: var(--panel-2); border-radius: 12px; padding: 14px;
+  }
+  .usage-slide-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+  .usage-slide-head .d { font-weight: 600; font-size: 0.95rem; }
+  .usage-slide-head .tot { color: var(--violet); font-weight: 650; font-size: 1.1rem; }
+  .usage-pos { text-align: center; color: var(--dim); font-size: 0.72rem; margin-top: 8px; }
 </style>
 </head>
 <body>
@@ -179,6 +195,8 @@
       <button id="btn-sleep">Connect</button></div>
     <div class="row"><span><span class="dot off" id="dot-location"></span>Background location</span>
       <button id="btn-location">Connect</button></div>
+    <div class="row"><span><span class="dot off" id="dot-usagestats"></span>App usage</span>
+      <button id="btn-usagestats">Connect</button></div>
   </section>
 
   <section class="card">
@@ -221,6 +239,11 @@
   <section class="card">
     <div class="card-head"><h2>Sleep</h2><span class="sub">last 30 days</span></div>
     <div id="sleep-body" class="empty">Connect sleep to see your nights here.</div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>App usage</h2><span class="sub" id="usage-sub">yesterday</span></div>
+    <div id="usagestats-body" class="empty">Connect app usage to see your screen time per app.</div>
   </section>
 
   <section class="card">

@@ -57,6 +57,24 @@ class UserStore:
         """Remove answers, added events, accepted suggestions and narratives (the profile and reports stay)."""
         raise NotImplementedError
 
+    def set_consent(self) -> None:
+        """Record that the user agreed to AI-written reports (``profiles.consented_at = now()``)."""
+        raise NotImplementedError
+
+    def time_zone(self) -> str:
+        """The user's IANA time zone (``profiles.time_zone``); it defines "today", "last night" and the week."""
+        raise NotImplementedError
+
+    def rows(self, table: str, column: Optional[str] = None, lo: Optional[str] = None, hi: Optional[str] = None
+             ) -> List[Dict[str, Any]]:
+        """The user's rows of a real-data table, optionally with ``lo <= column <= hi`` (ISO strings), ordered by
+        ``column``. Rows look like PostgREST JSON: timestamps and dates as ISO strings."""
+        raise NotImplementedError
+
+    def consented(self) -> bool:
+        """Whether the user agreed to their summaries being sent to the AI service (``profiles.consented_at``)."""
+        raise NotImplementedError
+
     # ------------------------------------------------------------- reports --
     # One report per kind and period. It is claimed before the model is called, so a period can never cost
     # more than one call; nothing here deletes a report.

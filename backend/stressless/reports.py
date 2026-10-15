@@ -68,7 +68,7 @@ class Pattern(BaseModel):
 class DayPoint(BaseModel):
     """One day of the week being summarised (weekly reports only)."""
     day: date
-    score: Optional[int] = None                # sleep score for the night before
+    score: Optional[int] = None                # sleep score for the night after this day
     tags: List[str] = Field(default_factory=list)   # "Travel day", "5 meetings", "Morning workout"
 
 

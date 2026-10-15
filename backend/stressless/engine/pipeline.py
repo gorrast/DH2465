@@ -77,7 +77,7 @@ class Engine:
     def habits(self, upto: date, history_days: Optional[int] = None) -> List[Habit]:
         return rank_habits(self.ds, upto, history_days, fit=self.fit_for(upto, history_days), cache=self._cache)
 
-    def morning_report(self, morning: date, history_days: Optional[int] = None) -> MorningReport:
+    def morning_report(self, morning: date, history_days: Optional[int] = None, narrate: bool = True) -> MorningReport:
         self._check_report_date(morning)
         night_date = morning - timedelta(days=1)
         night = self.ds.night(night_date)
@@ -108,7 +108,8 @@ class Engine:
             missing_data=None if worn else "No watch data for the night of %s — was the watch charging?" % fmt_day(night_date),
             confidence_note=note, calm_day_pred=meta.get("calm_day_pred"), rating=rating(score) if score is not None else None,
             sources=self.sources_for(night_date))
-        report.narrative = self._narrative(report, morning, history_days)
+        if narrate:                              # the generated reports build on this without the old narrative call
+            report.narrative = self._narrative(report, morning, history_days)
         return report
 
     def _narrative(self, report: MorningReport, morning: date, history_days: Optional[int]) -> str:

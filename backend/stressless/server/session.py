@@ -3,6 +3,10 @@
 A user's dataset is identified by (persona, seed, today) and regenerated on demand — about 0.15 s — then the user's
 own state is replayed onto it. Warm instances keep recently generated datasets and recently used engines in small LRU
 caches, so most requests skip both generation and model fitting.
+
+The app runs on each signed-in user's own data, read from the real-data tables (``connectors.real_data``). It changes
+whenever the phone syncs, so an engine is reused for at most REAL_TTL seconds. The simulated personas are only kept
+for the older test suites (STRESSLESS_DATA=demo) until the simulator is removed.
 """
 from __future__ import annotations
 
@@ -16,6 +20,7 @@ from contextlib import contextmanager
 from datetime import date
 from typing import Any, Dict, Hashable, Iterator, Optional, Tuple
 
+from ..connectors.real_data import load_dataset, valid_tz
 from ..engine.pipeline import Engine
 from ..models import Dataset
 from ..sim import PERSONAS, generate_dataset, get_persona
@@ -25,6 +30,11 @@ from ..timeutil import parse_date, today_local
 log = logging.getLogger("stressless.server.session")
 DAYS = 70
 DEFAULT_PERSONA, DEFAULT_SEED = "alex", 7
+REAL_TTL = 60
+
+
+def real_data() -> bool:
+    return os.environ.get("STRESSLESS_DATA", "real").lower() != "demo"
 
 
 class _LRU:
@@ -94,7 +104,21 @@ def _identity(store: UserStore) -> Tuple[str, int, date]:
     return persona, seed, today
 
 
+def _real_engine_for(user_id: str, store: UserStore) -> Engine:
+    today = anchor_override() or today_local(valid_tz(store.time_zone()))
+    key = (user_id, "real", today, store.state_version(), int(time.time() // REAL_TTL))
+    engine = _engines.get(key)
+    if engine is None:
+        engine = Engine(load_dataset(store, today), store)
+        _engines.drop(lambda k: k[0] == user_id)
+        _engines.put(key, engine)
+    engine.store = store
+    return engine
+
+
 def _engine_for(user_id: str, store: UserStore) -> Engine:
+    if real_data():
+        return _real_engine_for(user_id, store)
     persona, seed, today = _identity(store)
     key = (user_id, persona, seed, today, store.state_version())
     engine = _engines.get(key)
@@ -123,7 +147,8 @@ def engine_session(user_id: str, store: UserStore) -> Iterator[Engine]:
     with _user_lock(user_id):
         engine = _engine_for(user_id, store)
         yield engine
-        _remember(user_id, engine)
+        if not real_data():
+            _remember(user_id, engine)
 
 
 def switch_persona(user_id: str, store: UserStore, persona: str, seed: int) -> None:

@@ -17,6 +17,7 @@ from .base import DEFAULT_PROFILE, UserStore
 
 log = logging.getLogger("stressless.store.supabase")
 _client: Optional[httpx.Client] = None
+PAGE = 1000
 
 
 class SupabaseError(Exception):
@@ -123,6 +124,33 @@ class SupabaseStore(UserStore):
         self._call("POST", "/rpc/stressless_clear_state", json={})
         snap = self._state()
         snap["answers"], snap["events"], snap["accepted"] = {}, {}, {}
+
+    def set_consent(self) -> None:
+        now = _now()
+        self._upsert("profiles", {"consented_at": now}, "user_id")
+        self._state()["profile"] = dict(self._state()["profile"] or {}, consented_at=now)
+
+    def time_zone(self) -> str:
+        return (self._state()["profile"] or {}).get("time_zone") or "Europe/Stockholm"
+
+    def rows(self, table: str, column: Optional[str] = None, lo: Optional[str] = None, hi: Optional[str] = None
+             ) -> List[Dict[str, Any]]:
+        """Read through RLS (the user's own rows), 1000 rows per request, the PostgREST default maximum."""
+        params = {"select": "*"}
+        conds = ["%s.gte.%s" % (column, lo)] * (lo is not None) + ["%s.lte.%s" % (column, hi)] * (hi is not None)
+        if column:
+            params["order"] = column
+        if conds:
+            params["and"] = "(%s)" % ",".join(conds)
+        out: List[Dict[str, Any]] = []
+        while True:
+            page = self._call("GET", "/" + table, params=dict(params, limit=str(PAGE), offset=str(len(out)))) or []
+            out.extend(page)
+            if len(page) < PAGE:
+                return out
+
+    def consented(self) -> bool:
+        return bool((self._state()["profile"] or {}).get("consented_at"))
 
     # ------------------------------------------------------------- reports --
     @staticmethod

@@ -22,6 +22,9 @@ class MemoryStore(UserStore):
         self._accepted: Dict[str, str] = {}
         self._narratives: Dict[str, str] = {}
         self._reports: Dict[Tuple[str, date], Dict[str, Any]] = {}
+        self.consented_at: Optional[str] = None
+        self.tz: str = "Europe/Stockholm"
+        self.tables: Dict[str, List[Dict[str, Any]]] = {}      # real-data tables, rows as PostgREST returns them
 
     def profile(self) -> Dict[str, Any]:
         return dict(self._profile)
@@ -58,6 +61,23 @@ class MemoryStore(UserStore):
         self._events.clear()
         self._accepted.clear()
         self._narratives.clear()
+
+    def set_consent(self) -> None:
+        self.consented_at = _now()
+
+    def time_zone(self) -> str:
+        return self.tz
+
+    def rows(self, table: str, column: Optional[str] = None, lo: Optional[str] = None, hi: Optional[str] = None
+             ) -> List[Dict[str, Any]]:
+        out = [dict(r) for r in self.tables.get(table, [])]
+        if column:
+            out = [r for r in out if (lo is None or str(r[column]) >= lo) and (hi is None or str(r[column]) <= hi)]
+            out.sort(key=lambda r: str(r[column]))
+        return out
+
+    def consented(self) -> bool:
+        return self.consented_at is not None
 
     def report_row(self, kind: str, period_start: date) -> Optional[Dict[str, Any]]:
         row = self._reports.get((kind, period_start))

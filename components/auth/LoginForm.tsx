@@ -1,10 +1,11 @@
 'use client';
-/* Email + password sign-in and sign-up (Supabase Auth). New accounts confirm their email before the first sign-in. */
+/* Email + password sign-in, sign-up and password reset (Supabase Auth). New accounts confirm their email before the
+ * first sign-in; a reset link signs the user in through /auth/confirm and lands on /reset-password. */
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { getSupabase } from '@/lib/supabase/client';
 
-type Mode = 'signin' | 'signup';
+type Mode = 'signin' | 'signup' | 'forgot';
 
 /** Only allow same-site relative redirects after sign-in. */
 function safeNext(next: string | null): string {
@@ -14,21 +15,44 @@ function safeNext(next: string | null): string {
 export function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const [mode, setMode] = useState<Mode>('signin');
+  const [mode, setMode] = useState<Mode>(params.get('reset') ? 'forgot' : 'signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(params.get('error'));
   const [notice, setNotice] = useState<string | null>(params.get('confirmed') ? 'Email confirmed — sign in to continue.' : null);
   const next = safeNext(params.get('next'));
 
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    setPending(true);
+  function switchMode(m: Mode) {
+    setMode(m);
     setError(null);
     setNotice(null);
+    setPassword('');
+    setConfirm('');
+  }
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setNotice(null);
+    if (mode === 'signup' && password !== confirm) {
+      setError('The passwords do not match.');
+      return;
+    }
+    setPending(true);
     const supabase = getSupabase();
     try {
+      if (mode === 'forgot') {
+        const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: location.origin + '/auth/confirm?next=' + encodeURIComponent('/reset-password'),
+        });
+        if (err) throw err;
+        // Same message whether or not the address has an account, so the form does not reveal who is registered.
+        setNotice('If ' + email + ' has an account, we sent it a link to choose a new password.');
+        setPending(false);
+        return;
+      }
       if (mode === 'signin') {
         const { error: err } = await supabase.auth.signInWithPassword({ email, password });
         if (err) throw err;
@@ -49,6 +73,7 @@ export function LoginForm() {
       setNotice('Check your inbox: we sent a confirmation link to ' + email + '. Open it to finish creating your account.');
       setMode('signin');
       setPassword('');
+      setConfirm('');
     } catch (err: any) {
       setError(err?.message || String(err));
     }
@@ -64,29 +89,51 @@ export function LoginForm() {
           </span>
           <span className="brand-text">StressLess<small>the watch measures, the calendar explains</small></span>
         </div>
-        <div className="segmented login-tabs" role="tablist">
-          <button type="button" role="tab" aria-selected={mode === 'signin'} className={mode === 'signin' ? 'active' : ''} onClick={() => { setMode('signin'); setError(null); }}>Sign in</button>
-          <button type="button" role="tab" aria-selected={mode === 'signup'} className={mode === 'signup' ? 'active' : ''} onClick={() => { setMode('signup'); setError(null); }}>Create account</button>
-        </div>
+        {mode === 'forgot' ? (
+          <div>
+            <h3 className="login-title">Reset your password</h3>
+            <p className="small secondary login-intro">Enter your email and we will send you a link to choose a new password.</p>
+          </div>
+        ) : (
+          <div className="segmented login-tabs" role="tablist">
+            <button type="button" role="tab" aria-selected={mode === 'signin'} className={mode === 'signin' ? 'active' : ''} onClick={() => switchMode('signin')}>Sign in</button>
+            <button type="button" role="tab" aria-selected={mode === 'signup'} className={mode === 'signup' ? 'active' : ''} onClick={() => switchMode('signup')}>Create account</button>
+          </div>
+        )}
         <form className="stack login-form" onSubmit={submit}>
           <label className="login-field">
             <span className="small secondary">Email</span>
             <input className="input" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
           </label>
-          <label className="login-field">
-            <span className="small secondary">Password</span>
-            <input className="input" type="password" autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} />
-          </label>
+          {mode !== 'forgot' ? (
+            <div className="login-field">
+              <div className="row between">
+                <label className="small secondary" htmlFor="login-password">Password</label>
+                {mode === 'signin' ? <button type="button" className="login-link small" onClick={() => switchMode('forgot')}>Forgot password?</button> : null}
+              </div>
+              <input id="login-password" className="input" type="password" autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} />
+            </div>
+          ) : null}
+          {mode === 'signup' ? (
+            <label className="login-field">
+              <span className="small secondary">Confirm password</span>
+              <input className="input" type="password" autoComplete="new-password" required minLength={6} value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+            </label>
+          ) : null}
           {error ? <p className="login-msg login-error small" role="alert">{error}</p> : null}
           {notice ? <p className="login-msg login-notice small" role="status">{notice}</p> : null}
           <button className="btn btn-primary login-submit" type="submit" disabled={pending}>
             {pending ? <span className="spinner" /> : null}
-            {mode === 'signin' ? 'Sign in' : 'Create account'}
+            {mode === 'signin' ? 'Sign in' : mode === 'signup' ? 'Create account' : 'Send reset link'}
           </button>
         </form>
-        <p className="tiny muted login-foot">
-          {mode === 'signin' ? 'Each account gets its own demo: a simulated person, their calendar and their watch.' : 'You will get an email to confirm your address before your first sign-in.'}
-        </p>
+        {mode === 'forgot' ? (
+          <button type="button" className="login-link small login-back" onClick={() => switchMode('signin')}>Back to sign in</button>
+        ) : (
+          <p className="tiny muted login-foot">
+            {mode === 'signin' ? 'Sign in to see your reports.' : 'You will get an email to confirm your address before your first sign-in.'}
+          </p>
+        )}
       </div>
     </div>
   );

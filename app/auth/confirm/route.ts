@@ -24,9 +24,16 @@ export async function GET(request: NextRequest) {
   }
 
   if (!error) return NextResponse.redirect(origin + next);
-  // A link opened in another browser cannot finish the PKCE exchange, but the email is confirmed: ask to sign in.
   const url = new URL('/login', origin);
-  if (code) url.searchParams.set('confirmed', '1');
-  else url.searchParams.set('error', error);
+  if (next.startsWith('/reset-password')) {
+    // A reset link opened in another browser, or used twice, cannot sign the user in: ask for a new one.
+    url.searchParams.set('error', 'This reset link has expired or was opened in a different browser. Request a new one.');
+    url.searchParams.set('reset', '1');
+  } else if (code) {
+    // A link opened in another browser cannot finish the PKCE exchange, but the email is confirmed: ask to sign in.
+    url.searchParams.set('confirmed', '1');
+  } else {
+    url.searchParams.set('error', error);
+  }
   return NextResponse.redirect(url);
 }

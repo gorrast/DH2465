@@ -24,7 +24,7 @@ from ..models import to_jsonable
 from ..sim.personas import PERSONA_ORDER, PERSONAS
 from ..store import SupabaseError
 from ..timeutil import parse_date
-from . import calendar, phone_sync, session
+from . import calendar, phone_sync, session, reports
 from .auth import Principal, current_principal
 
 log = logging.getLogger("stressless.server")
@@ -34,6 +34,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 app = FastAPI(title="StressLess API", version=__version__, docs_url="/api/docs", openapi_url="/api/openapi.json", redoc_url=None)
 app.include_router(calendar.router)
 app.include_router(phone_sync.router)
+app.include_router(reports.router)
 JSON_TYPE = "application/json; charset=utf-8"
 
 # The phone app (correlate-app) runs in an Android WebView on https://localhost and calls the API cross-origin with a

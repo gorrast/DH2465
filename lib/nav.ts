@@ -11,6 +11,7 @@ export interface NavItem {
 }
 
 export const NAV: NavItem[] = [
+  { name: 'home', label: 'Home', icon: 'brain', key: '0', title: 'Home' },
   { name: 'morning', label: 'Morning', icon: 'moon', key: '1', withDate: true, title: 'Morning' },
   { name: 'replay', label: 'Replay', icon: 'pulse', key: '2', withDate: true, dateOffset: -1, title: 'Replay' },
   { name: 'week', label: 'Week', icon: 'week', key: '3', title: 'Week' },
@@ -23,6 +24,7 @@ export const NAV: NavItem[] = [
 ];
 
 export function defaultHref(item: NavItem, today: string): string {
+  if (item.name === 'home') return '/';
   if (!item.withDate) return '/' + item.name;
   return '/' + item.name + '/' + (item.dateOffset ? dates.addDays(today, item.dateOffset) : today);
 }
@@ -35,5 +37,5 @@ export function hrefFor(name: string, today: string): string {
 /** Split a pathname like /morning/2026-09-27 into the view name and its params. */
 export function parsePath(pathname: string): { name: string; params: string[] } {
   const segs = pathname.split('/').filter(Boolean);
-  return { name: segs[0] || 'morning', params: segs.slice(1) };
+  return { name: segs[0] || 'home', params: segs.slice(1) };
 }

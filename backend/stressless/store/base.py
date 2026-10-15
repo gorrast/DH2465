@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import date
 from typing import Any, Dict, List, Optional
 
 from ..models import CalendarEvent, Dataset
+from ..reports import Report
 
 DEFAULT_PROFILE = {"persona": "alex", "seed": 7, "anchor": None}
 
@@ -52,7 +54,44 @@ class UserStore:
         raise NotImplementedError
 
     def clear_user_state(self) -> None:
-        """Remove answers, added events, accepted suggestions and narratives (the profile stays)."""
+        """Remove answers, added events, accepted suggestions and narratives (the profile and reports stay)."""
+        raise NotImplementedError
+
+    def set_consent(self) -> None:
+        """Record that the user agreed to AI-written reports (``profiles.consented_at = now()``)."""
+        raise NotImplementedError
+
+    def time_zone(self) -> str:
+        """The user's IANA time zone (``profiles.time_zone``); it defines "today", "last night" and the week."""
+        raise NotImplementedError
+
+    def rows(self, table: str, column: Optional[str] = None, lo: Optional[str] = None, hi: Optional[str] = None
+             ) -> List[Dict[str, Any]]:
+        """The user's rows of a real-data table, optionally with ``lo <= column <= hi`` (ISO strings), ordered by
+        ``column``. Rows look like PostgREST JSON: timestamps and dates as ISO strings."""
+        raise NotImplementedError
+
+    def consented(self) -> bool:
+        """Whether the user agreed to their summaries being sent to the AI service (``profiles.consented_at``)."""
+        raise NotImplementedError
+
+    # ------------------------------------------------------------- reports --
+    # One report per kind and period. It is claimed before the model is called, so a period can never cost
+    # more than one call; nothing here deletes a report.
+    def report_row(self, kind: str, period_start: date) -> Optional[Dict[str, Any]]:
+        """{"status": "pending" | "ready", "report": Report | None, "created_at": ISO string}, or None."""
+        raise NotImplementedError
+
+    def claim_report(self, kind: str, period_start: date) -> bool:
+        """Reserve the period. False when it was already claimed (pending or ready)."""
+        raise NotImplementedError
+
+    def save_report(self, report: Report) -> None:
+        """Fill in a claimed, still pending report."""
+        raise NotImplementedError
+
+    def reports_last_day(self) -> int:
+        """Reports claimed by all users in the last 24 hours (the global cap on model calls)."""
         raise NotImplementedError
 
     # ------------------------------------------------------------- derived --

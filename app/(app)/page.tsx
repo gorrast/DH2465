@@ -1,5 +1,8 @@
-import { redirect } from 'next/navigation';
+import type { Metadata } from 'next';
+import { HomeView } from '@/components/views/Home';
 
-export default function Home() {
-  redirect('/morning');
+export const metadata: Metadata = { title: 'Home' };
+
+export default function Page() {
+  return <HomeView />;
 }

@@ -12,6 +12,11 @@
 .login-error { background: rgba(208, 59, 59, 0.12); color: var(--ink-primary); border: 1px solid rgba(208, 59, 59, 0.4); }
 .login-notice { background: var(--accent-soft); color: var(--ink-primary); border: 1px solid var(--hairline-strong); }
 .login-foot { margin: 0; text-align: center; }
+.login-title { margin: 0 0 6px; }
+.login-intro { margin: 0; }
+.login-link { background: none; border: 0; padding: 0; color: var(--accent); font-weight: 600; cursor: pointer; }
+.login-link:hover { text-decoration: underline; }
+.login-back { align-self: center; }
 .rail-foot { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
 .rail-user { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .rail-signout { padding-left: 0; }

@@ -41,6 +41,10 @@ Requirements: Node.js 20+, [uv](https://docs.astral.sh/uv/) (Python 3.12) and a 
 2. **Environment.** `cp .env.example .env.local` and fill in `NEXT_PUBLIC_SUPABASE_URL` and
    `NEXT_PUBLIC_SUPABASE_ANON_KEY` (Project Settings → API). Projects that still use the legacy
    JWT secret also need `SUPABASE_JWT_SECRET`; projects on asymmetric signing keys (the default) do not.
+   The Calendar view's Google connection needs five more server-side variables (`APP_URL`,
+   `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_TOKEN_ENCRYPTION_KEY`, `SUPABASE_SERVICE_ROLE_KEY`; see
+   `.env.example`) and `<APP_URL>/api/calendar/google/callback` registered as a redirect URI on the Google
+   OAuth client. Without them the rest of the app works and the Calendar view reports it is not configured.
 3. **Install and run.**
 
    ```bash
@@ -117,6 +121,7 @@ Regenerate them against a running instance with `STRESSLESS_EMAIL=… STRESSLESS
 | Reality check | Questions asked only when calendar, location and body disagree — booked but not seen, seen but not booked |
 | Planner | What-if for today or the coming week; accepted suggestions land in the calendar and as `.ics` |
 | Data & privacy | What is connected, which data classes are read and why, persona and seed, importing your own data (coming soon), delete everything |
+| Calendar | Connect a Google Calendar (read-only), sync its events, disconnect |
 | Under the hood | Pipeline, model card (in-sample vs out-of-sample fit), validation against planted truth, hidden factors, why this is not circular, cold-start slider, open challenges |
 
 ## How the engine works (and what it does not claim)

@@ -1,34 +1,19 @@
 'use client';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { getSupabase } from '@/lib/supabase/client';
+import { api } from '@/lib/api';
 import { Icon } from '../ui/Icon';
 import { ViewHead } from './common';
 
 type Step = 'start' | 'providers' | 'google' | 'connected';
 type Connection = { status?: string; email?: string; last_synced_at?: string };
 
-async function calendarRequest(action: string) {
-  const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!baseUrl || !anonKey) throw new Error('Calendar connections are not configured for this app.');
+type Action = 'status' | 'authorize' | 'sync' | 'disconnect';
 
-  const { data, error } = await getSupabase().auth.getSession();
-  if (error) throw error;
-  if (!data.session) throw new Error('Your session has expired. Sign in again and retry.');
-
-  const response = await fetch(new URL('/functions/v1/google-calendar', baseUrl), {
-    method: 'POST',
-    headers: {
-      Authorization: 'Bearer ' + data.session.access_token,
-      apikey: anonKey,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ action }),
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || 'Google Calendar request failed.');
-  return payload;
+/** The Google Calendar routes of the FastAPI backend (backend/stressless/server/calendar.py). */
+function calendarRequest(action: Action): Promise<any> {
+  const base = '/api/calendar/google';
+  return action === 'status' ? api.get(base) : api.post(base + '/' + action);
 }
 
 function connectedCalendar(payload: any): Connection | null {

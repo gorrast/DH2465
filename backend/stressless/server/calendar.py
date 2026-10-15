@@ -108,7 +108,9 @@ def state_hash(state: str) -> str:
 # ---------------------------------------------------------------- storage --
 def _db(method: str, table: str, *, params: Optional[Dict[str, str]] = None, json: Any = None, prefer: Optional[str] = None) -> Any:
     key = _env("SUPABASE_SERVICE_ROLE_KEY")
-    headers = {"apikey": key, "Authorization": "Bearer " + key, "Content-Type": "application/json"}
+    headers = {"apikey": key, "Content-Type": "application/json"}
+    if not key.startswith("sb_"):  # legacy service_role JWT; the newer sb_secret_ keys go in apikey only
+        headers["Authorization"] = "Bearer " + key
     if prefer:
         headers["Prefer"] = prefer
     try:

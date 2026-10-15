@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { Analytics } from "@vercel/analytics/next"
 import '@/styles/base.css';
 import '@/styles/charts.css';
+import '@/styles/views/home.css';
 import '@/styles/views/morning.css';
 import '@/styles/views/week.css';
 import '@/styles/views/habits.css';

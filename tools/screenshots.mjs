@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /* Render every StressLess view with headless Chromium and fail on client-side errors.
  *
- * Usage: STRESSLESS_EMAIL=… STRESSLESS_PASSWORD=… node tools/screenshots.mjs [--url http://localhost:3000] [--out docs/screenshots] [--theme light]
+ * Usage: STRESSLESS_EMAIL=… STRESSLESS_PASSWORD=… node tools/screenshots.mjs [--url http://localhost:3000] [--out docs/screenshots] [--theme light] [--mobile]
  * Needs a running app (npm run dev, or a deployment) and a confirmed account. First time: npx playwright install chromium.
  */
 import { mkdirSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { chromium } from 'playwright';
 
-const { values: args } = parseArgs({ options: { url: { type: 'string', default: 'http://localhost:3000' }, out: { type: 'string', default: 'docs/screenshots' }, theme: { type: 'string' } } });
+const { values: args } = parseArgs({ options: { url: { type: 'string', default: 'http://localhost:3000' }, out: { type: 'string', default: 'docs/screenshots' }, theme: { type: 'string' }, mobile: { type: 'boolean', default: false } } });
 const base = args.url.replace(/\/$/, '');
 const email = process.env.STRESSLESS_EMAIL, password = process.env.STRESSLESS_PASSWORD;
 if (!email || !password) {
@@ -18,7 +18,7 @@ if (!email || !password) {
 mkdirSync(args.out, { recursive: true });
 
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+const page = await browser.newPage({ viewport: args.mobile ? { width: 390, height: 844 } : { width: 1440, height: 1000 }, reducedMotion: 'reduce' });
 page.setDefaultTimeout(15000);
 let errors = [];
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
@@ -38,7 +38,7 @@ const today = href.split('/')[2];
 const yesterday = new Date(Date.parse(today + 'T12:00:00Z') - 86400000).toISOString().slice(0, 10);
 
 const views = [
-  ['morning', `/morning/${today}`, '.v-morning-cause, .v-morning-causes .card'],
+  ['morning', `/morning/${today}`, '.ah-finding, .ah-empty'],
   ['morning-reveal', `/morning/${today}?reveal=1`, '[data-tour="reveal"]'],
   ['replay', `/replay/${yesterday}?t=1020`, '.c-timeline'],
   ['week', '/week', '.c-heat'],
@@ -46,6 +46,7 @@ const views = [
   ['reality', '/reality', '[data-tour="inbox"]'],
   ['planner', `/planner/${today}`, '.v-planner-event, .v-planner-hero'],
   ['data', '/data', '.v-data-persona'],
+  ['media', '/media', '.v-media-recent-scroll, .v-media-insights'],
   ['lab', '/lab', '.c-effects'],
 ];
 let failures = 0;
@@ -56,6 +57,7 @@ for (const [name, path, ready] of views) {
   await page.waitForTimeout(700);
   await page.screenshot({ path: `${args.out}/${name}.png` });
   const bad = await page.locator('.error-card').count();
+  if (await page.evaluate(() => document.body.scrollWidth > innerWidth)) errors.push('page overflows the viewport');
   const ok = !errors.length && !bad;
   failures += ok ? 0 : 1;
   console.log(`${name.padEnd(16)} ${ok ? 'ok' : 'FAIL'}${bad ? ' (error card)' : ''}`);
@@ -64,7 +66,7 @@ for (const [name, path, ready] of views) {
 
 // presenter tour, step 3 (the replay playing the evening)
 await page.goto(base + `/morning/${today}`);
-await page.locator('.v-morning').waitFor();
+await page.locator('.ah-report').waitFor();
 await page.keyboard.press('t');
 await page.locator('.tour-card').waitFor();
 await page.keyboard.press('ArrowRight');

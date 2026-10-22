@@ -1,6 +1,7 @@
 'use client';
 /* Analysis charts: effect bars, the nightly heat strip and the planted-vs-estimated scatter (ported from charts.js). */
-import { fmt, dates } from '@/lib/format';
+import { fmt, dates, pointClass } from '@/lib/format';
+import { ScoreChange } from '../ui/ScoreChange';
 import { showTip, hideTip, type TipRow } from '../ui/overlays';
 import { cssVar, isVal, niceTicks, useThemeKey, useWidth } from './common';
 
@@ -11,7 +12,8 @@ export interface EffectItem {
 }
 export function EffectBars(o: { items: EffectItem[]; width?: number; rowH?: number; labelW?: number; onSelect?: (it: EffectItem) => void }) {
   useThemeKey();
-  const [ref, W] = useWidth(560, o.width);
+  const [ref, measuredWidth] = useWidth(560, o.width);
+  const W = Math.max(560, measuredWidth);
   const items = o.items || [];
   const rowH = o.rowH || 34, labelW = o.labelW || 170, valueW = 170, padT = 8;
   const H = padT + rowH * items.length + 24;
@@ -20,26 +22,26 @@ export function EffectBars(o: { items: EffectItem[]; width?: number; rowH?: numb
   const x0 = labelW, x1 = W - valueW, mid = (x0 + x1) / 2;
   const x = (v: number) => mid + (v / span) * ((x1 - x0) / 2);
   return (
-    <div ref={ref}>
+    <div ref={ref} className="c-effects-wrap">
       <svg className="c-effects" viewBox={`0 0 ${W} ${H}`} width={W} height={H}>
         {niceTicks(-span, span, 6).map((t) => (
           <g key={t}>
             <line x1={x(t)} x2={x(t)} y1={padT} y2={H - 20} stroke={cssVar('--grid')} />
-            <text x={x(t)} y={H - 6} textAnchor="middle" className="c-axis tabular">{fmt.signed(t, 0)}</text>
+            <text x={x(t)} y={H - 6} textAnchor="middle" className={'c-axis tabular ' + pointClass(t, 0)}>{fmt.signed(t, 0)}</text>
           </g>
         ))}
         <line x1={mid} x2={mid} y1={padT} y2={H - 20} stroke={cssVar('--axis')} strokeWidth={1.5} />
         {items.map((it, i) => {
           const cy = padT + rowH * i + rowH / 2;
           const v = isVal(it.effect) ? it.effect : 0;
-          const color = it.direction === 'neutral' || Math.abs(v) < 0.05 ? cssVar('--div-mid') : v > 0 ? cssVar('--div-better') : cssVar('--div-worse');
+          const color = cssVar(pointClass(it.effect) === 'pts-pos' ? '--score-positive' : pointClass(it.effect) === 'pts-neg' ? '--score-negative' : '--ink-secondary');
           const bx = Math.min(x(0), x(v)), bwid = Math.max(2, Math.abs(x(v) - x(0)));
-          const tip = (e: React.PointerEvent) => showTip(e.clientX, e.clientY, it.label, ([{ label: 'effect', value: fmt.signed(it.effect, 1) + ' pts', color }] as TipRow[])
-            .concat(isVal(it.lo) ? [{ label: '95 % interval', value: fmt.signed(it.lo, 1) + ' to ' + fmt.signed(it.hi, 1) }] : [])
-            .concat(isVal(it.adjusted) ? [{ label: 'adjusted (model)', value: fmt.signed(it.adjusted, 1) }] : [])
+          const tip = (e: React.PointerEvent) => showTip(e.clientX, e.clientY, it.label, ([{ label: 'effect', value: <><ScoreChange value={it.effect} /> pts</>, color }] as TipRow[])
+            .concat(isVal(it.lo) ? [{ label: '95 % interval', value: <><ScoreChange value={it.lo} /> to <ScoreChange value={it.hi} /></> }] : [])
+            .concat(isVal(it.adjusted) ? [{ label: 'adjusted (model)', value: <ScoreChange value={it.adjusted} /> }] : [])
             .concat(it.n !== undefined ? [{ label: 'nights', value: String(it.n) }] : []));
           return (
-            <g key={i} className={'c-effect-row' + (o.onSelect ? ' clickable' : '')} onPointerMove={tip} onPointerLeave={hideTip} onClick={o.onSelect ? () => o.onSelect!(it) : undefined}>
+            <g key={i} tabIndex={o.onSelect ? 0 : undefined} role={o.onSelect ? 'button' : undefined} aria-label={it.label + ', ' + fmt.signed(it.effect, 1) + ' points, ' + (it.confidence || 'unknown') + ' confidence'} onKeyDown={(e) => { if (o.onSelect && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); o.onSelect(it); } }} className={'c-effect-row' + (o.onSelect ? ' clickable' : '')} onPointerMove={tip} onPointerLeave={hideTip} onClick={o.onSelect ? () => o.onSelect!(it) : undefined}>
               <text x={0} y={cy + 4} className="c-label">{it.label}</text>
               <rect x={bx} y={cy - 8} width={bwid} height={16} rx={4} fill={color} opacity={it.confidence === 'low' ? 0.55 : 0.95} />
               {isVal(it.lo) && isVal(it.hi) ? (
@@ -50,7 +52,7 @@ export function EffectBars(o: { items: EffectItem[]; width?: number; rowH?: numb
                 </>
               ) : null}
               {isVal(it.adjusted) ? <path d={`M${x(it.adjusted)} ${cy - 7} l6 7 l-6 7 l-6 -7 z`} fill={cssVar('--card')} stroke={cssVar('--ink-primary')} strokeWidth={1.5} /> : null}
-              <text x={x1 + 10} y={cy + 4} className="c-value tabular">{isVal(it.effect) ? fmt.signed(it.effect, 1) + ' pts' : '–'}</text>
+              <text x={x1 + 10} y={cy + 4} className={'c-value tabular ' + pointClass(it.effect)}>{isVal(it.effect) ? fmt.signed(it.effect, 1) + ' pts' : '–'}</text>
               {it.confidence ? <text x={W - 4} y={cy + 4} textAnchor="end" className={'c-axis c-conf-' + it.confidence}>{it.confidence}</text> : null}
             </g>
           );
@@ -92,7 +94,7 @@ export function HeatStrip(o: { className?: string; days: HeatDay[]; width?: numb
     const color = day.worn ? binColor(day.score) : null;
     return (
       <g key={day.date}>
-        <rect x={cx} y={cy} width={cell} height={cell} rx={3} fill={day.worn ? color || cssVar('--card-3') : 'url(#hatch-heat)'} className={'c-heat-cell' + (o.onSelect ? ' clickable' : '')} data-date={day.date}
+        <rect x={cx} y={cy} width={cell} height={cell} rx={3} fill={day.worn ? color || cssVar('--card-3') : 'url(#hatch-heat)'} className={'c-heat-cell' + (o.onSelect ? ' clickable' : '')} data-date={day.date} tabIndex={o.onSelect ? 0 : undefined} role={o.onSelect ? 'button' : undefined} aria-label={fmtDayLong(day.date) + ', ' + (day.worn ? 'sleep score ' + day.score : 'watch not worn')} onKeyDown={(e) => { if (o.onSelect && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); o.onSelect(day); } }}
           onPointerMove={(e) => showTip(e.clientX, e.clientY, fmtDayLong(day.date), ([{ label: 'sleep score', value: day.worn ? String(day.score) : 'watch not worn', color: color || cssVar('--ink-muted') }] as TipRow[]).concat(day.is_weekend ? [{ label: 'night', value: 'weekend' }] : []))}
           onPointerLeave={hideTip} onClick={o.onSelect ? () => o.onSelect!(day) : undefined} />
         {day.worn && cell >= 18 ? <text x={cx + cell / 2} y={cy + cell / 2 + 3.5} textAnchor="middle" className="c-heat-value">{String(day.score)}</text> : null}
@@ -101,7 +103,7 @@ export function HeatStrip(o: { className?: string; days: HeatDay[]; width?: numb
   });
   return (
     <div ref={ref} className={o.className}>
-      <svg className="c-heat" viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="img" aria-label="Sleep score by night">
+      <svg className="c-heat" viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="group" aria-label="Sleep score by night">
         <defs>
           <pattern id="hatch-heat" width={5} height={5} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
             <rect width={5} height={5} fill={cssVar('--card-3')} />
@@ -143,21 +145,21 @@ export function Scatter(o: { points: ScatterPoint[]; width?: number; height?: nu
           <g key={t}>
             <line x1={padL} x2={W - padR} y1={y(t)} y2={y(t)} stroke={cssVar('--grid')} />
             <line x1={x(t)} x2={x(t)} y1={padT} y2={H - padB} stroke={cssVar('--grid')} />
-            <text x={padL - 8} y={y(t) + 4} textAnchor="end" className="c-axis tabular">{fmt.signed(t, 0)}</text>
-            <text x={x(t)} y={H - padB + 16} textAnchor="middle" className="c-axis tabular">{fmt.signed(t, 0)}</text>
+            <text x={padL - 8} y={y(t) + 4} textAnchor="end" className={'c-axis tabular ' + pointClass(t, 0)}>{fmt.signed(t, 0)}</text>
+            <text x={x(t)} y={H - padB + 16} textAnchor="middle" className={'c-axis tabular ' + pointClass(t, 0)}>{fmt.signed(t, 0)}</text>
           </g>
         ))}
         {o.identity ? <line x1={x(lo)} y1={y(lo)} x2={x(hi)} y2={y(hi)} stroke={cssVar('--axis')} strokeWidth={1.5} /> : null}
         <line x1={x(0)} x2={x(0)} y1={padT} y2={H - padB} stroke={cssVar('--axis')} />
         <line x1={padL} x2={W - padR} y1={y(0)} y2={y(0)} stroke={cssVar('--axis')} />
         {pts.map((p, i) => {
-          const color = p.color || cssVar('--series-2');
+          const color = p.color || cssVar(pointClass(p.y) === 'pts-pos' ? '--score-positive' : pointClass(p.y) === 'pts-neg' ? '--score-negative' : '--ink-secondary');
           return (
             <g key={i}>
               {isVal(p.lo) && isVal(p.hi) ? <line x1={x(p.x)} x2={x(p.x)} y1={y(p.lo)} y2={y(p.hi)} stroke={color} strokeWidth={1.5} opacity={0.7} /> : null}
               <circle cx={x(p.x)} cy={y(p.y)} r={6} fill={p.hollow ? cssVar('--card') : color} stroke={p.hollow ? color : cssVar('--card')} strokeWidth={2}
-                onPointerMove={(e) => showTip(e.clientX, e.clientY, p.label, ([{ label: o.xLabel || 'x', value: fmt.signed(p.x, 1) }, { label: o.yLabel || 'y', value: fmt.signed(p.y, 1), color }] as TipRow[])
-                  .concat(isVal(p.lo) ? [{ label: '95 % interval', value: fmt.signed(p.lo, 1) + ' to ' + fmt.signed(p.hi, 1) }] : []))}
+                onPointerMove={(e) => showTip(e.clientX, e.clientY, p.label, ([{ label: o.xLabel || 'x', value: <ScoreChange value={p.x} /> }, { label: o.yLabel || 'y', value: <ScoreChange value={p.y} />, color }] as TipRow[])
+                  .concat(isVal(p.lo) ? [{ label: '95 % interval', value: <><ScoreChange value={p.lo} /> to <ScoreChange value={p.hi} /></> }] : []))}
                 onPointerLeave={hideTip} />
               {p.label && !p.hollow && pts.length <= 12 ? <text x={x(p.x) + 9} y={y(p.y) - 8} className="c-label small">{p.label}</text> : null}
             </g>

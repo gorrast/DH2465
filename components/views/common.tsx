@@ -8,16 +8,16 @@ import { useApp } from '../shell/AppContext';
 export function useLoad<T>(fn: () => Promise<T>, deps: DependencyList) {
   const [state, setState] = useState<{ data: T | null; error: Error | null; loading: boolean }>({ data: null, error: null, loading: true });
   const seq = useRef(0);
-  const run = useCallback(() => {
+  const run = useCallback((preserve = false) => {
     const id = ++seq.current;
-    setState({ data: null, error: null, loading: true });
+    setState((current) => ({ data: preserve ? current.data : null, error: null, loading: !preserve || !current.data }));
     fn().then(
       (data) => { if (id === seq.current) setState({ data, error: null, loading: false }); },
       (error) => { if (id === seq.current) setState({ data: null, error, loading: false }); },
     );
   }, deps); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { run(); }, [run]);
-  return { ...state, reload: run, setData: (data: T) => setState({ data, error: null, loading: false }) };
+  useEffect(() => { run(); return () => { ++seq.current; }; }, [run]);
+  return { ...state, reload: () => run(true), setData: (data: T) => setState({ data, error: null, loading: false }) };
 }
 
 export function ViewHead({ eyebrow, title, children }: { eyebrow: string; title: ReactNode; children?: ReactNode }) {
@@ -30,7 +30,7 @@ export function ViewHead({ eyebrow, title, children }: { eyebrow: string; title:
 }
 
 export function Skeleton({ height }: { height: number }) {
-  return <div className="skeleton" style={{ height: height + 'px' }} />;
+  return <div className="skeleton" role="status" aria-label="Loading your insights" style={{ height: height + 'px' }} />;
 }
 
 /** The generic failure card the original router showed when a view threw. */

@@ -43,9 +43,22 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return (ct.includes('application/json') ? res.json() : res.text()) as Promise<T>;
 }
 
+async function upload<T>(path: string, files: File[]): Promise<T> {
+  const headers = await authHeaders();
+  const form = new FormData();
+  files.forEach((file) => form.append('files', file));
+  const res = await fetch(path, { method: 'POST', headers, body: form });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new ApiError(body?.error || res.status + ' ' + res.statusText, res.status);
+  }
+  return res.json() as Promise<T>;
+}
+
 export const api = {
   get: <T = any>(path: string) => request<T>('GET', path),
   post: <T = any>(path: string, body?: unknown) => request<T>('POST', path, body === undefined ? {} : body),
+  upload: <T = any>(path: string, files: File[]) => upload<T>(path, files),
   /** Fetch an authenticated file and hand it to the browser as a download. */
   download: async (path: string, filename: string) => {
     const blob = await (await send('GET', path)).blob();

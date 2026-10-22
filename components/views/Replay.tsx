@@ -25,7 +25,7 @@ export function ReplayView({ date, t }: { date?: string; t?: string }) {
       <div className="v-replay stack">
         {load.loading ? <Skeleton height={300} />
           : load.error || !load.data ? <div className="card empty"><h2>No data for this day</h2><p>{load.error?.message}</p></div>
-          : <ReplayBody day={load.data} date={d} t={t} />}
+          : <ReplayBody key={d} day={load.data} date={d} t={t} />}
       </div>
     </>
   );
@@ -39,6 +39,7 @@ function ReplayBody({ day, date, t }: { day: any; date: string; t?: string }) {
   const [cursor, setCursor] = useState(initial);
   const [speed, setSpeedState] = useState(16);
   const [playing, setPlaying] = useState(false);
+  const [eveningOnly, setEveningOnly] = useState(false);
   const pos = useRef(initial);
   const speedRef = useRef(16);
   const playingRef = useRef(false);
@@ -47,6 +48,7 @@ function ReplayBody({ day, date, t }: { day: any; date: string; t?: string }) {
   const stopAt = useRef<number | null>(null);
 
   const seek = useCallback((m: number) => {
+    if (m < 16 * 60) setEveningOnly(false);
     pos.current = Math.max(0, Math.min(1439, m));
     setCursor(Math.round(pos.current));
   }, []);
@@ -112,9 +114,10 @@ function ReplayBody({ day, date, t }: { day: any; date: string; t?: string }) {
         </div>
         <div className="card v-replay-main" data-tour="timeline">
           <div className="card-title"><h3>The day, minute by minute</h3><span className="row tiny muted">{day.chips.map((c: string, i: number) => <span key={i} className="chip">{c}</span>)}</span></div>
-          <DayTimeline className="v-replay-timeline" date={date} events={day.events} visits={day.visits} hr={day.hr} norm={day.norm} night={day.night} nightPrev={day.night_prev} workouts={day.workouts} checks={day.checks} cursorMinute={cursor} onSeek={seek} />
+          <div className="row between v-replay-window"><span className="small secondary">Follow your body's response</span><div className="segmented" aria-label="Timeline window"><button type="button" aria-pressed={!eveningOnly} className={!eveningOnly ? 'active' : ''} onClick={() => setEveningOnly(false)}>Full day</button><button type="button" aria-pressed={eveningOnly} className={eveningOnly ? 'active' : ''} onClick={() => { setEveningOnly(true); if (cursor < 16 * 60) seek(17 * 60); }}>Evening detail</button></div></div>
+          <div className="v-replay-chart-scroll"><DayTimeline startMinute={eveningOnly ? 16 * 60 : 0} className="v-replay-timeline" date={date} events={day.events} visits={day.visits} hr={day.hr} norm={day.norm} night={day.night} nightPrev={day.night_prev} workouts={day.workouts} checks={day.checks} cursorMinute={cursor} onSeek={seek} /></div>
           <div className="v-replay-scrub">
-            <input type="range" min={0} max={1439} value={cursor} aria-label="Time of day" onChange={(e) => seek(+e.target.value)} />
+            <input type="range" min={eveningOnly ? 16 * 60 : 0} max={1439} value={cursor} aria-label="Time of day" aria-valuetext={minuteLabel(cursor)} onChange={(e) => seek(+e.target.value)} />
           </div>
           <div className="row v-replay-transport" data-tour="transport">
             <button className="btn btn-primary" type="button" onClick={() => (playing ? pause() : play())}>
@@ -131,13 +134,13 @@ function ReplayBody({ day, date, t }: { day: any; date: string; t?: string }) {
           <div className="tiny muted">Coral line: heart rate. Dotted: your usual heart rate at that hour on calm evenings. Shaded: above your norm. Blue shading: asleep. Dashed outline: booked but not attended.</div>
         </div>
       </div>
-      <DaySide day={day} date={date} seek={seek} />
+      <DaySide day={day} date={date} seek={seek} selectedId={info.event?.id} />
     </>
   );
 }
 
 /** Events with the body's response, and the night after. Memoized: playback only moves the cursor. */
-const DaySide = memo(function DaySide({ day, date, seek }: { day: any; date: string; seek: (m: number) => void }) {
+const DaySide = memo(function DaySide({ day, date, seek, selectedId }: { day: any; date: string; seek: (m: number) => void; selectedId?: string }) {
   const checksByEvent: Record<string, any> = {};
   day.checks.forEach((c: any) => { if (c.event_id) checksByEvent[c.event_id] = c; });
   const n = day.night;
@@ -151,7 +154,7 @@ const DaySide = memo(function DaySide({ day, date, seek }: { day: any; date: str
             const r = day.responses[ev.id];
             const chk = checksByEvent[ev.id];
             return (
-              <li key={ev.id} className={'list-item v-replay-event' + (ev.attended === false ? ' unattended' : '')} onClick={() => seek(Math.max(0, (minuteOf(ev.start, date) as number) - 5))}>
+              <li key={ev.id} tabIndex={0} aria-current={selectedId === ev.id ? 'true' : undefined} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); seek(Math.max(0, (minuteOf(ev.start, date) as number))); } }} className={'list-item v-replay-event' + (ev.attended === false ? ' unattended' : '')} onClick={() => seek(Math.max(0, (minuteOf(ev.start, date) as number)))}>
                 <span className="v-replay-evt-swatch" style={{ background: palette.event(ev.type) }}><Icon name={eventIcon(ev.type)} size={14} /></span>
                 <div className="body">
                   <div className="row between"><span className="title">{ev.title}</span><span className="tiny muted tabular">{fmt.hm(ev.start) + '–' + fmt.hm(ev.end)}</span></div>

@@ -1,6 +1,6 @@
 'use client';
 /* The 24-hour day: calendar lane, Maps lane, minute heart rate against the personal norm, sleep shading (charts.js). */
-import { memo, useMemo, useRef, useState } from 'react';
+import { memo, useId, useMemo, useRef, useState } from 'react';
 import { minuteLabel, minuteOf } from '@/lib/format';
 import { ICON_PATHS, eventIcon } from '@/lib/icons';
 import { EVENT_LABELS, palette } from '@/lib/palette';
@@ -26,16 +26,18 @@ export function valueAt(o: TimelineData, m: number): MinuteInfo {
 }
 
 interface Props extends TimelineData {
+  startMinute?: number; endMinute?: number; highlightRange?: [number, number];
   compact?: boolean; width?: number; className?: string; cursorMinute?: number | null;
   onSeek?: (m: number) => void; onHover?: (m: number, info: MinuteInfo) => void;
 }
 
-interface Geometry { W: number; H: number; padL: number; padR: number; padT: number; yHr: number; hrH: number; x: (m: number) => number }
+interface Geometry { start: number; end: number; W: number; H: number; padL: number; padR: number; padT: number; yHr: number; hrH: number; x: (m: number) => number }
 
 /** Static layers, memoized so playback (which only moves the cursor) does not redraw 1 440 points per frame. */
-const Layers = memo(function Layers({ o, g, compact, theme }: { o: TimelineData; g: Geometry; compact: boolean; theme: string }) {
+const Layers = memo(function Layers({ o, g, compact, theme, onSeek }: { o: TimelineData; g: Geometry; compact: boolean; theme: string; onSeek?: (m: number) => void }) {
   void theme;
-  const { W, H, padL, padT, yHr, hrH, x } = g;
+  const { start, end, W, H, padL, padT, yHr, hrH, x } = g;
+  const id = useId();
   const laneEv = compact ? 22 : 34, laneLoc = compact ? 0 : 16, gap = 6;
   const yEv = padT, yLoc = padT + laneEv + gap;
   const hr = o.hr || [], norm = o.norm || [];
@@ -56,6 +58,7 @@ const Layers = memo(function Layers({ o, g, compact, theme }: { o: TimelineData;
   }
   // grid + hour labels
   for (let h = 0; h <= 24; h += compact ? 6 : 3) {
+    if (h * 60 < start || h * 60 > end) continue;
     out.push(<line key={'g' + h} x1={x(h * 60)} x2={x(h * 60)} y1={padT} y2={yHr + hrH} stroke={cssVar('--grid')} />);
     out.push(<text key={'gl' + h} x={x(h * 60)} y={H - 5} textAnchor="middle" className="c-axis">{(h % 24).toString().padStart(2, '0') + ':00'}</text>);
   }
@@ -64,9 +67,9 @@ const Layers = memo(function Layers({ o, g, compact, theme }: { o: TimelineData;
   // norm + exceedance
   if (norm.length) {
     let nd = ''; let pen = false;
-    for (let m = 0; m < 1440; m += 5) { const v = norm[m]; if (v === null || v === undefined) { pen = false; continue; } nd += (pen ? ' L' : ' M') + x(m) + ' ' + y(v); pen = true; }
+    for (let m = start; m < end; m += 5) { const v = norm[m]; if (v === null || v === undefined) { pen = false; continue; } nd += (pen ? ' L' : ' M') + x(m) + ' ' + y(v); pen = true; }
     let ed = ''; let back: [number, number][] = [];
-    for (let m = 0; m < 1440; m += 2) {
+    for (let m = start; m < end; m += 2) {
       const v = hr[m], nv = norm[m];
       if (v === null || v === undefined || nv === null || nv === undefined) continue;
       if (v > nv + 3) { ed += (ed && back.length ? ' L' : ed ? ' M' : 'M') + x(m) + ' ' + y(v); back.push([x(m), y(nv + 3)]); }
@@ -78,7 +81,7 @@ const Layers = memo(function Layers({ o, g, compact, theme }: { o: TimelineData;
   }
   // HR line
   let d = ''; let pen = false;
-  for (let m = 0; m < 1440; m++) { const v = hr[m]; if (v === null || v === undefined) { pen = false; continue; } d += (pen ? ' L' : ' M') + x(m).toFixed(1) + ' ' + y(v).toFixed(1); pen = true; }
+  for (let m = start; m < end; m++) { const v = hr[m]; if (v === null || v === undefined) { pen = false; continue; } d += (pen ? ' L' : ' M') + x(m).toFixed(1) + ' ' + y(v).toFixed(1); pen = true; }
   out.push(<path key="hr" d={d.trim()} fill="none" stroke={cssVar('--series-1')} strokeWidth={compact ? 1.5 : 2} strokeLinejoin="round" className="c-hr" />);
   // workout brackets
   (o.workouts || []).forEach((w, i) => {
@@ -89,7 +92,7 @@ const Layers = memo(function Layers({ o, g, compact, theme }: { o: TimelineData;
   // location lane
   if (laneLoc) {
     (o.visits || []).forEach((v, i) => {
-      const a = Math.max(0, minuteOf(v.start, o.date) as number), b = Math.min(1440, minuteOf(v.end, o.date) as number);
+      const a = Math.max(start, minuteOf(v.start, o.date) as number), b = Math.min(end, minuteOf(v.end, o.date) as number);
       if (b <= a) return;
       out.push(
         <rect key={'v' + i} x={x(a)} y={yLoc} width={Math.max(1, x(b) - x(a) - 1)} height={laneLoc} rx={3} fill={cssVar('--ink-muted')} opacity={PLACE_SHADE[v.place_type] || 0.35}
@@ -105,7 +108,7 @@ const Layers = memo(function Layers({ o, g, compact, theme }: { o: TimelineData;
   (o.checks || []).forEach((c) => { if (c.event_id) checksByEvent[c.event_id] = c; });
   const sorted = (o.events || []).slice().sort((a, b) => (a.start < b.start ? -1 : 1));
   sorted.forEach((ev) => {
-    const a = Math.max(0, minuteOf(ev.start, o.date) as number), b = Math.min(1440, minuteOf(ev.end, o.date) as number);
+    const a = Math.max(start, minuteOf(ev.start, o.date) as number), b = Math.min(end, minuteOf(ev.end, o.date) as number);
     if (b <= a) return;
     const color = palette.event(ev.type);
     const rectAttrs: React.SVGProps<SVGRectElement> = { x: x(a), y: yEv, width: Math.max(3, x(b) - x(a) - 2), height: laneEv, rx: 5, fill: color, opacity: ev.attended === false ? 0.35 : 0.9 };
@@ -118,7 +121,8 @@ const Layers = memo(function Layers({ o, g, compact, theme }: { o: TimelineData;
       .concat(ev.attended === false ? [{ label: 'status', value: 'not attended' }] : [])
       .concat(chk ? [{ label: 'reality check', value: chk.status }] : []));
     out.push(
-      <g key={'e' + ev.id} className={'c-evt c-evt-' + ev.type + (ev.attended === false ? ' unattended' : '')} onPointerMove={tip} onPointerLeave={hideTip}>
+      <g key={'e' + ev.id} role={onSeek ? 'button' : undefined} tabIndex={onSeek ? 0 : undefined} aria-label={ev.title + ', ' + minuteLabel(a) + ' to ' + minuteLabel(b)} onClick={onSeek ? () => onSeek(a) : undefined} onKeyDown={(e) => { if (onSeek && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onSeek(a); } }} className={'c-evt c-evt-' + ev.type + (ev.attended === false ? ' unattended' : '')} onPointerMove={tip} onPointerLeave={hideTip}>
+        <title>{ev.title + ' · ' + minuteLabel(a) + '–' + minuteLabel(b)}</title>
         <rect {...rectAttrs} />
         {!compact || wpx > 40 ? (
           <>
@@ -126,8 +130,8 @@ const Layers = memo(function Layers({ o, g, compact, theme }: { o: TimelineData;
               dangerouslySetInnerHTML={{ __html: ICON_PATHS[eventIcon(ev.type)] || ICON_PATHS.dot }} />
             {wpx > 56 ? (
               <>
-                <clipPath id={'clip-' + ev.id}><rect x={x(a)} y={yEv} width={Math.max(0, wpx - 6)} height={laneEv} /></clipPath>
-                <text x={x(a) + 22} y={yEv + laneEv / 2 + 4} className="c-evt-label" fill={ink} clipPath={`url(#clip-${ev.id})`}>{ev.title}</text>
+                <clipPath id={id + '-clip-' + ev.id}><rect x={x(a)} y={yEv} width={Math.max(0, wpx - 6)} height={laneEv} /></clipPath>
+                <text x={x(a) + 22} y={yEv + laneEv / 2 + 4} className="c-evt-label" fill={ink} clipPath={`url(#${id}-clip-${ev.id})`}>{ev.title}</text>
               </>
             ) : null}
           </>
@@ -151,16 +155,17 @@ export function DayTimeline(props: Props) {
   const laneEv = compact ? 22 : 34, laneLoc = compact ? 0 : 16, hrH = compact ? 44 : 120, gap = 6, padB = 20;
   const H = padT + laneEv + gap + (laneLoc ? laneLoc + gap : 0) + hrH + padB;
   const yHr = padT + laneEv + gap + (laneLoc ? laneLoc + gap : 0);
-  const x = (m: number) => padL + (Math.max(0, Math.min(1440, m)) / 1440) * (W - padL - padR);
+  const start = props.startMinute ?? 0, end = props.endMinute ?? 1440;
+  const x = (m: number) => padL + ((Math.max(start, Math.min(end, m)) - start) / (end - start)) * (W - padL - padR);
   const data = useMemo<TimelineData>(() => ({
     date: props.date, events: props.events, visits: props.visits, hr: props.hr, norm: props.norm, night: props.night, nightPrev: props.nightPrev, workouts: props.workouts, checks: props.checks,
   }), [props.date, props.events, props.visits, props.hr, props.norm, props.night, props.nightPrev, props.workouts, props.checks]);
-  const geom = useMemo<Geometry>(() => ({ W, H, padL, padR, padT, yHr, hrH, x }), [W, H, yHr, hrH]); // eslint-disable-line react-hooks/exhaustive-deps
+  const geom = useMemo<Geometry>(() => ({ start, end, W, H, padL, padR, padT, yHr, hrH, x }), [start, end, W, H, yHr, hrH]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const minuteAt = (e: React.PointerEvent | React.MouseEvent) => {
     const b = svgRef.current!.getBoundingClientRect();
     const px = (e.clientX - b.left) * (W / b.width);
-    return Math.max(0, Math.min(1439, Math.round(((px - padL) / (W - padL - padR)) * 1440)));
+    return Math.max(0, Math.min(1439, Math.round(start + ((px - padL) / (W - padL - padR)) * (end - start))));
   };
   const onMove = (e: React.PointerEvent) => {
     const m = minuteAt(e);
@@ -176,9 +181,10 @@ export function DayTimeline(props: Props) {
   const cursor = props.cursorMinute ?? null;
   return (
     <div ref={ref} className={props.className}>
-      <svg ref={svgRef} className={'c-timeline' + (compact ? ' compact' : '')} viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="img" aria-label={'Day timeline ' + (props.date || '')}>
-        <Layers o={data} g={geom} compact={compact} theme={theme} />
-        <line x1={x(cursor || 0)} x2={x(cursor || 0)} y1={padT} y2={yHr + hrH} stroke={cssVar('--accent')} strokeWidth={2} opacity={cursor === null ? 0 : 1} className="c-cursor" />
+      <svg ref={svgRef} className={'c-timeline' + (compact ? ' compact' : '')} viewBox={`0 0 ${W} ${H}`} width={W} height={H} role={props.onSeek ? 'group' : 'img'} aria-label={'Day timeline ' + (props.date || '')}>
+        <rect x={x(props.highlightRange?.[0] ?? 0)} y={padT} width={props.highlightRange ? Math.max(0, x(props.highlightRange[1]) - x(props.highlightRange[0])) : 0} height={yHr + hrH - padT} fill="var(--sleep, var(--accent))" opacity={0.09} />
+        <Layers o={data} g={geom} compact={compact} theme={theme} onSeek={props.onSeek} />
+        <line x1={x(cursor || 0)} x2={x(cursor || 0)} y1={padT} y2={yHr + hrH} stroke={cssVar('--accent')} strokeWidth={2} opacity={cursor === null || cursor < start || cursor > end ? 0 : 1} className="c-cursor" />
         <line x1={x(hover || 0)} x2={x(hover || 0)} y1={padT} y2={yHr + hrH} stroke={cssVar('--hairline-strong')} opacity={hover === null ? 0 : 1} />
         <rect x={padL} y={yHr} width={W - padL - padR} height={hrH} fill="transparent" style={{ cursor: props.onSeek ? 'pointer' : 'default' }}
           onPointerMove={onMove} onPointerLeave={() => { setHover(null); hideTip(); }} onClick={props.onSeek ? (e) => props.onSeek!(minuteAt(e)) : undefined} />

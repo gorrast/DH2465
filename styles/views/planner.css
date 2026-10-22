@@ -11,3 +11,18 @@
 .v-planner-controls { margin-top: 6px; gap: 6px; }
 .v-planner-added { color: var(--status-good); font-weight: 600; }
 @media (max-width: 1200px) { .v-planner-grid { grid-template-columns: 1fr; } }
+.v-planner-grid { gap: 24px; }
+.v-planner-hero { gap: 14px; background: var(--glow-report), var(--card); }
+.v-planner-preview-head { margin: 24px 0 12px; }
+.plan-timeline { padding: 16px 0 24px; margin-bottom: 24px; border-bottom: 1px solid var(--hairline); }
+.plan-ticks { height: 24px; position: relative; margin-right: 24px; }
+.plan-ticks span { position: absolute; transform: translateX(-50%); font-size: 11px; color: var(--ink-muted); }
+.plan-lane { position: relative; min-height: 56px; padding-top: 17px; margin-right: 24px; }
+.plan-block { position: absolute; top: 2px; height: 8px; border-radius: 4px; }
+.plan-event-label { display: flex; justify-content: space-between; flex-wrap: wrap; column-gap: 12px; font-size: 12px; }
+.prediction-range { margin: 16px 0 8px; }
+.prediction-track { position: relative; height: 8px; border-radius: 8px; background: var(--card-3); margin: 8px 8px 12px; }
+.prediction-band { position: absolute; top: -4px; height: 16px; border-radius: 6px; background: var(--accent-soft); }
+.prediction-marker, .prediction-baseline { position: absolute; top: -4px; height: 16px; width: 3px; background: var(--ink-muted); transform: translateX(-50%); }
+.prediction-marker { width: 14px; border: 3px solid var(--card); border-radius: 50%; background: var(--accent); transition: left .3s; }
+@media (max-width: 700px) { .v-planner-grid { gap: 16px; } .v-planner-delta { font-size: 64px; } }

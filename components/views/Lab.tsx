@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { api } from '@/lib/api';
 import { dates, fmt } from '@/lib/format';
 import { Icon } from '../ui/Icon';
+import { ScoreChange } from '../ui/ScoreChange';
 import { EffectBars, Scatter } from '../charts/analysis';
 import { useApp } from '../shell/AppContext';
 import { ErrorCard, Skeleton, ViewHead, useLoad } from './common';
@@ -13,7 +14,7 @@ const HISTORY_STOPS: (number | null)[] = [7, 14, 28, null];
 const pct = (v: number | null | undefined) => (v === null || v === undefined ? '–' : Math.round(v * 100) + ' %');
 const num = (v: number | null | undefined, d?: number) => (v === null || v === undefined ? '–' : fmt.num(v, d === undefined ? 2 : d));
 
-function Stat({ label, value, caption }: { label: string; value: ReactNode; caption?: string }) {
+function Stat({ label, value, caption }: { label: string; value: ReactNode; caption?: ReactNode }) {
   return (
     <div className="stat-tile v-lab-stat">
       <div className="label">{label}</div>
@@ -116,7 +117,7 @@ function LabBody({ data, hd, setHistoryDays }: { data: any[]; hd: number | null;
                 <Stat label="Rank agreement" value={num(val.spearman_total, 2)} caption={'Spearman between planted and estimated effects — ' + (val.spearman_total >= 0.8 ? 'the engine ordered the real causes correctly' : val.spearman_total >= 0.6 ? 'mostly the right order' : 'weak ordering')} />
                 <Stat label="Night-by-night agreement" value={num(val.pooled_spearman, 2)} caption={'over every (night, factor) pair that was active (' + val.pooled_n + ' pairs)'} />
                 {val.holdout ? <Stat label="Prediction skill" value={pct(val.holdout.skill)} caption={'predicts the last ' + val.holdout.n_test + ' nights ' + Math.round((val.holdout.skill || 0) * 100) + ' % better than assuming your median (error ±' + num(val.holdout.rmse_holdout, 0) + ' vs ±' + num(val.holdout.rmse_naive, 0) + ')'} /> : null}
-                {nullRow ? <Stat label="Planted null" value={fmt.signed(nullRow.estimated, 1)} caption={nullRow.label + ' was planted as no effect for this persona — engine says ' + fmt.signed(nullRow.estimated, 1) + ' (interval ' + fmt.signed(nullRow.ci_low, 1) + ' to ' + fmt.signed(nullRow.ci_high, 1) + ')' + (nullRow.ci_covers_zero ? ': correctly covers zero' : ': a false alarm')} /> : null}
+                {nullRow ? <Stat label="Planted null" value={<ScoreChange value={nullRow.estimated} />} caption={<>{nullRow.label} was planted as no effect for this persona — engine says <ScoreChange value={nullRow.estimated} /> (interval <ScoreChange value={nullRow.ci_low} /> to <ScoreChange value={nullRow.ci_high} />){nullRow.ci_covers_zero ? ': correctly covers zero' : ': a false alarm'}</>} /> : null}
                 {val.spearman_before_answers !== null && val.spearman_before_answers !== undefined ? <Stat label="After your answers" value={num(val.spearman_before_answers, 2) + ' → ' + num(val.spearman_after_answers, 2)} caption="rank agreement before vs after applying your reality-check answers" /> : null}
               </div>
             </div>

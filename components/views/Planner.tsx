@@ -1,11 +1,14 @@
 'use client';
 /* Planner: what-if on today's (or a coming day's) calendar, with a predicted delta and likely range (SPEC §9.4). */
 import { useEffect, useRef, useState } from 'react';
+import { LayoutGroup, motion, useReducedMotion } from 'motion/react';
+import { ActionButton, calmTransition } from '../ui/Motion';
 import { api } from '@/lib/api';
 import { dates, fmt, minuteOf } from '@/lib/format';
 import { eventIcon } from '@/lib/icons';
 import { palette } from '@/lib/palette';
 import { Icon } from '../ui/Icon';
+import { ScoreChange, ScoreText } from '../ui/ScoreChange';
 import { toast } from '../ui/overlays';
 import { useApp } from '../shell/AppContext';
 import { DateNav, Skeleton, ViewHead, useLoad } from './common';
@@ -41,6 +44,7 @@ export function PlannerView({ date: dateParam }: { date?: string }) {
 }
 
 function PlannerBody({ date, today, initialDay, initialReport }: { date: string; today: string; initialDay: any; initialReport: any }) {
+  const reducedMotion = useReducedMotion();
   const [day, setDay] = useState(initialDay);
   const [report, setReport] = useState(initialReport);
   const [mods, setMods] = useState<Mod[]>([]);
@@ -52,10 +56,10 @@ function PlannerBody({ date, today, initialDay, initialReport }: { date: string;
   const [recomputeTick, setRecomputeTick] = useState(0);
 
   useEffect(() => {
+    const id = ++seq.current;
+    setDim(true);
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(async () => {
-      const id = ++seq.current;
-      setDim(true);
       try {
         const res = await api.post('/api/whatif', { date, mods });
         if (id !== seq.current) return;   // a newer request is in flight; its answer wins
@@ -63,11 +67,12 @@ function PlannerBody({ date, today, initialDay, initialReport }: { date: string;
         setWerr(null);
       } catch (e: any) {
         if (id !== seq.current) return;
+        setW(null);
         setWerr(e.message);
       }
       setDim(false);
     }, 250);
-    return () => { if (timer.current) clearTimeout(timer.current); };
+    return () => { ++seq.current; if (timer.current) clearTimeout(timer.current); };
   }, [date, mods, recomputeTick]);
 
   const hourOf = (iso: string) => (minuteOf(iso, date) as number) / 60;
@@ -86,6 +91,7 @@ function PlannerBody({ date, today, initialDay, initialReport }: { date: string;
     b('Remove', 'remove');
     return ctl;
   };
+  const [proposed, setProposed] = useState(true);
   const evs = day.events.filter((e: any) => e.attended !== false).slice().sort((a: any, b: any) => (a.start < b.start ? -1 : 1));
 
   const acceptSuggestion = async (s: any) => {
@@ -94,22 +100,25 @@ function PlannerBody({ date, today, initialDay, initialReport }: { date: string;
       setDay(await api.get('/api/day/' + date));
       setReport(await api.get('/api/report/' + today));
       setRecomputeTick((t) => t + 1);
-      toast('Added to your calendar', { kind: 'success' });
+      toast('Added to your StressLess plan', { kind: 'success' });
     } catch (err: any) {
       toast(err.message, { kind: 'error' });
     }
   };
 
+  const previewEvents = w && !dim && proposed ? w.events_after : day.events;
   return (
-    <div className="v-planner-grid">
+    <LayoutGroup><div className="v-planner-grid">
       <div className="stack">
         <div className={'card v-planner-hero' + (dim ? ' loading-dim' : '')} data-tour="prediction">
           <div className="eyebrow">Predicted change for this night</div>
-          <div className={'v-planner-delta ' + (w && w.delta > 0 ? 'pts-pos' : w && w.delta < 0 ? 'pts-neg' : '')}>{!w ? '–' : w.nMods ? fmt.signed(w.delta, 0) : '±0'}</div>
+          <div className="v-planner-delta"><ScoreChange value={!w ? null : w.nMods ? w.delta : 0} digits={0}>{!w ? '–' : w.nMods ? fmt.signed(w.delta, 0) : '±0'}</ScoreChange></div>
           <div className="small secondary">
-            {werr ? werr : !w ? '' : w.nMods && w.delta_low !== null ? 'likely ' + fmt.signed(w.delta_low, 0) + ' to ' + fmt.signed(w.delta_high, 0) + ' points' : 'Change the plan to see the effect'}
+            {werr ? werr : !w ? '' : w.nMods && w.delta_low !== null ? <>Likely <ScoreChange value={w.delta_low} digits={0} /> to <ScoreChange value={w.delta_high} digits={0} /> points</> : 'Change the plan to see the effect'}
           </div>
-          <div className="v-planner-pred">
+          {w ? <PredictionRange baseline={w.baseline_pred} score={w.nMods ? w.modified_pred : w.baseline_pred} low={w.nMods && w.delta_low != null ? w.baseline_pred + w.delta_low : null} high={w.nMods && w.delta_high != null ? w.baseline_pred + w.delta_high : null} /> : null}
+          {werr ? <button className="btn btn-sm" type="button" onClick={() => setRecomputeTick((tick) => tick + 1)}>Retry estimate</button> : null}
+          <div className="v-planner-pred" role="status" aria-live="polite">
             {w ? (
               <>
                 <span className="muted small">Predicted sleep score </span>
@@ -127,11 +136,11 @@ function PlannerBody({ date, today, initialDay, initialReport }: { date: string;
             <>
               <h4>Suggestions for tonight</h4>
               {report.suggestions.map((s: any) => (
-                <div key={s.id} className="card soft v-planner-sugg">
-                  <div className="row between"><strong>{s.title}</strong>{s.gain_low !== null && s.gain_low !== undefined ? <span className="chip pts pts-pos">{fmt.signed(s.gain_low, 0) + ' to ' + fmt.signed(s.gain_high, 0)}</span> : null}</div>
-                  <p className="small secondary">{s.body}</p>
+                <motion.div initial={reducedMotion ? false : { opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} layout="position" transition={reducedMotion ? { duration: 0 } : calmTransition} key={s.id} className="card soft v-planner-sugg">
+                  <div className="row between"><strong>{s.title}</strong>{s.gain_low !== null && s.gain_low !== undefined ? <span className="chip pts"><ScoreChange value={s.gain_low} digits={0} /> to <ScoreChange value={s.gain_high} digits={0} /></span> : null}</div>
+                  <p className="small secondary"><ScoreText text={s.body} /></p>
                   <div className="row">
-                    {s.accepted ? <span className="row small v-planner-added"><Icon name="check" size={14} />Added</span>
+                    {s.accepted ? <motion.span initial={reducedMotion ? false : { opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={reducedMotion ? { duration: 0 } : calmTransition} className="row small v-planner-added"><Icon name="check" size={14} />Saved to plan</motion.span>
                       : s.proposed_event ? <AcceptButton onAccept={() => acceptSuggestion(s)} />
                       : s.kind === 'move_meeting' ? (
                         <button className="btn btn-sm" type="button" onClick={() => {
@@ -140,7 +149,7 @@ function PlannerBody({ date, today, initialDay, initialReport }: { date: string;
                         }}>Try it</button>
                       ) : null}
                   </div>
-                </div>
+                </motion.div>
               ))}
             </>
           ) : null}
@@ -151,9 +160,14 @@ function PlannerBody({ date, today, initialDay, initialReport }: { date: string;
           <h3>{'The plan for ' + fmt.day(date)}</h3>
           <button className="btn btn-sm" type="button" disabled={!mods.length} onClick={() => setMods([])}><Icon name="refresh" size={14} />Undo changes</button>
         </div>
-        <div className="stack" data-tour="events">
+        <div className="row between v-planner-preview-head">
+          <span className="small secondary">Your day at a glance</span>
+          <div className="segmented" aria-label="Compare plans"><button type="button" aria-pressed={!proposed} className={!proposed ? 'active' : ''} onClick={() => setProposed(false)}>Current</button><button type="button" aria-pressed={proposed} className={proposed ? 'active' : ''} onClick={() => setProposed(true)}>Proposed</button></div>
+        </div>
+        <PlanTimeline events={previewEvents || day.events} date={date} />
+        <div className="stack" data-tour="events" aria-busy={dim}>
           {!evs.length ? <p className="muted">An empty day. Add nothing and sleep well.</p> : evs.map((ev: any) => (
-            <div key={ev.id} className={'v-planner-event' + (has(ev.id, 'remove') ? ' removed' : '')}>
+            <motion.div initial={reducedMotion ? false : { opacity: 0, y: 16 }} animate={{ opacity: has(ev.id, 'remove') ? 0.5 : 1, y: 0 }} layout="position" transition={reducedMotion ? { duration: 0 } : calmTransition} key={ev.id} className={'v-planner-event' + (has(ev.id, 'remove') ? ' removed' : '')}>
               <span className="v-planner-swatch" style={{ background: palette.event(ev.type) }}><Icon name={eventIcon(ev.type)} size={14} /></span>
               <div className="v-planner-event-body">
                 <div className="row between">
@@ -162,16 +176,38 @@ function PlannerBody({ date, today, initialDay, initialReport }: { date: string;
                 </div>
                 <div className="row v-planner-controls">{controlsFor(ev)}</div>
               </div>
-            </div>
+            </motion.div>
           ))}
         </div>
-        <div className="tiny muted" style={{ marginTop: '10px' }}>Change a block and watch the prediction move. Nothing here edits your real calendar until you accept a suggestion.</div>
+        <div className="tiny muted" style={{ marginTop: '10px' }}>Change a block and watch the prediction move. These changes preview your StressLess plan. Accept a suggestion to save its block; download its .ics file from Today to use it in another calendar.</div>
       </div>
-    </div>
+    </div></LayoutGroup>
   );
 }
 
 function AcceptButton({ onAccept }: { onAccept: () => Promise<void> }) {
   const [pending, setPending] = useState(false);
-  return <button className="btn btn-sm btn-primary" type="button" disabled={pending} onClick={async () => { setPending(true); await onAccept(); setPending(false); }}>Add to calendar</button>;
+  return <ActionButton className="btn btn-sm btn-primary" type="button" disabled={pending} onClick={async () => { setPending(true); await onAccept(); setPending(false); }}>Save to plan</ActionButton>;
+}
+
+/** Separate rows keep overlapping events readable without a calendar dependency. */
+function PlanTimeline({ events, date }: { events: any[]; date: string }) {
+  const reducedMotion = useReducedMotion();
+  const entries = events.filter((e) => e.attended !== false).slice().sort((a, b) => a.start.localeCompare(b.start));
+  const start = Math.min(6 * 60, ...entries.map((e) => minuteOf(e.start, date) ?? 360));
+  const end = Math.max(24 * 60, ...entries.map((e) => minuteOf(e.end, date) ?? 1440));
+  const percent = (minute: number) => (minute - start) / (end - start) * 100;
+  return <div className="plan-timeline">
+    <div className="plan-ticks" aria-hidden="true">{[6, 12, 18, 24].map((h) => <span key={h} style={{ left: percent(h * 60) + '%' }}>{h === 24 ? '00:00' : h + ':00'}</span>)}</div>
+    {entries.map((ev) => { const a = minuteOf(ev.start, date) ?? start; const b = minuteOf(ev.end, date) ?? a; return <motion.div initial={reducedMotion ? false : { opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} layout="position" transition={reducedMotion ? { duration: 0 } : calmTransition} className="plan-lane" key={ev.id}><motion.span initial={false} transition={reducedMotion ? { duration: 0 } : calmTransition} className="plan-block" animate={{ left: percent(a) + '%', width: Math.max(1, percent(b) - percent(a)) + '%' }} style={{ background: palette.event(ev.type) }} /><span className="plan-event-label">{ev.title}<span className="muted">{fmt.hm(ev.start)}–{fmt.hm(ev.end)}</span></span></motion.div>; })}
+    {!entries.length ? <p className="small secondary">Room to breathe. No events planned.</p> : null}
+  </div>;
+}
+
+function PredictionRange({ baseline, score, low, high }: { baseline: number; score: number; low: number | null; high: number | null }) {
+  const clamp = (n: number) => Math.max(0, Math.min(100, n));
+  return <div className="prediction-range" role="img" aria-label={`Estimated sleep score ${fmt.score(score)}, current plan ${fmt.score(baseline)}${low !== null && high !== null ? ', likely change ' + fmt.signed(low - baseline, 0) + ' to ' + fmt.signed(high - baseline, 0) + ' points' : ''}`}>
+    <div className="prediction-track">{low !== null && high !== null ? <span className="prediction-band" style={{ left: clamp(low) + '%', width: clamp(high) - clamp(low) + '%' }} /> : null}<i className="prediction-baseline" style={{ left: clamp(baseline) + '%' }} /><i className="prediction-marker" style={{ left: clamp(score) + '%' }} /></div>
+    <div className="row between tiny muted"><span>0 · estimated sleep score</span><span>100</span></div>
+  </div>;
 }

@@ -1,26 +1,9 @@
 'use client';
-/* Small charts: score ring, sparkline, bars, sleep stages and the data table (ported from charts.js). */
-import { useRef, useState } from 'react';
-import { fmt, bandFor, minuteOf, minuteLabel } from '@/lib/format';
+/* Small charts: sparkline, bars, sleep stages and the data table (ported from charts.js). */
+import { useRef, useState, type ReactNode } from 'react';
+import { fmt, minuteOf, minuteLabel } from '@/lib/format';
 import { showTip, hideTip, type TipRow } from '../ui/overlays';
-import { bandColor, cssVar, isVal, niceTicks, useThemeKey, useWidth } from './common';
-
-// ---------------------------------------------------------------------- ring
-export function Ring({ value, max = 100, label, sublabel, band, size = 180 }: { value: number | null | undefined; max?: number; label?: string; sublabel?: string | null; band?: string; size?: number }) {
-  useThemeKey();
-  const sw = Math.max(8, size * 0.075), r = (size - sw) / 2, c = size / 2, circ = 2 * Math.PI * r;
-  const frac = !isVal(value) ? 0 : Math.max(0, Math.min(1, value / (max || 100)));
-  const color = bandColor(band || bandFor(value));
-  return (
-    <svg className="c-ring" viewBox={`0 0 ${size} ${size}`} width={size} height={size} role="img" aria-label={(label || 'score') + ' ' + fmt.score(value)}>
-      <circle cx={c} cy={c} r={r} fill="none" stroke={cssVar('--card-3')} strokeWidth={sw} />
-      {frac > 0 ? <circle cx={c} cy={c} r={r} fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round" strokeDasharray={`${circ * frac} ${circ}`} transform={`rotate(-90 ${c} ${c})`} className="c-ring-arc" /> : null}
-      <text x={c} y={c + (label ? -2 : 8)} textAnchor="middle" className="c-ring-value" style={{ fontSize: size * 0.3 + 'px' }}>{fmt.score(value)}</text>
-      {label ? <text x={c} y={c + size * 0.13} textAnchor="middle" className="c-ring-label">{label}</text> : null}
-      {sublabel ? <text x={c} y={c + size * 0.23} textAnchor="middle" className="c-ring-sub">{sublabel}</text> : null}
-    </svg>
-  );
-}
+import { cssVar, isVal, niceTicks, useThemeKey, useWidth } from './common';
 
 // ----------------------------------------------------------------- sparkline
 interface SparkProps {
@@ -181,13 +164,13 @@ export function Stages({ className, night, width }: { className?: string; night:
 
 // --------------------------------------------------------------------- table
 export interface Column { key: string; label: string; num?: boolean }
-export function DataTable({ columns, rows }: { columns: Column[]; rows: Record<string, unknown>[] }) {
+export function DataTable({ columns, rows }: { columns: Column[]; rows: Record<string, ReactNode>[] }) {
   return (
     <table className="data c-table">
       <thead><tr>{columns.map((c) => <th key={c.key} className={c.num ? 'num' : ''}>{c.label}</th>)}</tr></thead>
       <tbody>
         {rows.map((r, i) => (
-          <tr key={i}>{columns.map((c) => <td key={c.key} className={c.num ? 'num' : ''}>{r[c.key] === null || r[c.key] === undefined ? '–' : String(r[c.key])}</td>)}</tr>
+          <tr key={i}>{columns.map((c) => <td key={c.key} className={c.num ? 'num' : ''}>{r[c.key] ?? '–'}</td>)}</tr>
         ))}
       </tbody>
     </table>

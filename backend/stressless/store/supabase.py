@@ -180,3 +180,13 @@ class SupabaseStore(UserStore):
 
     def reports_last_day(self) -> int:
         return int(self._call("POST", "/rpc/stressless_reports_last_day", json={}) or 0)
+    def media_events(self) -> List[Dict[str, Any]]:
+        return self._call("GET", "/media_events", params={"select": "id,provider,occurred_at,title,creator,minutes,source,imported_at", "order": "occurred_at.desc"}) or []
+
+    def media_documents(self) -> List[Dict[str, Any]]:
+        return self._call("GET", "/media_documents", params={"select": "id,filename,kind,payload,imported_at", "order": "imported_at.desc"}) or []
+
+    def replace_media(self, provider: str, events: List[Dict[str, Any]], documents: List[Dict[str, Any]]) -> None:
+        self._call("POST", "/rpc/stressless_replace_media", json={
+            "p_provider": provider, "p_events": events, "p_documents": documents,
+        })

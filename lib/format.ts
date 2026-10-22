@@ -58,6 +58,12 @@ export const fmt = {
   },
 };
 
+/** Neutral styling for absent values and changes that round to zero at the displayed precision. */
+export function pointClass(value: N, digits = 1): string {
+  const rounded = typeof value === 'number' && Number.isFinite(value) ? Number(value.toFixed(digits)) : 0;
+  return rounded > 0 ? 'pts-pos' : rounded < 0 ? 'pts-neg' : 'pts-neutral';
+}
+
 export const dates = {
   parse: parseISODate,
   toISO: toISODate,

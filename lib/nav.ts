@@ -14,13 +14,14 @@ export const NAV: NavItem[] = [
   { name: 'home', label: 'Home', icon: 'brain', key: '0', title: 'Home' },
   { name: 'morning', label: 'Morning', icon: 'moon', key: '1', withDate: true, title: 'Morning' },
   { name: 'replay', label: 'Replay', icon: 'pulse', key: '2', withDate: true, dateOffset: -1, title: 'Replay' },
-  { name: 'week', label: 'Week', icon: 'week', key: '3', title: 'Week' },
+  { name: 'week', label: 'Insights', icon: 'week', key: '3', title: 'Week' },
   { name: 'habits', label: 'Habits', icon: 'habits', key: '4', title: 'Habits' },
   { name: 'reality', label: 'Reality check', icon: 'inbox', key: '5', title: 'Reality check' },
-  { name: 'planner', label: 'Planner', icon: 'planner', key: '6', title: 'Planner' },
+  { name: 'planner', label: 'Plan', icon: 'planner', key: '6', title: 'Planner' },
   { name: 'data', label: 'Data & privacy', icon: 'lock', key: '7', title: 'Data & privacy' },
   { name: 'lab', label: 'Under the hood', icon: 'lab', key: '8', title: 'Under the hood' },
   { name: 'calendar', label: 'Calendar', icon: 'calendar', key: '9', title: 'Calendar' },
+  { name: 'media', label: 'Media lab', icon: 'music', key: '9', title: 'Media lab' },
 ];
 
 export function defaultHref(item: NavItem, today: string): string {

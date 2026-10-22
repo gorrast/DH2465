@@ -1,324 +1,208 @@
 'use client';
-/* Morning report view (SPEC §9.4). */
+
 import Link from 'next/link';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { motion, useScroll, useTransform, useReducedMotion } from 'motion/react';
 import { api } from '@/lib/api';
-import { bandFor, dates, fmt } from '@/lib/format';
+import { dates, fmt, minuteLabel, minuteOf, pointClass } from '@/lib/format';
 import { Icon } from '../ui/Icon';
-import { toast } from '../ui/overlays';
-import { Ring, Sparkline, Stages } from '../charts/basic';
-import { DayTimeline } from '../charts/DayTimeline';
+import { ActionButton, Collapse, RevealHeading, RevealSection, MetricGroup, quietItem, calmTransition } from '../ui/Motion';
+import { ScoreChange, ScoreText } from '../ui/ScoreChange';
+import { Sparkline, Stages } from '../charts/basic';
+import { DayTimeline, valueAt } from '../charts/DayTimeline';
 import { useApp } from '../shell/AppContext';
-import { Chip, DateNav, Skeleton, ViewHead, useLoad } from './common';
+import { DateNav, Skeleton, useLoad } from './common';
 
-let revealed = false; // once "Why?" is clicked, the veil stays off for the session
+const MARKERS = ['hrv_ms', 'resting_hr', 'wrist_temp_dev'];
 
-const EVIDENCE_ICON: Record<string, string> = { hr: 'pulse', hrv: 'heart', rhr: 'heart', bedtime: 'bed', duration: 'moon', interruptions: 'bed', temp: 'thermometer', location: 'map', calendar: 'calendar', resp: 'lungs', spo2: 'drop' };
-
-function Badge({ conf }: { conf: string }) {
-  return <span className={'badge badge-' + conf}>{conf}</span>;
+function SleepScore({ report }: { report: any }) {
+  const score = report.score;
+  const length = score == null ? 0 : Math.max(0, Math.min(100, score));
+  const id = useId();
+  return <div className="ah-score" data-tour="watch-card">
+    <div className="ah-score-orbit" aria-hidden="true" />
+    <div className="ah-score-visual">
+    <svg className="ah-score-ring" viewBox="0 0 280 280" role="img" aria-label={`Sleep score ${fmt.score(score)} out of 100. ${report.rating || 'Watch data unavailable'}`}>
+      <defs><linearGradient id={id} x1="0" y1="1" x2="1" y2="0"><stop stopColor="var(--sleep)" /><stop offset="1" stopColor="var(--recovery)" /></linearGradient></defs>
+      <circle cx="140" cy="140" r="116" fill="none" stroke="var(--card-3)" strokeWidth="6" />
+      {score != null ? <circle className="ah-score-arc" cx="140" cy="140" r="116" pathLength="100" fill="none" stroke={`url(#${id})`} strokeWidth="6" strokeLinecap="round" strokeDasharray={`${length} 100`} transform="rotate(-90 140 140)" /> : null}
+    </svg>
+    <svg className="ah-score-readout" viewBox="0 0 280 280" aria-hidden="true">
+      <text x="140" y="151" textAnchor="middle" className="ah-score-value">{fmt.score(score)}</text>
+      <text x="140" y="182" textAnchor="middle" className="ah-score-label">Sleep score / 100</text>
+    </svg>
+    </div>
+  </div>;
 }
 
-function Pts({ v, lo, hi }: { v: number; lo?: number | null; hi?: number | null }) {
-  return (
-    <span className={'chip pts ' + (v < 0 ? 'pts-neg' : 'pts-pos')} title={lo !== null && lo !== undefined ? 'likely ' + fmt.signed(lo, 0) + ' to ' + fmt.signed(hi, 0) + ' points' : ''}>
-      {fmt.signed(v, 1) + ' pts'}
-    </span>
-  );
-}
-
-function CauseItem({ c, expandedDefault }: { c: any; expandedDefault: boolean }) {
-  const [expanded, setExpanded] = useState(expandedDefault);
-  return (
-    <li className="list-item v-morning-cause" data-factor={c.factor}>
-      <span className="num">{String(c.rank)}</span>
-      <div className="body">
-        <div className="row between"><span className="title">{c.title}</span><span className="row"><Pts v={c.points} lo={c.points_low} hi={c.points_high} /><Badge conf={c.confidence} /></span></div>
-        <div className="detail">{c.detail}</div>
-        <div className="row tiny muted">
-          {c.n_similar ? <span>{c.n_similar + ' similar nights in your history'}</span> : null}
-          {c.evidence && c.evidence.length ? (
-            <button className="btn btn-ghost btn-sm v-morning-toggle" type="button" onClick={() => setExpanded(!expanded)}>{expanded ? 'Hide evidence' : 'Show evidence'}</button>
-          ) : null}
-        </div>
-        <div className="v-morning-evidence">
-          {expanded ? c.evidence.map((ev: any, i: number) => (
-            <EvidenceRow key={i} ev={ev} />
-          )) : null}
-        </div>
-      </div>
-    </li>
-  );
-}
-
-function EvidenceRow({ ev }: { ev: any }) {
-  return (
-    <>
-      <div className="v-morning-evidence-row"><Icon name={EVIDENCE_ICON[ev.kind] || 'info'} size={14} /><span>{ev.text}</span></div>
-      {ev.series && ev.series.length ? (
-        <>
-          <Sparkline className="v-morning-spark" values={ev.series} norm={ev.series_baseline || null} start={ev.series_start} stepMin={ev.series_step_min || 5} height={64} unit={ev.unit || ''} label={ev.kind === 'hr' ? 'heart rate' : ev.kind} digits={0} />
-          {ev.series_baseline ? <div className="tiny muted">Solid: last night · dotted: your usual at that hour · shaded: above your norm</div> : null}
-        </>
-      ) : null}
-    </>
-  );
-}
-
-function SuggestionCard({ s, morning, style, className }: { s: any; morning: string; style?: React.CSSProperties; className?: string }) {
-  const [accepted, setAccepted] = useState(!!s.accepted);
+function TonightAction({ suggestion: s, morning, paused }: { suggestion: any; morning: string; paused: boolean }) {
+  const [saved, setSaved] = useState(!!s.accepted);
   const [pending, setPending] = useState(false);
-  const range = s.gain_low !== null && s.gain_low !== undefined ? ' · likely ' + fmt.signed(s.gain_low, 0) + ' to ' + fmt.signed(s.gain_high, 0) + ' points' : '';
-  let actions: ReactNode;
-  if (accepted) {
-    actions = (
-      <>
-        <span className="row v-morning-added"><Icon name="check" size={16} />Added to your calendar</span>
-        <button className="btn btn-sm" type="button" onClick={() => api.download('/api/suggestions/' + morning + '/' + s.id + '.ics', 'stressless-' + s.id + '.ics').catch((e) => toast('Could not download: ' + e.message, { kind: 'error' }))}>
-          <Icon name="download" size={14} />Download .ics
-        </button>
-        <Link className="btn btn-sm btn-ghost" href={'/planner/' + morning}>See it in the Planner</Link>
-      </>
-    );
-  } else if (s.proposed_event) {
-    actions = (
-      <button className="btn btn-primary" type="button" disabled={pending} onClick={async () => {
-        setPending(true);
-        try {
-          await api.post('/api/suggestions/' + morning + '/' + s.id + '/accept');
-          setAccepted(true);
-          toast('Added "' + s.proposed_event.title + '" to tonight', { kind: 'success' });
-        } catch (e: any) {
-          setPending(false);
-          toast('Could not add: ' + e.message, { kind: 'error' });
-        }
-      }}>
-        <Icon name="calendar" size={16} />Add to calendar
-      </button>
-    );
-  } else {
-    actions = <Link className="btn" href={'/planner/' + (s.for_date || morning)}><Icon name="planner" size={16} />Try it in the Planner</Link>;
-  }
-  return (
-    <div className={'card accent v-morning-sugg' + (className ? ' ' + className : '')} data-tour="suggestion" style={style}>
-      <div className="eyebrow">{'Suggestion' + range}</div>
-      <h3>{s.title}</h3>
-      <p className="small">{s.body}</p>
-      <div className="row v-morning-sugg-actions">{actions}</div>
+  const [downloading, setDownloading] = useState(false);
+  const [error, setError] = useState('');
+  const errorId = useId();
+  const save = async () => {
+    if (pending || saved) return;
+    setPending(true); setError('');
+    try { await api.post(`/api/suggestions/${morning}/${s.id}/accept`); setSaved(true); }
+    catch (e) { setError(e instanceof Error ? e.message : "We couldn't save this block. Try again."); }
+    finally { setPending(false); }
+  };
+  const download = async () => {
+    if (downloading) return;
+    setDownloading(true); setError('');
+    try { await api.download(`/api/suggestions/${morning}/${s.id}.ics`, `stressless-${s.id}.ics`); }
+    catch { setError("We couldn't prepare the calendar file. Try again."); }
+    finally { setDownloading(false); }
+  };
+  return <section className={'ah-tonight' + (saved ? ' is-saved' : '')} data-tour="suggestion" aria-label="One change for tonight">
+    <div className="ah-tonight-icon"><Icon name={saved ? 'check' : 'moon'} size={22} /></div>
+    <div className="ah-tonight-copy"><span className="ah-eyebrow">{saved ? 'A little space, protected' : 'One change for tonight'}</span><RevealHeading as="h3" paused={paused}>{s.title}</RevealHeading>
+      <p><ScoreText text={s.body.replace(/\s*Likely[^.]*points\.?$/i, '')} /></p>{!saved && s.gain_low != null && s.gain_high != null ? <span className="ah-estimate">Estimated change <ScoreChange value={s.gain_low} digits={0} /> to <ScoreChange value={s.gain_high} digits={0} /> points</span> : null}
+      <div className="ah-actions">
+        {saved ? <><span className="ah-saved" role="status">Saved to your StressLess plan</span><button className="btn btn-sm" aria-disabled={downloading} aria-busy={downloading} onClick={download}>{downloading ? 'Preparing…' : 'Download .ics'}<Icon name="download" size={14} /></button><Link className="ah-text-link" href={'/planner/' + morning}>View plan →</Link></>
+          : s.proposed_event ? <ActionButton className="btn btn-primary" aria-disabled={pending} aria-busy={pending} aria-describedby={error ? errorId : undefined} onClick={save}>{pending ? 'Saving your evening…' : error ? 'Try saving again' : 'Protect this time'}<Icon name={pending ? 'refresh' : 'chevron-right'} size={16} /></ActionButton>
+          : <Link className="btn btn-primary" href={'/planner/' + (s.for_date || morning)}>Try a quieter evening<Icon name="chevron-right" size={16} /></Link>}
+      </div>
+      {error ? <p className="ah-error" id={errorId} role="alert">{error}</p> : null}
     </div>
-  );
+  </section>;
 }
 
-const TILE_ICON: Record<string, string> = { hrv_ms: 'heart', resting_hr: 'pulse', wrist_temp_dev: 'thermometer', resp_rate: 'lungs', spo2: 'drop' };
-function StatTile({ m }: { m: any }) {
-  const fmtValue = (v: number | null) => (v === null || v === undefined ? '–' : m.key === 'wrist_temp_dev' ? fmt.signed(v, 1) : m.key === 'spo2' ? fmt.num(v, 1) : m.key === 'hrv_ms' ? fmt.num(v, 0) : m.key === 'resp_rate' ? fmt.num(v, 1) : fmt.num(v, 0));
-  const delta = m.delta === null || m.delta === undefined ? null
-    : m.key === 'hrv_ms' && m.delta_pct !== null && m.delta_pct !== undefined ? fmt.pct(m.delta_pct, 0)
-    : fmt.signed(m.delta, m.key === 'wrist_temp_dev' || m.key === 'resp_rate' || m.key === 'spo2' ? 1 : 0) + ' ' + m.unit;
-  const hasSeries = m.series && m.series.some((v: number | null) => v !== null);
-  return (
-    <div className="stat-tile v-morning-tile">
-      <div className="label"><Icon name={TILE_ICON[m.key] || 'info'} size={14} />{m.label}</div>
-      <div className="value">{fmtValue(m.value)}<small>{m.unit}</small></div>
-      <div className="delta">{delta === null ? <span className="muted">no baseline yet</span> : <span>{delta + ' vs baseline'}</span>}<span className={'badge badge-' + m.status}>{m.status}</span></div>
-      {hasSeries ? (
-        <Sparkline className="trend" values={m.series} baseline={m.baseline} height={32} label={m.label} unit={m.unit} digits={m.key === 'wrist_temp_dev' ? 2 : 1}
-          xLabels={m.series.map((_: unknown, i: number) => (13 - i === 0 ? 'last night' : 13 - i + ' nights ago'))} />
-      ) : <div className="trend" />}
-    </div>
-  );
+const evidenceKey = (text: string) => text.trim().replace(/\s+/g, ' ').replace(/[.!?]+$/, '').toLowerCase();
+
+function EvidenceText({ text, evidence }: { text: string; evidence?: any }) {
+  if (evidence?.kind !== 'duration') return <ScoreText text={text} />;
+  const delta = evidence.value != null && evidence.baseline != null ? Math.round(evidence.value) - Math.round(evidence.baseline) : null;
+  return <>Slept <strong className={pointClass(delta)}>{fmt.minutes(evidence.value)}</strong> vs your usual <strong className={pointClass(delta == null ? null : -delta)}>{fmt.minutes(evidence.baseline)}</strong></>;
 }
 
-function HistorySelect() {
-  const { historyDays: cur, setHistoryDays } = useApp();
-  return (
-    <label className="row small muted">History used
-      <select className="select" aria-label="Nights of history used" value={cur === null ? 'all' : String(cur)} onChange={(e) => setHistoryDays(e.target.value === 'all' ? null : +e.target.value)}>
-        {[7, 14, 28].map((n) => <option key={n} value={String(n)}>{n + ' nights'}</option>)}
-        <option value="all">All nights</option>
-      </select>
-    </label>
-  );
+function Finding({ cause: c, date, expanded, onSelect }: { cause: any; date: string; expanded: boolean; onSelect: () => void }) {
+  const id = useId();
+  const tone = pointClass(c.points);
+  const direction = tone === 'pts-pos' ? 'positive' : tone === 'pts-neg' ? 'negative' : 'neutral';
+  const seen = new Set([evidenceKey(c.detail || '')]);
+  const evidence = (c.evidence || []).map((ev: any) => {
+    const key = evidenceKey(ev.text || '');
+    const showText = !!key && !seen.has(key);
+    seen.add(key);
+    return { ...ev, showText };
+  });
+  const detailEvidence = evidence.find((ev: any) => evidenceKey(ev.text || '') === evidenceKey(c.detail || ''));
+  return <li className={'ah-finding' + (expanded ? ' is-open' : '')} data-factor={c.factor}>
+    <button className="ah-finding-trigger" aria-expanded={expanded} aria-controls={id} onClick={onSelect}>
+      <span className="ah-finding-rank">{String(c.rank).padStart(2, '0')}</span>
+      <span className="ah-finding-title">{c.title}<span>{c.n_similar ? `${c.n_similar} similar nights` : 'Your recent history'} · {c.confidence} confidence</span></span>
+      <span className="ah-finding-points" data-direction={direction}>{direction !== 'neutral' ? <Icon name={direction === 'positive' ? 'arrow-up' : 'arrow-down'} size={18} /> : null}{fmt.signed(c.points, 1)}<small>pts</small></span><Icon name="chevron-right" size={18} className="ah-disclosure-icon" />
+    </button>
+    <Collapse id={id} open={expanded}><div className="ah-evidence">
+      <p><EvidenceText text={c.detail || ''} evidence={detailEvidence} /></p>
+      {c.points_low != null && c.points_high != null ? <p className="ah-evidence-range">Estimated association: <ScoreChange value={c.points_low} /> to <ScoreChange value={c.points_high} /> points.</p> : null}
+      {evidence.map((ev: any, i: number) => ev.showText || ev.series?.length ? <div className="ah-evidence-item" key={i}>{ev.showText ? <p><EvidenceText text={ev.text} evidence={ev} /></p> : null}
+        {ev.series?.length ? <><Sparkline className="ah-evidence-spark" values={ev.series} norm={ev.series_baseline} height={64} unit={ev.unit} label={ev.kind} start={ev.series_start} stepMin={ev.series_step_min || 5} />
+          <details className="ah-data-details"><summary>Read chart values</summary><div className="ah-data-scroll"><table className="data"><thead><tr><th>Time</th><th>Measured {ev.unit}</th><th>Your usual</th></tr></thead><tbody>{ev.series.map((v: number | null, j: number) => <tr key={j}><td>{minuteLabel((minuteOf(ev.series_start, date) ?? 0) + j * (ev.series_step_min || 5))}</td><td>{fmt.num(v, 0)}</td><td>{fmt.num(ev.series_baseline?.[j], 0)}</td></tr>)}</tbody></table></div></details></> : null}
+      </div> : null)}
+      <a className="ah-text-link" href="#day-story">See the day behind this finding <span aria-hidden="true">↓</span></a>
+    </div></Collapse>
+  </li>;
+}
+
+function MorningReport({ report, day, morning, veiled, onReveal }: { report: any; day: any; morning: string; veiled: boolean; onReveal: () => void }) {
+  const { meta, historyDays, setHistoryDays } = useApp();
+  const [motionPaused, setMotionPaused] = useState(false);
+  const heroRef = useRef<HTMLElement>(null);
+  const reducedMotion = useReducedMotion();
+  const { scrollYProgress } = useScroll({ target: heroRef, offset: ['start start', 'end -35%'] });
+  const glowScale = useTransform(scrollYProgress, [0, 1], [1, 1.28]);
+  const glowOpacity = useTransform(scrollYProgress, [0, 1], [1, 0.15]);
+  const [selected, setSelected] = useState<number | null>(null);
+  const [cursor, setCursor] = useState(18 * 60);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const night = report.night;
+  const causes = report.causes || [];
+  const selectCause = (index: number) => {
+    setSelected(selected === index ? null : index);
+    const evidence = causes[index].evidence?.find((ev: any) => ev.series_start);
+    if (evidence) setCursor(Math.max(0, Math.min(1439, (minuteOf(evidence.series_start, report.night_date) ?? 0) + 30)));
+  };
+  const chosenEvidence = selected == null ? null : causes[selected]?.evidence?.find((ev: any) => ev.series_start);
+  const rangeStart = chosenEvidence ? minuteOf(chosenEvidence.series_start, report.night_date) : null;
+  const info = day ? valueAt(day, cursor) : null;
+  const summary = report.missing_data || (report.model?.insufficient ? report.confidence_note : report.narrative?.split(/(?<=[.!?])\s+/).slice(0, 2).join(' ')) || 'Explore your recent nights to understand the patterns in your day.';
+  const recovery = report.recovery || [];
+  return <div className="ah-report">
+    <section ref={heroRef} className={'ah-hero' + (motionPaused ? ' is-motion-paused' : '')} data-tour="hero" aria-labelledby="morning-title">
+      <motion.div className="ah-hero-glow" aria-hidden="true" style={{ scale: reducedMotion || motionPaused ? 1 : glowScale, opacity: reducedMotion || motionPaused ? 1 : glowOpacity }} />
+      <p className="ah-night-date">Last night · {fmt.day(report.night_date)}</p>
+      <div className="ah-hero-main">
+        <RevealHeading as="h1" id="morning-title" paused={motionPaused} lines={['Your night,', <em key="light">in a new light.</em>]} />
+        <div className="ah-score-stage"><SleepScore report={report} /></div>
+      </div>
+      <div className="ah-hero-controls"><a className="ah-text-link" href="#night-explanation">Explore your night <span aria-hidden="true">↓</span></a><button className="ah-text-link ah-motion-toggle" type="button" aria-pressed={motionPaused} onClick={() => setMotionPaused(paused => !paused)}>Pause motion</button></div>
+    </section>
+
+    <RevealSection paused={motionPaused} className="ah-section ah-sleep-summary" id="night-explanation" tabIndex={-1}>
+      <header className="ah-section-heading"><RevealHeading paused={motionPaused}>A moment to understand.</RevealHeading></header>
+      <dl className="ah-sleep-facts">
+        <div><dt>Sleep rating</dt><dd className="ah-summary-rating">{report.rating || 'Unavailable'}<span className="ah-summary-baseline">{report.score == null ? 'No score for this night' : report.delta_vs_baseline == null ? 'Building your personal baseline' : <><strong><ScoreChange value={report.delta_vs_baseline} digits={0} /> points</strong> · your usual {fmt.score(report.baseline_score)}</>}</span></dd></div>
+        <div><dt>Time asleep</dt><dd>{night?.worn ? fmt.minutes(night.duration_min) : 'Unavailable'}</dd></div>
+        <div><dt>Wake time</dt><dd>{night?.worn ? fmt.hm(night.wake_time) : 'Unavailable'}</dd></div>
+      </dl>
+      <p className="ah-lead" data-tour="narrative">{veiled ? 'A score tells you how the night went. Your day can help explain why.' : <ScoreText text={summary} />}</p>
+      {veiled ? <ActionButton className="btn btn-primary" data-tour="reveal" onClick={onReveal}>Explore the explanation<Icon name="chevron-right" size={16} /></ActionButton> : null}
+    </RevealSection>
+
+    {!veiled ? <RevealSection paused={motionPaused} className="ah-section ah-plan">
+      <header className="ah-section-heading"><div><span className="ah-eyebrow">One change for tonight</span><RevealHeading paused={motionPaused}>Protect space for yourself.</RevealHeading></div></header>
+      {report.suggestions?.[0] ? <TonightAction key={report.suggestions[0].id} suggestion={report.suggestions[0]} morning={morning} paused={motionPaused} /> : <Link className="btn" href={'/planner/' + morning}>Explore tonight's plan →</Link>}
+    </RevealSection> : null}
+
+    {!veiled ? <RevealSection paused={motionPaused} className="ah-section ah-findings" data-tour="causes">
+      <header className="ah-section-heading"><div><span className="ah-eyebrow">Connect the dots</span><RevealHeading paused={motionPaused}>The day behind your night.</RevealHeading></div><p>Patterns from your own history.<br />Associations, never certainties.</p></header>
+      {report.missing_data ? <div className="ah-empty"><RevealHeading as="h3" paused={motionPaused}>Watch data unavailable</RevealHeading><p>{report.missing_data}</p></div> : report.model?.insufficient ? <div className="ah-empty"><RevealHeading as="h3" paused={motionPaused}>Building your baseline</RevealHeading><p>{report.confidence_note}</p></div> : causes.length ? <ol className="ah-finding-list">{causes.map((c: any, i: number) => <Finding key={c.factor} cause={c} date={report.night_date} expanded={selected === i} onSelect={() => selectCause(i)} />)}</ol> : <div className="ah-empty"><RevealHeading as="h3" paused={motionPaused}>No calendar pattern stands out</RevealHeading><p>{report.unexplained_note || 'Some nights have no clear explanation in the available data.'}</p></div>}
+      {report.helpers?.length ? <p className="ah-helpers"><Icon name="sun" size={16} /><span>What helped: {report.helpers.map((h: any) => h.title).join(' · ')}</span></p> : null}
+    </RevealSection> : null}
+
+    {day ? <RevealSection paused={motionPaused} className="ah-section ah-day" id="day-story" tabIndex={-1}>
+      <header className="ah-section-heading"><div><span className="ah-eyebrow">Follow the rhythm</span><RevealHeading paused={motionPaused}>A day. A body. A connection.</RevealHeading></div><Link className="ah-text-link" href={'/replay/' + report.night_date + '?t=' + cursor}>Open day replay <span aria-hidden="true">↗</span></Link></header>
+      <div className="ah-timeline-frame" data-tour="timeline">
+        <div className="ah-trace-header"><span><i className="ah-live-dot" />{fmt.day(report.night_date)}<span className="ah-trace-subtitle">Calendar meets body</span></span><span className="ah-trace-legend"><i />Heart rate <b />Your usual</span></div>
+        <div className="ah-timeline-scroll"><DayTimeline className="ah-timeline" date={day.date} events={day.events} visits={day.visits} hr={day.hr} norm={day.norm} night={day.night} nightPrev={day.night_prev} workouts={day.workouts} checks={day.checks} cursorMinute={cursor} highlightRange={rangeStart == null ? undefined : [rangeStart, Math.min(1440, rangeStart + (chosenEvidence.series?.length || 0) * (chosenEvidence.series_step_min || 5))]} onSeek={setCursor} /></div>
+        <div className="ah-inspection"><div><strong>{minuteLabel(cursor)}</strong><span>{info?.event?.title || info?.place?.place_name || 'A moment in your day'}</span></div><p><strong>{fmt.num(info?.hr, 0)} <small>bpm</small></strong><span>{info?.norm == null ? 'No personal baseline' : `Your usual ${fmt.num(info.norm, 0)} bpm`}</span></p></div>
+        <label className="ah-scrubber"><span className="sr-only">Inspect time of day</span><input type="range" min={0} max={1439} value={cursor} aria-valuetext={`${minuteLabel(cursor)}, ${info?.hr == null ? 'heart rate unavailable' : info.hr + ' beats per minute'}, ${info?.event?.title || 'no calendar event'}`} onChange={(e) => setCursor(+e.target.value)} /></label>
+        <p className="ah-chart-note">Select an event or move through the day. The dotted line is your personal baseline; the shaded area shows readings above it.</p>
+      </div>
+    </RevealSection> : null}
+
+    {night?.worn ? <RevealSection paused={motionPaused} className="ah-section ah-recovery" data-tour="recovery">
+      <header className="ah-section-heading"><div><span className="ah-eyebrow">The quieter signals</span><RevealHeading paused={motionPaused}>More than a number.</RevealHeading></div><p>Last night's recovery markers,<br />compared with your usual.</p></header>
+      <MetricGroup paused={motionPaused}>{recovery.filter((m: any) => MARKERS.includes(m.key)).map((m: any) => <Metric key={m.key} marker={m} paused={motionPaused} />)}</MetricGroup>
+      <button className="ah-text-link ah-more" aria-expanded={moreOpen} aria-controls="ah-night-details" onClick={() => setMoreOpen(!moreOpen)}>{moreOpen ? 'Close night details' : 'A closer look at the night'}<Icon name={moreOpen ? 'x' : 'chevron-right'} size={16} /></button>
+      <Collapse id="ah-night-details" open={moreOpen}><div className="ah-night-details"><div className="ah-metric-grid">{recovery.filter((m: any) => !MARKERS.includes(m.key)).map((m: any) => <Metric key={m.key} marker={m} />)}</div><RevealHeading as="h3" paused={motionPaused}>Your sleep, in stages</RevealHeading><p>{fmt.hm(night.sleep_onset)} asleep · {fmt.hm(night.wake_time)} awake · {night.interruptions} interruptions</p><Stages night={night} /><details className="ah-data-details"><summary>Read sleep-stage times</summary><div className="ah-data-scroll"><table className="data"><thead><tr><th>Stage</th><th>Start</th><th>End</th></tr></thead><tbody>{night.stages?.map((stage: any, i: number) => <tr key={i}><td>{stage.kind}</td><td>{fmt.hm(stage.start)}</td><td>{fmt.hm(stage.end)}</td></tr>)}</tbody></table></div></details></div></Collapse>
+    </RevealSection> : null}
+
+    <footer className="ah-report-footer" data-tour="confidence"><div><Icon name="shield" size={18} /><p>{report.confidence_note}<span>{meta.source === 'demo' ? 'Simulated health & calendar data' : 'Imported health & calendar data'} · {report.reasoning_mode === 'claude' ? 'AI-assisted narrative' : 'Rule-based narrative'}</span></p></div><label>History used<select className="select" aria-label="Nights of history used" value={historyDays ?? 'all'} onChange={(e) => setHistoryDays(e.target.value === 'all' ? null : +e.target.value)}>{[7, 14, 28].map((n) => <option key={n} value={n}>{n} nights</option>)}<option value="all">All nights</option></select></label></footer>
+  </div>;
+}
+
+function Metric({ marker: m, paused = false }: { marker: any; paused?: boolean }) {
+  const reduced = useReducedMotion();
+  const value = m.key === 'wrist_temp_dev' ? fmt.signed(m.value, 1) : fmt.num(m.value, m.key === 'resp_rate' || m.key === 'spo2' ? 1 : 0);
+  return <motion.article className="ah-metric" variants={quietItem} transition={{ ...calmTransition, duration: reduced || paused ? 0 : 0.65 }}><span className="ah-eyebrow">{m.label}</span><p className="ah-metric-value">{value}<span>{m.unit}</span></p><p>{m.delta == null ? 'Building your baseline' : m.key === 'hrv_ms' && m.delta_pct != null ? fmt.pct(m.delta_pct) + ' vs your usual' : fmt.signed(m.delta, 1) + ' ' + m.unit + ' vs your usual'}</p><span className="ah-marker-status">{m.status}</span></motion.article>;
 }
 
 export function MorningView({ date, reveal }: { date?: string; reveal?: boolean }) {
-  const { today, meta, historyDays: hd, go } = useApp();
+  const { today, meta, go, historyDays } = useApp();
   const morning = date || today;
-  const [veiled, setVeiled] = useState(!!reveal && !revealed);
-  const [moreOpen, setMoreOpen] = useState(false);
+  const [veiled, setVeiled] = useState(!!reveal);
+  useEffect(() => setVeiled(!!reveal), [reveal]);
   const load = useLoad(async () => {
-    const report = await api.get('/api/report/' + morning + (hd ? '?history_days=' + hd : ''));
-    let day = null;
-    try { day = await api.get('/api/day/' + report.night_date); } catch { day = null; }
+    const report = await api.get('/api/report/' + morning + (historyDays ? '?history_days=' + historyDays : ''));
+    const day = await api.get('/api/day/' + report.night_date).catch(() => null);
     return { report, day };
-  }, [morning, hd]);
-
-  const head = (
-    <ViewHead eyebrow="Morning report" title={fmt.dayLong(morning)}>
-      <DateNav label={morning === today ? 'This morning' : fmt.day(morning)}
-        prevHref={'/morning/' + dates.addDays(morning, -1)} nextHref={'/morning/' + dates.addDays(morning, 1)}
-        prevDisabled={!!meta.start && morning <= dates.addDays(meta.start, 1)} nextDisabled={morning >= today}
-        extra={morning !== today ? <button className="btn btn-sm btn-ghost" type="button" onClick={() => go('/morning/' + today)}>Today</button> : null} />
-    </ViewHead>
-  );
-
-  if (load.loading) return <>{head}<div className="v-morning"><Skeleton height={220} /></div></>;
-  if (load.error || !load.data) {
-    const msg = load.error ? load.error.message : '';
-    return (
-      <>{head}
-        <div className="v-morning">
-          <div className="card empty">
-            <Icon name="moon" size={28} />
-            <h2>{/No report yet/.test(msg) ? 'No report yet' : 'No report'}</h2>
-            <p>{msg}</p>
-            <button className="btn" onClick={() => go('/morning/' + today)}>Go to this morning</button>
-          </div>
-        </div>
-      </>
-    );
-  }
-
-  const { report, day } = load.data;
-  const src = report.sources || {};
-  const night = report.night;
-  const asleep = night && night.worn ? fmt.minutes(night.duration_min) : '–';
-
-  const causeBlocks: ReactNode[] = [];
-  const stagger = () => ({ className: ' v-morning-stagger', style: { animationDelay: causeBlocks.length * 0.18 + 's' } });
-  let st = stagger();
-  if (report.missing_data) {
-    causeBlocks.push(<div key="missing" className={"card" + st.className} style={st.style}><h3>No watch data</h3><p className="secondary">{report.missing_data}</p><p className="small muted">Yesterday still counts for your patterns; the day strip below shows what it looked like.</p></div>);
-  } else if (report.model && report.model.insufficient) {
-    causeBlocks.push(<div key="baseline" className={"card" + st.className} style={st.style}><h3>Building your baseline</h3><p className="secondary">{report.confidence_note}</p></div>);
-  } else if (!report.causes.length) {
-    causeBlocks.push(<div key="calm" className={"card" + st.className} style={st.style}><h3>Nothing in your calendar stands out</h3><p className="secondary">{'A calm day. ' + (report.unexplained_note || '')}</p></div>);
-  } else {
-    causeBlocks.push(
-      <div key="causes" className={"card v-morning-causes-card" + st.className} style={st.style}>
-        <div className="card-title"><h3>{report.causes.length === 1 ? 'The likely cause' : report.causes.length === 2 ? 'Two likely causes' : 'Three likely causes'}</h3><span className="tiny muted">calendar · Maps · watch</span></div>
-        <ol className="list v-morning-cause-list">
-          {report.causes.map((c: any, i: number) => <CauseItem key={c.factor + i} c={c} expandedDefault={i === 0 || c.evidence.some((e: any) => e.kind === 'hr' && e.series)} />)}
-        </ol>
-      </div>,
-    );
-  }
-  st = stagger();
-  if (report.helpers && report.helpers.length) {
-    causeBlocks.push(
-      <div key="helpers" className={"card soft" + st.className} style={st.style}>
-        <h4>What helped</h4>
-        <ul className="list">
-          {report.helpers.map((h: any, i: number) => (
-            <li key={i} className="row between small"><span><strong>{h.title}</strong>{' — '}{h.detail}</span><Pts v={h.points} lo={h.points_low} hi={h.points_high} /></li>
-          ))}
-        </ul>
-      </div>,
-    );
-  }
-
-  const primary = (report.recovery || []).filter((m: any) => ['hrv_ms', 'resting_hr', 'wrist_temp_dev'].includes(m.key));
-  const more = (report.recovery || []).filter((m: any) => !['hrv_ms', 'resting_hr', 'wrist_temp_dev'].includes(m.key));
-
-  return (
-    <>
-      {head}
-      <div className="v-morning">
-        <div className="row v-morning-sources" data-tour="sources">
-          <Chip icon="calendar">{'Calendar · ' + (src.calendar_events || 0) + ' events'}</Chip>
-          <Chip icon="map">{'Maps · ' + (src.maps_places || 0) + ' places'}</Chip>
-          <Chip icon="watch">{'Watch · ' + (src.watch_minutes || 0).toLocaleString('en') + ' min'}</Chip>
-          <span className="tiny muted">{'yesterday, ' + fmt.day(report.night_date)}</span>
-        </div>
-
-        <div className="v-morning-hero" data-tour="hero">
-          <div className="card soft v-morning-watch" data-tour="watch-card">
-            <div className="eyebrow">What your watch says</div>
-            <div className="v-morning-watch-face">
-              <div className="v-morning-watch-score">{fmt.score(report.score)}</div>
-              <div className="v-morning-watch-meta"><div className="v-morning-watch-rating">{report.rating || 'No data'}</div><div className="muted small">Sleep score</div></div>
-            </div>
-            <div className="row v-morning-watch-rows small">
-              <span><Icon name="moon" size={14} />{' Asleep ' + asleep}</span>
-              {night && night.worn ? <span><Icon name="bed" size={14} />{' ' + fmt.hm(night.in_bed_start) + ' → ' + fmt.hm(night.wake_time)}</span> : null}
-            </div>
-            <p className="v-morning-watch-quote">{report.score === null ? 'No data for last night.' : 'That’s all your watch tells you.'}</p>
-          </div>
-          <div className="card v-morning-ring">
-            <div className="v-morning-ringbox"><Ring value={report.score} label="sleep score" sublabel={report.rating} band={bandFor(report.score)} size={190} /></div>
-            <div className="v-morning-delta">
-              {report.delta_vs_baseline === null || report.delta_vs_baseline === undefined
-                ? <span className="muted">{report.baseline_score ? 'Usual ' + fmt.score(report.baseline_score) : 'Building your baseline'}</span>
-                : <span className={report.delta_vs_baseline < 0 ? 'pts-neg' : 'pts-pos'}>{fmt.signed(report.delta_vs_baseline, 0) + ' vs your usual ' + fmt.score(report.baseline_score)}</span>}
-            </div>
-          </div>
-          <div className={'v-morning-causes' + (veiled ? ' veiled' : '')} data-tour="causes">
-            {veiled ? (
-              <div className="card v-morning-why">
-                <p className="v-morning-why-text">A number. No explanation.</p>
-                <button className="btn btn-primary v-morning-why-btn" type="button" data-tour="reveal" onClick={() => { revealed = true; setVeiled(false); }}>Why?</button>
-              </div>
-            ) : (
-              <>
-                {causeBlocks}
-                {report.suggestions && report.suggestions.length ? (
-                  <SuggestionCard s={report.suggestions[0]} morning={morning} className="v-morning-stagger" style={{ animationDelay: causeBlocks.length * 0.18 + 's' }} />
-                ) : null}
-              </>
-            )}
-          </div>
-        </div>
-
-        <div className="card v-morning-narrative" data-tour="narrative">
-          <div className="card-title"><h3>In plain words</h3><span className="chip"><Icon name="brain" size={13} />{report.reasoning_mode === 'claude' ? 'Written by Claude' : 'On-device rules'}</span></div>
-          <p>{report.narrative || '—'}</p>
-        </div>
-
-        {day && day.hr ? (
-          <div className="card">
-            <div className="card-title"><h3>Yesterday at a glance</h3><Link className="small" href={'/replay/' + report.night_date}>Open the full replay →</Link></div>
-            <DayTimeline className="v-morning-strip" date={day.date} events={day.events} visits={day.visits} hr={day.hr} norm={day.norm} night={day.night} nightPrev={day.night_prev} workouts={day.workouts} checks={day.checks} compact
-              onSeek={(m) => go('/replay/' + report.night_date + '?t=' + m)} />
-            <div className="tiny muted">Calendar blocks above, heart rate below. Dotted: your usual heart rate at that hour; shaded: above it. Click to jump into the replay.</div>
-          </div>
-        ) : null}
-
-        {night && night.worn ? (
-          <div className="card" data-tour="recovery">
-            <div className="card-title"><h3>Last night in numbers</h3><button className="btn btn-ghost btn-sm" type="button" onClick={() => setMoreOpen(!moreOpen)}>{moreOpen ? 'Fewer markers' : 'More markers'}</button></div>
-            <div className="grid grid-3">{primary.map((m: any) => <StatTile key={m.key} m={m} />)}</div>
-            <div className="grid grid-3 v-morning-more" hidden={!moreOpen}>{more.map((m: any) => <StatTile key={m.key} m={m} />)}</div>
-            <div className="divider" />
-            <div className="grid grid-2">
-              <div>
-                <h4>The night</h4>
-                <div className="row v-morning-nightfacts">
-                  <Chip icon="bed">{'In bed ' + fmt.hm(night.in_bed_start)}</Chip>
-                  <Chip icon="moon">{'Asleep ' + fmt.hm(night.sleep_onset)}</Chip>
-                  <Chip icon="sun">{'Woke ' + fmt.hm(night.wake_time)}</Chip>
-                  <Chip>{fmt.minutes(night.duration_min) + ' asleep'}</Chip>
-                  <Chip>{night.interruptions + ' interruption' + (night.interruptions === 1 ? '' : 's') + ', ' + fmt.minutes(night.awake_min) + ' awake'}</Chip>
-                </div>
-                <Stages className="v-morning-stages" night={night} />
-              </div>
-              <div>
-                <h4>Facts from the night</h4>
-                <div className="row">{report.proximal.map((e: any, i: number) => <Chip key={i}>{e.text}</Chip>)}</div>
-              </div>
-            </div>
-            {night.score_parts ? (
-              <div className="tiny muted" style={{ marginTop: '8px' }}>
-                {'Score parts — duration ' + night.score_parts.duration + '/50 · consistency ' + night.score_parts.consistency + '/30 · interruptions ' + night.score_parts.interruptions + '/20'}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
-        <div className="card soft row between v-morning-footer" data-tour="confidence">
-          <span className="small secondary row"><Icon name="info" size={14} />{report.confidence_note}</span>
-          <HistorySelect />
-        </div>
-      </div>
-    </>
-  );
+  }, [morning, historyDays, meta.persona.key]);
+  return <div className="after-hours">
+    <header className="ah-page-header view-head"><div><span className="ah-eyebrow">Your daily brief</span><p>{fmt.dayLong(morning)}<span className="ah-demo-label">{meta.source === 'demo' ? 'Simulated example' : 'Your data'}</span></p></div><DateNav label={morning === today ? 'This morning' : fmt.day(morning)} prevHref={'/morning/' + dates.addDays(morning, -1)} nextHref={'/morning/' + dates.addDays(morning, 1)} prevDisabled={!!meta.start && morning <= dates.addDays(meta.start, 1)} nextDisabled={morning >= today} extra={morning !== today ? <button className="btn btn-sm" onClick={() => go('/morning/' + today)}>Today</button> : null} /></header>
+    {load.loading ? <div className="ah-loading" aria-busy="true"><Skeleton height={400} /><p>Preparing your morning brief…</p></div> : load.error || !load.data ? <section className="ah-empty" role="alert"><span className="ah-eyebrow">Your daily brief</span><RevealHeading as="h1">A moment out of reach.</RevealHeading><p>{load.error?.message || 'We could not load this report.'}</p><ActionButton className="btn btn-primary" onClick={load.reload}>Try again</ActionButton></section> : <MorningReport key={`${morning}-${historyDays}-${meta.persona.key}`} report={load.data.report} day={load.data.day} morning={morning} veiled={veiled} onReveal={() => setVeiled(false)} />}
+  </div>;
 }

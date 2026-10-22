@@ -1,6 +1,7 @@
 'use client';
 /* Week view: heat strip, meeting load vs sleep, strongest pattern, last seven days, top habits. */
 import Link from 'next/link';
+import { ScoreText } from '../ui/ScoreChange';
 import { api } from '@/lib/api';
 import { bandFor, dates, fmt } from '@/lib/format';
 import { Bars } from '../charts/basic';
@@ -18,6 +19,7 @@ export function WeekView({ end: endParam }: { end?: string }) {
       <ViewHead eyebrow="Weekly insight" title="Patterns over the last weeks">
         <span className="small muted">{'up to ' + fmt.day(dates.addDays(end, -1))}</span>
       </ViewHead>
+      <nav className="view-tabs" aria-label="Insights"><Link href="/week" aria-current="page">Overview</Link><Link href="/habits" >Your patterns</Link></nav>
       <div className="v-week stack">
         {load.loading ? <Skeleton height={200} /> : load.error || !w ? <ErrorCard error={load.error!} onRetry={load.reload} view="week" /> : (
           <>
@@ -29,11 +31,11 @@ export function WeekView({ end: endParam }: { end?: string }) {
               <div className="card span-2" data-tour="buckets">
                 <div className="card-title"><h3>{'Average sleep score by meeting load, last ' + w.weeks + ' weeks'}</h3><span className="tiny muted">work nights only · whiskers: 95 % range</span></div>
                 <Bars className="v-week-buckets" items={w.buckets.map((b: any) => ({ label: b.label, value: b.mean_score, n: b.n, lo: b.lo, hi: b.hi }))} unit="sleep score" height={260} ariaLabel="Average sleep score by meeting load" />
-                <p className="secondary v-week-headline">{w.headline}</p>
+                <p className="secondary v-week-headline"><ScoreText text={w.headline} /></p>
               </div>
               <div className="card accent" data-tour="strongest">
                 <div className="eyebrow small">Strongest pattern</div>
-                <p className="v-week-strongest">{w.strongest_pattern || 'No pattern clears the confidence bar yet.'}</p>
+                <p className="v-week-strongest"><ScoreText text={w.strongest_pattern || 'No pattern clears the confidence bar yet.'} /></p>
                 <Link className="small" href="/habits" style={{ color: 'inherit', textDecoration: 'underline' }}>All habits →</Link>
               </div>
             </div>

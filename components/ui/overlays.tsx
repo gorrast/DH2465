@@ -1,12 +1,12 @@
 'use client';
 /* App-wide overlays: chart tooltip, toasts, confirm modal and the busy stepper.
  * Each is driven by a tiny external store so callers (charts, views) can trigger them without re-rendering the tree. */
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createStore, useStore } from '@/lib/store';
 import { Icon } from './Icon';
 
 // ------------------------------------------------------------------ tooltip --
-export interface TipRow { label: string; value: string; color?: string | null }
+export interface TipRow { label: string; value: ReactNode; color?: string | null }
 interface TipState { x: number; y: number; title: string | null; rows: TipRow[]; visible: boolean }
 const tipStore = createStore<TipState>({ x: 0, y: 0, title: null, rows: [], visible: false });
 
@@ -90,41 +90,25 @@ export function confirmModal(opts: ConfirmOptions): Promise<boolean> {
 
 export function ModalHost() {
   const m = useStore(modalStore);
-  const confirmRef = useRef<HTMLButtonElement>(null);
+  const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
-    if (!m) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        close(false);
-      }
-    };
-    document.addEventListener('keydown', onKey);
-    const t = setTimeout(() => confirmRef.current?.focus(), 20);
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      clearTimeout(t);
-    };
-  });
+    const node = dialog.current;
+    if (!m || !node) return;
+    node.showModal();
+    return () => node.close();
+  }, [m]);
   if (!m) return null;
   const o = m.opts;
-  function close(v: boolean) {
-    modalStore.set(null);
-    m!.resolve(v);
-  }
+  const close = (answer: boolean) => { dialog.current?.close(); m.resolve(answer); modalStore.set(null); };
   return (
-    <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) close(false); }}>
-      <div className="modal card raised" role="dialog" aria-modal="true" aria-label={o.title || 'Confirm'}>
-        <h3>{o.title || 'Are you sure?'}</h3>
-        <p className="secondary">{o.body || ''}</p>
-        <div className="row modal-actions">
-          <button className="btn btn-ghost" type="button" onClick={() => close(false)}>{o.cancelLabel || 'Cancel'}</button>
-          <button ref={confirmRef} className={'btn ' + (o.danger ? 'btn-danger' : 'btn-primary')} type="button" onClick={() => close(true)}>
-            {o.confirmLabel || 'Confirm'}
-          </button>
-        </div>
+    <dialog ref={dialog} className="modal card raised" aria-labelledby="confirm-title" aria-describedby="confirm-body" onCancel={() => close(false)}>
+      <h3 id="confirm-title">{o.title || 'Are you sure?'}</h3>
+      <p id="confirm-body">{o.body || ''}</p>
+      <div className="row modal-actions">
+        <button autoFocus className="btn" type="button" onClick={() => close(false)}>{o.cancelLabel || 'Cancel'}</button>
+        <button className={'btn ' + (o.danger ? 'btn-danger' : 'btn-primary')} type="button" onClick={() => close(true)}>{o.confirmLabel || 'Confirm'}</button>
       </div>
-    </div>
+    </dialog>
   );
 }
 

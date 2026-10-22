@@ -1,12 +1,11 @@
 /* charts.js styles — all classes prefixed .c-* */
-.c-ring-value { font-weight: 700; fill: var(--ink-primary); letter-spacing: -0.03em; }
-.c-ring-label { font-size: 12px; fill: var(--ink-secondary); }
-.c-ring-sub { font-size: 12px; fill: var(--ink-muted); font-weight: 600; }
-.c-ring-arc { transition: stroke-dasharray 0.6s ease; }
 .c-axis { font-size: 11px; fill: var(--ink-muted); }
 .c-label { font-size: 12px; fill: var(--ink-secondary); }
 .c-label.small { font-size: 11px; }
 .c-value { font-size: 12px; font-weight: 700; fill: var(--ink-primary); }
+.c-axis.pts-pos, .c-value.pts-pos { fill: var(--score-positive); }
+.c-axis.pts-neg, .c-value.pts-neg { fill: var(--score-negative); }
+.c-axis.pts-neutral, .c-value.pts-neutral { fill: var(--ink-secondary); }
 .c-bar { transition: opacity 0.15s; } .c-bar:hover { opacity: 0.8; }
 .c-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 8px; font-size: 12px; color: var(--ink-secondary); }
 .c-legend-item { display: inline-flex; align-items: center; gap: 6px; }
@@ -28,3 +27,8 @@
 .c-heat-value { font-size: 9px; fill: #fff; font-weight: 600; pointer-events: none; }
 :root[data-theme="light"] .c-heat-value { fill: #1B1F3B; }
 .c-table { margin-top: 8px; }
+.c-effects-wrap { overflow-x: auto; }
+.c-effects-wrap svg { display: block; }
+.c-stages { max-width: 100%; }
+.c-heat-cell:focus-visible, .c-effect-row:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.c-timeline .c-evt[role="button"] { cursor: pointer; }

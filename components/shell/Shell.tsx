@@ -1,12 +1,14 @@
 'use client';
 /* The app frame: rail, top bar, global keyboard shortcuts, persona switching and the overlay hosts. */
 import Link from 'next/link';
+import { motion, useReducedMotion } from 'motion/react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api, logClient } from '@/lib/api';
 import { dates, fmt } from '@/lib/format';
 import { NAV, defaultHref, parsePath } from '@/lib/nav';
 import { getSupabase } from '@/lib/supabase/client';
+import { quietGroup, quietItem, calmTransition } from '../ui/Motion';
 import { Icon } from '../ui/Icon';
 import { BusyHost, ModalHost, ToastHost, TooltipHost, busy, toast } from '../ui/overlays';
 import { useTour } from '../tour/Tour';
@@ -21,7 +23,13 @@ export function Shell({ children }: { children: ReactNode }) {
   const [meta, setMeta] = useState<Meta | null>(null);
   const [historyDays, setHistoryDays] = useState<number | null>(null);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
+  const [navFocused, setNavFocused] = useState(false);
+  useEffect(() => { if (!navOpen) setNavFocused(false); }, [navOpen]);
+  const reducedMotion = useReducedMotion();
+  useEffect(() => setNavOpen(false), [pathname]);
+  const primary = NAV.filter((item) => ['morning', 'replay', 'week', 'planner'].includes(item.name));
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const replay = useRef<ReplayControls | null>(null);
   const today = meta?.today || dates.localToday();
@@ -91,13 +99,23 @@ export function Shell({ children }: { children: ReactNode }) {
 
   const { controls: tour, element: tourElement } = useTour({ today, go, setHistoryDays, replay });
 
-  // close the persona menu on any outside click
+  useEffect(() => setMoreOpen(false), [pathname]);
   useEffect(() => {
-    if (!menuOpen) return;
-    const close = () => setMenuOpen(false);
-    document.addEventListener('click', close);
-    return () => document.removeEventListener('click', close);
-  }, [menuOpen]);
+    const dismiss = (event: PointerEvent | KeyboardEvent) => {
+      const escape = event instanceof KeyboardEvent && event.key === 'Escape';
+      if (event instanceof KeyboardEvent && !escape) return;
+      document.querySelectorAll<HTMLDetailsElement>('.persona-wrap[open]').forEach((menu) => {
+        if (escape || !menu.contains(event.target as Node)) {
+          menu.open = false;
+          if (escape) menu.querySelector('summary')?.focus();
+        }
+      });
+      if (escape || !(event.target instanceof Element && event.target.closest('.mobile-more'))) setMoreOpen(false);
+    };
+    document.addEventListener('pointerdown', dismiss);
+    document.addEventListener('keydown', dismiss);
+    return () => { document.removeEventListener('pointerdown', dismiss); document.removeEventListener('keydown', dismiss); };
+  }, []);
 
   // keyboard: 1–9 views, ←/→ change day, t tour, d theme, ? help
   const route = parsePath(pathname);
@@ -143,45 +161,69 @@ export function Shell({ children }: { children: ReactNode }) {
   const m = meta || FALLBACK_META;
   return (
     <>
+      <a className="skip-link" href="#view">Skip to content</a>
       <div className="app">
-        <aside className="rail" aria-label="Primary">
+        <div className={'rail-drawer' + (navOpen ? ' is-open' : '')}
+          onPointerEnter={(e) => { if (e.pointerType === 'mouse') setNavOpen(true); }}
+          onPointerLeave={(e) => { if (e.pointerType === 'mouse' && !e.currentTarget.contains(document.activeElement)) setNavOpen(false); }}
+          onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setNavOpen(false); }}
+          onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setNavOpen(false); e.currentTarget.querySelector('button')?.focus(); } }}>
+          <button className="btn btn-icon rail-toggle" type="button" aria-label={navOpen ? 'Close navigation' : 'Open navigation'} aria-expanded={navOpen} aria-controls="primary-sidebar" onClick={() => setNavOpen(open => !open)}>
+            <Icon name={navOpen ? 'x' : 'menu'} size={20} /><span className="rail-toggle-copy">{navOpen ? 'Close' : 'Menu'}<small>{navOpen ? 'Esc to close' : 'Hover or click'}</small></span>
+          </button>
+        <motion.aside initial={false} animate={{ x: navOpen ? 0 : '-100%', visibility: navOpen ? 'visible' : 'hidden' }} transition={{ ...(reducedMotion ? { duration: 0 } : { type: 'spring' as const, stiffness: 170, damping: 28 }), visibility: { duration: 0, delay: navOpen || reducedMotion ? 0 : 0.8 } }} className="rail" id="primary-sidebar" aria-label="Primary" inert={!navOpen}>
           <div className="brand">
             <span className="pulse-mark" aria-hidden="true">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12h4l2-5 4 10 2-5h6" /></svg>
             </span>
             <span className="brand-text">StressLess<small>the watch measures, the calendar explains</small></span>
           </div>
-          <nav id="rail-nav" aria-label="Views">
-            {NAV.map((item) => (
-              <Link key={item.name} href={defaultHref(item, today)} className={'rail-link' + (route.name === item.name ? ' active' : '')} data-view={item.name} title={item.label + ' (' + item.key + ')'}>
+          <motion.nav id="rail-nav" aria-label="Views" initial={false} animate={navOpen ? 'open' : 'closed'} variants={reducedMotion || navFocused ? undefined : quietGroup} onFocusCapture={() => setNavFocused(true)}>
+
+            {primary.map((item) => (
+              <motion.div key={item.name} variants={quietItem} animate={navFocused && navOpen ? 'open' : undefined} transition={{ ...calmTransition, duration: reducedMotion || navFocused ? 0 : 0.45 }}><Link href={defaultHref(item, today)} className={'rail-link' + (route.name === item.name || (item.name === 'week' && route.name === 'habits') || (item.name === 'morning' && route.name === 'reality') ? ' active' : '')} aria-current={route.name === item.name ? 'page' : undefined} data-view={item.name} title={item.label + ' (' + item.key + ')'}>
                 <Icon name={item.icon} size={20} />
                 <span className="rail-label">{item.label}</span>
                 <kbd className="rail-key">{item.key}</kbd>
+              </Link></motion.div>
+            ))}
+          </motion.nav>
+          <div className="rail-secondary">
+            <span className="nav-caption">Your wellbeing</span>
+            {NAV.filter((item) => ['habits', 'reality', 'data'].includes(item.name)).map((item) => (
+              <Link key={item.name} className={'rail-link' + (route.name === item.name ? ' active' : '')} href={defaultHref(item, today)} aria-current={route.name === item.name ? 'page' : undefined} title={item.label}>
+                <Icon name={item.icon} size={18} /><span className="rail-label">{item.label}</span>
               </Link>
             ))}
-          </nav>
+            <details className="demo-nav">
+              <summary className="rail-link" aria-label="Explore the demo" title="Explore the demo"><Icon name="lab" size={18} /><span className="rail-label">Explore the demo</span></summary>
+              <Link className="rail-link" href="/lab" title="Under the hood"><Icon name="lab" size={18} /><span className="rail-label">Under the hood</span></Link>
+              <Link className="rail-link" href="/media" title="Media lab"><Icon name="music" size={18} /><span className="rail-label">Media lab</span></Link>
+            </details>
+          </div>
           <div className="rail-foot">
             {userEmail ? <span className="rail-label rail-user" title={userEmail}>{userEmail}</span> : null}
             <button className="btn btn-sm btn-ghost rail-signout" type="button" onClick={signOut} title="Sign out">
               <Icon name="logout" size={16} /><span className="rail-label">Sign out</span>
             </button>
           </div>
-        </aside>
+        </motion.aside>
+        </div>
         <header className="topbar">
-          <div className="persona-wrap">
-            <button className="persona-chip" type="button" data-tour="persona" aria-haspopup="menu" aria-expanded={menuOpen} onClick={(e) => { e.stopPropagation(); setMenuOpen((o) => !o); }}>
+          <details className="persona-wrap" key={pathname}>
+            <summary className="persona-chip" data-tour="persona">
               <span className="avatar">{(m.persona?.name || 'A').slice(0, 1)}</span>
               <span className="persona-name">{m.persona ? m.persona.name : 'Demo'}</span>
               <span className="persona-tag">{m.source === 'demo' ? (m.anchor_mode ? 'Demo date ' + fmt.day(m.today) : 'Demo data') : 'Imported data'}</span>
               <Icon name="chevron-right" size={14} className="chev" />
-            </button>
-            <div className="persona-menu" role="menu" hidden={!menuOpen}>
+            </summary>
+            <div className="persona-menu">
               <div className="persona-menu-title">Demo persona<span className="muted tiny">{' · seed ' + (m.seed === undefined ? '–' : m.seed)}</span></div>
               {(m.personas || []).map((p) => {
                 const isCurrent = m.persona && m.persona.key === p.key;
                 return (
-                  <button key={p.key} className={'persona-item' + (isCurrent ? ' current' : '')} role="menuitem" type="button" data-persona={p.key}
-                    onClick={(e) => { e.stopPropagation(); setMenuOpen(false); if (!isCurrent) switchPersona(p.key); }}>
+                  <button key={p.key} className={'persona-item' + (isCurrent ? ' current' : '')} type="button" data-persona={p.key}
+                    onClick={(e) => { e.currentTarget.closest('details')?.removeAttribute('open'); if (!isCurrent) switchPersona(p.key); }}>
                     <span className="avatar">{(p.name || '?').slice(0, 1)}</span>
                     <span className="persona-item-body"><span className="persona-item-name">{p.name}</span><span className="persona-item-tag">{p.tagline || ''}</span></span>
                     {isCurrent ? <Icon name="check" size={16} /> : p.ready === false ? <span className="badge badge-low">preparing</span> : null}
@@ -190,10 +232,10 @@ export function Shell({ children }: { children: ReactNode }) {
               })}
               <div className="persona-menu-foot muted tiny">Same engine, different person. Seed and import options live under Data &amp; privacy.</div>
             </div>
-          </div>
-          <div className="reasoner-chip" data-tour="reasoner">
+          </details>
+          <div className="reasoner-chip" data-tour="reasoner" title="How this report was written">
             <Icon name="brain" size={14} />
-            <span>{m.reasoning_mode === 'claude' ? 'Reasoning: Claude' : 'Reasoning: on-device rules'}</span>
+            <span>{m.reasoning_mode === 'claude' ? 'AI-assisted report' : 'Rule-based report'}</span>
           </div>
           {historyDays !== null ? (
             <div className="history-pill">
@@ -203,11 +245,18 @@ export function Shell({ children }: { children: ReactNode }) {
             </div>
           ) : null}
           <div className="spacer" />
+          <div className="mobile-more">
+            <button className="btn btn-icon btn-ghost" type="button" aria-label="More destinations" aria-expanded={moreOpen} aria-controls="more-destinations" onClick={() => setMoreOpen(!moreOpen)}><Icon name={moreOpen ? 'x' : 'inbox'} size={20} /></button>
+            {moreOpen ? <nav id="more-destinations" aria-label="More destinations">{NAV.filter((item) => !primary.includes(item)).map((item) => <Link key={item.name} href={defaultHref(item, today)} onClick={() => setMoreOpen(false)}><Icon name={item.icon} size={18} />{item.label}</Link>)}<button className="btn btn-ghost" type="button" onClick={signOut}>Sign out</button></nav> : null}
+          </div>
           <button className="btn btn-sm" type="button" title="Presenter tour (t)" onClick={() => tour.start()}>Tour <kbd>t</kbd></button>
           <button className="btn btn-icon btn-ghost" type="button" aria-label={'Switch to ' + (theme === 'dark' ? 'light' : 'dark') + ' theme'} onClick={toggleTheme}>
             <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={18} />
           </button>
         </header>
+        <nav className="mobile-nav" aria-label="Primary mobile navigation">
+          {primary.map((item) => { const active = route.name === item.name || (item.name === 'week' && route.name === 'habits') || (item.name === 'morning' && route.name === 'reality'); return <Link key={item.name} href={defaultHref(item, today)} aria-current={active ? 'page' : undefined}><Icon name={item.icon} size={21} /><span>{item.label}</span></Link>; })}
+        </nav>
         <main id="view" tabIndex={-1}>
           {value ? <AppCtx.Provider value={value}>{children}</AppCtx.Provider> : <div className="skeleton" style={{ height: '220px' }} />}
         </main>

@@ -143,6 +143,85 @@ class ApiTests(unittest.TestCase):
         self.post("/api/persona", {"persona": "nobody"}, 400)
         m2 = self.post("/api/reset", {}); self.assertEqual(m2["persona"]["key"], "alex"); self.assertEqual(m2["seed"], 7)
 
+    def test_media_imports_are_normalized_and_user_owned(self):
+        spotify = [{"ts": "2026-10-01T12:00:00Z", "master_metadata_track_name": "Song", "master_metadata_artist_name": "Artist", "ms_played": 120000}]
+        response = self.client.post("/api/media/import?provider=spotify", files={"files": ("history.json", json.dumps(spotify), "application/json")})
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["imported"], 1)
+        self.assertEqual(payload["totals"]["spotify"]["items"], 1)
+        netflix = "Date,Title,Duration\n2026-10-02,Show,01:30:00\n"
+        response = self.client.post("/api/media/import?provider=netflix", files={"files": ("ViewingActivity.csv", netflix, "text/csv")})
+        self.assertEqual(response.status_code, 200, response.text)
+        media = self.jget("/api/media")
+        self.assertEqual(media["total"], 2)
+        self.assertEqual(media["totals"]["netflix"]["minutes"], 90)
+
+    def test_spotify_extended_files_and_documents(self):
+        music = [{"endTime": "2025-10-10 10:24", "artistName": "Artist", "trackName": "Track", "msPlayed": 72545}]
+        podcast = [{"endTime": "2026-01-07 18:32", "podcastName": "Language", "episodeName": "Lesson", "msPlayed": 824372}]
+        files = [("files", ("streaming_history_music0.json", json.dumps(music), "application/json")),
+                 ("files", ("streaming_history_podcast_0.json", json.dumps(podcast), "application/json"))]
+        response = self.client.post("/api/media/import?provider=spotify", files=files)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["imported"], 2)
+        self.assertEqual(self.jget("/api/media")["total"], 2)
+
+    def test_spotify_history_is_detected_from_content(self):
+        music = [{"endTime": "2025-10-10 10:24", "artistName": "Artist", "trackName": "Track", "msPlayed": 72545}]
+        response = self.client.post("/api/media/import?provider=spotify", files={"files": ("export.json", json.dumps(music), "application/json")})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["totals"]["spotify"]["items"], 1)
+
+    def test_invalid_or_unrecognized_import_preserves_existing_media(self):
+        spotify = [{"ts": "2026-10-01T12:00:00Z", "master_metadata_track_name": "Song", "master_metadata_artist_name": "Artist", "ms_played": 120000}]
+        first = self.client.post("/api/media/import?provider=spotify", files={"files": ("history.json", json.dumps(spotify), "application/json")})
+        self.assertEqual(first.status_code, 200, first.text)
+        response = self.client.post("/api/media/import?provider=spotify", files={"files": ("account.json", "{}", "application/json")})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(self.jget("/api/media")["total"], 1)
+        response = self.client.post("/api/media/import?provider=netflix", files={"files": ("wrong.csv", "Wrong,Headers\nA,B\n", "text/csv")})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(self.jget("/api/media")["total"], 1)
+
+    def test_netflix_import_preserves_spotify_documents(self):
+        spotify = [{"endTime": "2025-10-10 10:24", "artistName": "Artist", "trackName": "Track", "msPlayed": 72545}]
+        files = [
+            ("files", ("streaming_history_music0.json", json.dumps(spotify), "application/json")),
+            ("files", ("TasteProfile.json", json.dumps({"tasteProfile": {"musicalIdentity": "Varied"}}), "application/json")),
+        ]
+        self.assertEqual(self.client.post("/api/media/import?provider=spotify", files=files).status_code, 200)
+        netflix = "Date,Title,Duration\n2026-10-02,Show,01:30:00\n"
+        self.assertEqual(self.client.post("/api/media/import?provider=netflix", files={"files": ("ViewingActivity.csv", netflix, "text/csv")}).status_code, 200)
+        docs = self.jget("/api/media")["documents"]
+        self.assertEqual([doc["kind"] for doc in docs], ["taste_profile"])
+
+    def test_spotify_summary_import_preserves_streaming_history(self):
+        music = [{"endTime": "2025-10-10 10:24", "artistName": "Artist", "trackName": "Track", "msPlayed": 72545}]
+        history = self.client.post("/api/media/import?provider=spotify", files={"files": ("streaming_history_music0.json", json.dumps(music), "application/json")})
+        self.assertEqual(history.status_code, 200, history.text)
+        profile = {"tasteProfile": {"musicalIdentity": "Varied"}}
+        summary = self.client.post("/api/media/import?provider=spotify", files={"files": ("TasteProfile.json", json.dumps(profile), "application/json")})
+        self.assertEqual(summary.status_code, 200, summary.text)
+        self.assertEqual(summary.json()["total"], 1)
+        self.assertEqual([doc["kind"] for doc in summary.json()["documents"]], ["taste_profile"])
+
+    def test_media_insights_use_overlapping_health_days(self):
+        music = [
+            {"endTime": "2026-09-20 21:10", "artistName": "Artist", "trackName": "Track A", "msPlayed": 600000},
+            {"endTime": "2026-09-21 18:10", "artistName": "Artist", "trackName": "Track B", "msPlayed": 600000},
+            {"endTime": "2026-09-22 21:10", "artistName": "Artist", "trackName": "Track C", "msPlayed": 600000},
+            {"endTime": "2026-09-23 18:10", "artistName": "Artist", "trackName": "Track D", "msPlayed": 600000},
+        ]
+        response = self.client.post("/api/media/import?provider=spotify", files={"files": ("streaming_history_music0.json", json.dumps(music), "application/json")})
+        self.assertEqual(response.status_code, 200, response.text)
+        insights = self.jget("/api/media/insights")
+        self.assertTrue(insights["available"])
+        self.assertEqual(insights["overlap_days"], 4)
+        self.assertTrue(insights["insights"])
+        self.assertEqual(len(insights["chart"]), 4)
+        self.assertIn("detail", insights["headline"])
+
 
 if __name__ == "__main__":
     unittest.main()

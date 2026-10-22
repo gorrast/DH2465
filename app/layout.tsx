@@ -11,6 +11,7 @@ import '@/styles/views/replay.css';
 import '@/styles/views/reality.css';
 import '@/styles/views/planner.css';
 import '@/styles/views/data.css';
+import '@/styles/views/media.css';
 import '@/styles/views/lab.css';
 import '@/styles/views/calendar.css';
 import '@/styles/views/tour.css';
@@ -26,8 +27,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = { width: 'device-width', initialScale: 1 };
 
-// Apply the saved theme before first paint (localStorage, then ?theme=, then dark).
-const THEME_SCRIPT = `(function(){var t='dark';try{t=localStorage.getItem('sl-theme')||new URLSearchParams(location.search).get('theme')||'dark';}catch(e){}document.documentElement.setAttribute('data-theme',t);})();`;
+// Apply an explicit theme, saved preference, or default dark theme before first paint.
+const THEME_SCRIPT = `(function(){var t='dark';try{var q=new URLSearchParams(location.search).get('theme');var s=localStorage.getItem('sl-theme');t=q||s||'dark';if(t!=='dark'&&t!=='light')t='dark';}catch(e){}document.documentElement.setAttribute('data-theme',t);})();`;
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (

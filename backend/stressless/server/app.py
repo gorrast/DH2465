@@ -4,6 +4,7 @@ Run locally with ``uvicorn api.index:app --port 8000``; on Vercel ``api/index.py
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -11,7 +12,7 @@ import sys
 from datetime import date
 from typing import Any, Dict, Optional
 
-from fastapi import Body, Depends, FastAPI, Request
+from fastapi import Body, Depends, FastAPI, File, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
@@ -21,6 +22,8 @@ from .. import __version__
 from ..engine.pipeline import EngineError
 from ..engine.reasoning import reasoning_mode
 from ..models import to_jsonable
+from ..connectors.media import parse_media, parse_spotify_file
+from ..engine.media_insights import analyze_media
 from ..sim.personas import PERSONA_ORDER, PERSONAS
 from ..store import SupabaseError
 from ..timeutil import parse_date
@@ -36,6 +39,8 @@ app.include_router(calendar.router)
 app.include_router(phone_sync.router)
 app.include_router(reports.router)
 JSON_TYPE = "application/json; charset=utf-8"
+MAX_MEDIA_UPLOAD_BYTES = 4 * 1024 * 1024
+MAX_MEDIA_UPLOAD_FILES = 20
 
 # The phone app (correlate-app) runs in an Android WebView on https://localhost and calls the API cross-origin with a
 # bearer token, so no cookies: credentials stay off. Add more with STRESSLESS_CORS_ORIGINS.
@@ -205,6 +210,64 @@ def get_ics(day: str, suggestion_id: str, p: Principal = Depends(current_princip
 def get_validation(p: Principal = Depends(current_principal)):
     with session.engine_session(p.user_id, p.store) as e:
         return J(e.validation())
+
+
+def _media_payload(rows):
+    totals = {provider: {"items": 0, "minutes": 0.0} for provider in ("spotify", "netflix")}
+    for row in rows:
+        bucket = totals.setdefault(row["provider"], {"items": 0, "minutes": 0.0})
+        bucket["items"] += 1
+        bucket["minutes"] += float(row.get("minutes") or 0)
+    return {"events": rows[:100], "total": len(rows), "totals": totals}
+
+
+@app.get("/api/media")
+def get_media(p: Principal = Depends(current_principal)):
+    rows = p.store.media_events()
+    rows.sort(key=lambda row: row.get("occurred_at", ""), reverse=True)
+    return J({**_media_payload(rows), "documents": p.store.media_documents()})
+
+
+@app.get("/api/media/insights")
+def get_media_insights(p: Principal = Depends(current_principal)):
+    rows = p.store.media_events()
+    with session.engine_session(p.user_id, p.store) as e:
+        return J(analyze_media(e.ds, rows))
+
+
+@app.post("/api/media/import")
+async def post_media_import(provider: str, files: list[UploadFile] = File(...), p: Principal = Depends(current_principal)):
+    if provider not in ("spotify", "netflix"):
+        raise EngineError("unsupported media provider %r" % provider)
+    if len(files) > MAX_MEDIA_UPLOAD_FILES:
+        raise EngineError("Choose no more than 20 media export files at a time")
+    rows = []
+    documents = []
+    total_bytes = 0
+    for upload in files:
+        content = await upload.read(MAX_MEDIA_UPLOAD_BYTES - total_bytes + 1)
+        total_bytes += len(content)
+        if total_bytes > MAX_MEDIA_UPLOAD_BYTES:
+            raise EngineError("Combined media exports must be 4 MB or smaller")
+        if provider == "spotify":
+            parsed, document = parse_spotify_file(upload.filename or "spotify.json", content)
+        else:
+            parsed, document = parse_media(provider, upload.filename or "media-export", content), None
+        for row in parsed:
+            key = "%s|%s|%s|%s" % (row["provider"], row["occurred_at"], row["title"], row["creator"] or "")
+            row["id"] = hashlib.sha256(key.encode("utf-8")).hexdigest()[:32]
+            rows.append(row)
+        if document:
+            document["id"] = hashlib.sha256((upload.filename or "spotify.json").encode("utf-8")).hexdigest()[:32]
+            document["filename"] = upload.filename or "spotify.json"
+            payload = {key: value for key, value in document.items() if key not in ("id", "filename", "payload")}
+            documents.append({"id": document["id"], "filename": document["filename"], "kind": document["kind"], "payload": payload})
+    if not rows and not documents:
+        raise EngineError("No supported media records or summaries were found in these files")
+    p.store.replace_media(provider, rows, documents)
+    saved = p.store.media_events()
+    saved.sort(key=lambda row: row.get("occurred_at", ""), reverse=True)
+    return J({"imported": len(rows), **_media_payload(saved), "documents": p.store.media_documents()})
 
 
 @app.post("/api/persona")

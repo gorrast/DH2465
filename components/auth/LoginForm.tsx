@@ -2,7 +2,9 @@
 /* Email + password sign-in, sign-up and password reset (Supabase Auth). New accounts confirm their email before the
  * first sign-in; a reset link signs the user in through /auth/confirm and lands on /reset-password. */
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { motion, useMotionValue, useSpring } from 'motion/react';
+import { ActionButton, RevealHeading } from '../ui/Motion';
 import { getSupabase } from '@/lib/supabase/client';
 
 type Mode = 'signin' | 'signup' | 'forgot';
@@ -16,6 +18,12 @@ export function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const [mode, setMode] = useState<Mode>(params.get('reset') ? 'forgot' : 'signin');
+  const [motionPaused, setMotionPaused] = useState(false);
+  const pageRef = useRef<HTMLDivElement>(null);
+  const targetX = useMotionValue(0);
+  const targetY = useMotionValue(0);
+  const glowX = useSpring(targetX, { stiffness: 450, damping: 42, mass: 0.5 });
+  const glowY = useSpring(targetY, { stiffness: 450, damping: 42, mass: 0.5 });
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -31,6 +39,32 @@ export function LoginForm() {
     setPassword('');
     setConfirm('');
   }
+
+  useEffect(() => {
+    const page = pageRef.current;
+    if (!page || motionPaused) return;
+    const motion = matchMedia('(hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)');
+    const reset = () => {
+      targetX.set(0); targetY.set(0);
+      glowX.jump(0); glowY.jump(0);
+    };
+    const follow = (event: PointerEvent) => {
+      if (!motion.matches || event.pointerType !== 'mouse') return;
+      const bounds = page.getBoundingClientRect();
+      targetX.set(event.clientX - bounds.left - bounds.width * .15);
+      targetY.set(event.clientY - bounds.top - bounds.height * .4);
+    };
+    page.addEventListener('pointermove', follow);
+    page.addEventListener('pointerleave', reset);
+    motion.addEventListener('change', reset);
+    return () => {
+      page.removeEventListener('pointermove', follow);
+      page.removeEventListener('pointerleave', reset);
+      motion.removeEventListener('change', reset);
+      reset();
+    };
+  }, [motionPaused, targetX, targetY, glowX, glowY]);
+
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -81,7 +115,24 @@ export function LoginForm() {
   }
 
   return (
-    <div className="login-page">
+    <div className="login-page" ref={pageRef}>
+      <motion.div className="login-glow" aria-hidden="true" style={{ x: glowX, y: glowY }} />
+      <section className="login-story" aria-label="About StressLess">
+        <span className="eyebrow">A little clarity. A calmer tomorrow.</span>
+        <RevealHeading as="h1" paused={motionPaused} aria-label="Your day has a story. Understand yours." lines={['Your day has a story.', 'Understand yours.']} />
+        <p>Connect the dots between your calendar, your body, and your sleep. Find one small change for tonight.</p>
+        <div className="login-visual">
+          <svg viewBox="0 0 440 140" role="img" aria-label="Illustrative calendar events and flowing waveform">
+            <path d="M0 110H440" stroke="var(--hairline-strong)" />
+            {[40, 115, 190, 265].map((x, i) => <rect key={x} x={x} y={16} width={i === 3 ? 92 : 56} height={32} rx={8} fill={i === 3 ? 'var(--accent)' : 'var(--card-3)'} />)}
+            <g className="login-wave" style={{ animationPlayState: motionPaused ? 'paused' : 'running' }}>
+              {[0, 440].map(x => <path key={x} transform={`translate(${x} 0)`} d="M0 100C20 100 30 85 50 100S80 110 100 90S130 80 150 96S180 100 200 75S230 75 250 90S280 90 300 63S330 75 350 85S400 100 440 100" fill="none" stroke="var(--accent)" strokeWidth="3" strokeLinecap="round" />)}
+            </g>
+            <path d="M0 100H440" stroke="var(--ink-muted)" strokeDasharray="4 6" />
+          </svg>
+          <button className="login-motion-toggle" type="button" aria-pressed={motionPaused} onClick={() => setMotionPaused(paused => !paused)}>Pause animation</button>
+        </div>
+      </section>
       <div className="card raised login-card">
         <div className="brand login-brand">
           <span className="pulse-mark" aria-hidden="true">
@@ -122,10 +173,10 @@ export function LoginForm() {
           ) : null}
           {error ? <p className="login-msg login-error small" role="alert">{error}</p> : null}
           {notice ? <p className="login-msg login-notice small" role="status">{notice}</p> : null}
-          <button className="btn btn-primary login-submit" type="submit" disabled={pending}>
+          <ActionButton className="btn btn-primary login-submit" type="submit" disabled={pending}>
             {pending ? <span className="spinner" /> : null}
             {mode === 'signin' ? 'Sign in' : mode === 'signup' ? 'Create account' : 'Send reset link'}
-          </button>
+          </ActionButton>
         </form>
         {mode === 'forgot' ? (
           <button type="button" className="login-link small login-back" onClick={() => switchMode('signin')}>Back to sign in</button>

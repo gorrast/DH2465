@@ -1,6 +1,7 @@
 'use client';
 /* Habits view: every recurring pattern ranked by effect, with intervals and the adjusted effect. */
 import Link from 'next/link';
+import { ScoreChange } from '../ui/ScoreChange';
 import { useState } from 'react';
 import { api } from '@/lib/api';
 import { dates, fmt } from '@/lib/format';
@@ -23,6 +24,7 @@ export function HabitsView() {
   return (
     <>
       <ViewHead eyebrow="Habits" title="Your patterns, ranked by effect" />
+      <nav className="view-tabs" aria-label="Insights"><Link href="/week" >Overview</Link><Link href="/habits" aria-current="page">Your patterns</Link></nav>
       <div className="v-habits stack">
         {load.loading ? <Skeleton height={200} /> : load.error || !data ? <ErrorCard error={load.error!} onRetry={load.reload} view="habits" /> : (
           <>
@@ -40,9 +42,9 @@ export function HabitsView() {
                   <DataTable
                     columns={[{ key: 'title', label: 'Pattern' }, { key: 'n', label: 'Nights with / without' }, { key: 'effect', label: 'Effect (pts)', num: true }, { key: 'ci', label: '95 % interval' }, { key: 'adjusted', label: 'Adjusted', num: true }, { key: 'confidence', label: 'Confidence' }]}
                     rows={items.map((h: any) => ({
-                      title: h.title, n: h.n_with + ' / ' + h.n_without, effect: fmt.signed(h.effect, 1),
-                      ci: h.ci_low === null || h.ci_low === undefined ? '–' : fmt.signed(h.ci_low, 1) + ' to ' + fmt.signed(h.ci_high, 1),
-                      adjusted: h.adjusted_effect === null || h.adjusted_effect === undefined ? '–' : fmt.signed(h.adjusted_effect, 1), confidence: h.confidence,
+                      title: h.title, n: h.n_with + ' / ' + h.n_without, effect: <ScoreChange value={h.effect} />,
+                      ci: h.ci_low == null ? '–' : <><ScoreChange value={h.ci_low} /> to <ScoreChange value={h.ci_high} /></>,
+                      adjusted: <ScoreChange value={h.adjusted_effect} />, confidence: h.confidence,
                     }))} />
                 ) : null}
               </div>
@@ -50,17 +52,16 @@ export function HabitsView() {
             <div className="grid grid-3 v-habits-cards">
               {items.map((h: any) => {
                 const adj = h.adjusted_effect !== null && h.adjusted_effect !== undefined;
-                const v = adj ? h.adjusted_effect : h.effect || 0;
                 return (
                   <div key={h.key} className="card v-habits-card">
                     <div className="row between"><h3>{h.title}</h3><span className={'badge badge-' + h.confidence}>{h.confidence}</span></div>
                     <p className="small secondary">{h.description}</p>
                     <div className="v-habits-effect">
                       <div>
-                        <span className={'pts ' + (v < 0 ? 'pts-neg' : 'pts-pos')} style={{ fontSize: '24px' }}>{fmt.signed(adj ? h.adjusted_effect : h.effect, 1)}</span>
+                        <span className="pts" style={{ fontSize: '24px' }}><ScoreChange value={adj ? h.adjusted_effect : h.effect} /></span>
                         <span className="small muted">{adj ? ' pts, adjusted' : ' pts'}</span>
                       </div>
-                      <div className="small secondary">{'Simple comparison: ' + fmt.signed(h.effect, 1) + (h.ci_low !== null && h.ci_low !== undefined ? ' (95 % ' + fmt.signed(h.ci_low, 1) + ' to ' + fmt.signed(h.ci_high, 1) + ')' : '')}</div>
+                      <div className="small secondary">Simple comparison: <ScoreChange value={h.effect} />{h.ci_low != null ? <> (95 % <ScoreChange value={h.ci_low} /> to <ScoreChange value={h.ci_high} />)</> : null}</div>
                     </div>
                     <div className="row tiny muted">
                       <span>{'n = ' + h.n_with + ' vs ' + h.n_without + ' nights'}</span>

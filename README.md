@@ -158,7 +158,12 @@ the date with `STRESSLESS_ANCHOR`.
 
 ## Bring your own data
 
-Uploading your own exports to the web app is coming soon. The importers already exist and are tested
+The Media lab view now accepts two media-only exports: Spotify Extended Streaming History JSON and Netflix
+ViewingActivity.csv. The server parses each file, discards the upload, and stores normalized rows in the per-user
+Supabase `media_events` table. The view shows provider totals and recent records; health and sleep data are not
+imported by this prototype.
+
+The original health and calendar importers already exist and are tested
 (`backend/stressless/connectors/`): Apple Health (Settings → Health → Export All Health Data), Google
 Calendar (Settings → Import & export → Export) and Google Maps (Google Takeout → Location History, both the
 monthly Semantic Location History files and the newer `Timeline.json`). Note that Vercel limits request

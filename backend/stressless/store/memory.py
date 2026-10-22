@@ -25,6 +25,8 @@ class MemoryStore(UserStore):
         self.consented_at: Optional[str] = None
         self.tz: str = "Europe/Stockholm"
         self.tables: Dict[str, List[Dict[str, Any]]] = {}      # real-data tables, rows as PostgREST returns them
+        self._media: Dict[str, Dict[str, Any]] = {}
+        self._media_documents: Dict[str, Dict[str, Any]] = {}
 
     def profile(self) -> Dict[str, Any]:
         return dict(self._profile)
@@ -96,3 +98,16 @@ class MemoryStore(UserStore):
 
     def reports_last_day(self) -> int:
         return len(self._reports)
+    def media_events(self) -> List[Dict[str, Any]]:
+        return [copy.deepcopy(row) for row in self._media.values()]
+
+    def media_documents(self) -> List[Dict[str, Any]]:
+        return [copy.deepcopy(row) for row in self._media_documents.values()]
+
+    def replace_media(self, provider: str, events: List[Dict[str, Any]], documents: List[Dict[str, Any]]) -> None:
+        if events:
+            retained = {key: row for key, row in self._media.items() if row.get("provider") != provider}
+            retained.update({row["id"]: copy.deepcopy(row) for row in events})
+            self._media = retained
+        if provider == "spotify" and documents:
+            self._media_documents.update({row["id"]: copy.deepcopy(row) for row in documents})

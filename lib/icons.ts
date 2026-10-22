@@ -1,5 +1,6 @@
 /** Static, trusted SVG path data (24×24 stroke icons). No user data ever flows through here. */
 export const ICON_PATHS: Record<string, string> = {
+  menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
   calendar: '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/>',
   watch: '<rect x="6" y="6" width="12" height="12" rx="3"/><path d="M9 2h6M9 22h6M12 9v3l2 1"/>',
   map: '<path d="M12 21s-6-5.3-6-11a6 6 0 0 1 12 0c0 5.7-6 11-6 11z"/><circle cx="12" cy="10" r="2"/>',
@@ -19,6 +20,8 @@ export const ICON_PATHS: Record<string, string> = {
   x: '<path d="M6 6l12 12M18 6L6 18"/>',
   play: '<path d="M7 5v14l11-7z"/>',
   pause: '<path d="M8 5v14M16 5v14"/>',
+  'arrow-up': '<path d="M12 19V5M6 11l6-6 6 6"/>',
+  'arrow-down': '<path d="M12 5v14M6 13l6 6 6-6"/>',
   'chevron-left': '<path d="M15 5l-7 7 7 7"/>',
   'chevron-right': '<path d="M9 5l7 7-7 7"/>',
   download: '<path d="M12 4v11M7 10l5 5 5-5M4 20h16"/>',
@@ -32,6 +35,8 @@ export const ICON_PATHS: Record<string, string> = {
   inbox: '<path d="M3 13l2-8h14l2 8v6H3z"/><path d="M3 13h5l1 2h6l1-2h5"/>',
   planner: '<path d="M4 4h16v16H4z"/><path d="M4 10h16M10 4v16"/>',
   lab: '<path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/>',
+  music: '<path d="M9 18V5l10-2v13M9 18a3 3 0 1 1-3-3 3 3 0 0 1 3 3Zm10-2a3 3 0 1 1-3-3 3 3 0 0 1 3 3Z"/>',
+  podcast: '<path d="M12 14a3 3 0 0 0 3-3V8a3 3 0 0 0-6 0v3a3 3 0 0 0 3 3Zm-6-3a6 6 0 0 0 12 0M12 17v4m-3 0h6"/>',
   lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
   alert: '<path d="M12 3l10 18H2z"/><path d="M12 10v4M12 17h.01"/>',
   sparkles: '<path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>',

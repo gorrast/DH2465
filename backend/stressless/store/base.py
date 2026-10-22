@@ -94,6 +94,15 @@ class UserStore:
         """Reports claimed by all users in the last 24 hours (the global cap on model calls)."""
         raise NotImplementedError
 
+    def media_events(self) -> List[Dict[str, Any]]:
+        raise NotImplementedError
+
+    def media_documents(self) -> List[Dict[str, Any]]:
+        raise NotImplementedError
+
+    def replace_media(self, provider: str, events: List[Dict[str, Any]], documents: List[Dict[str, Any]]) -> None:
+        raise NotImplementedError
+
     # ------------------------------------------------------------- derived --
     def apply_to(self, ds: Dataset) -> None:
         """Mechanically replay user state onto a pristine dataset."""

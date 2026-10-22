@@ -5,6 +5,7 @@ import { useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import { fmt } from '@/lib/format';
 import { Icon } from '../ui/Icon';
+import { ScoreChange } from '../ui/ScoreChange';
 import { toast } from '../ui/overlays';
 import { ErrorCard, Skeleton, ViewHead, useLoad } from './common';
 
@@ -17,7 +18,7 @@ function HabitLine({ a }: { a: any }) {
     <div className="v-reality-shift">
       <Icon name="habits" size={14} />
       <span>{(f.title || b.title) + ': '}</span>
-      <strong>{fmt.signed(b.effect, 1) + ' → ' + fmt.signed(f.effect, 1) + ' pts'}</strong>
+      <strong><ScoreChange value={b.effect} /> → <ScoreChange value={f.effect} /> pts</strong>
       <span className="muted">{' (' + (b.n_with || 0) + ' → ' + (f.n_with || 0) + ' nights)'}</span>
     </div>
   );
@@ -66,6 +67,7 @@ function ResolvedCard({ c, extra }: { c: any; extra?: any }) {
 
 export function RealityView() {
   const recent = useRef<Record<string, any>>({});
+  const [questionIndex, setQuestionIndex] = useState(0);
   const load = useLoad(() => api.get('/api/reality'), []);
   const data = load.data;
 
@@ -75,6 +77,7 @@ export function RealityView() {
       recent.current[c.id] = res;
       toast(value === 'yes' ? (c.kind === 'seen_not_booked' ? 'Added to your calendar and patterns' : 'Kept in your patterns') : 'Removed from your patterns', { kind: 'success' });
       load.setData(await api.get('/api/reality'));
+      setQuestionIndex(0);
       return true;
     } catch (e: any) {
       toast('Could not save: ' + e.message, { kind: 'error' });
@@ -91,12 +94,13 @@ export function RealityView() {
           <>
             <div className="grid grid-3">
               <div className="span-2 stack">
-                <h3>Open questions</h3>
+                <div className="row between"><h3>One quick check</h3><span className="small muted">{data.open.length} remaining</span></div>
                 <div className="stack" data-tour="inbox">
                   {!data.open.length ? (
                     <div className="card empty"><Icon name="check" size={26} /><h2>All clear</h2><p>Calendar, Maps and watch agree for the last two weeks.</p></div>
-                  ) : data.open.map((c: any) => <CheckCard key={c.id} c={c} onAnswer={answer} />)}
+                  ) : data.open.slice(questionIndex % data.open.length, questionIndex % data.open.length + 1).map((c: any) => <CheckCard key={c.id} c={c} onAnswer={answer} />)}
                 </div>
+                {data.open.length > 1 ? <button className="btn btn-ghost" type="button" onClick={() => setQuestionIndex((index) => index + 1)}>Another question →</button> : null}
               </div>
               <div className="stack">
                 <h3>Answered</h3>

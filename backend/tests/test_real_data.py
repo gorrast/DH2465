@@ -87,6 +87,18 @@ class LoaderTests(unittest.TestCase):
         self.assertEqual(score.value, next(m for m in demo_inp.metrics if m.key == "sleep.score").value)
         self.assertTrue(inp.patterns)
 
+    def test_screen_time_metrics_are_loaded_up_to_yesterday(self):
+        store = real_store()
+        y = ANCHOR - timedelta(days=1)
+        store.tables["daily_metrics"] = [
+            {"day": y.isoformat(), "metric_key": "screen.late_minutes", "value": 42.5, "source": "screen_time"},
+            {"day": ANCHOR.isoformat(), "metric_key": "screen.minutes", "value": 30, "source": "screen_time"}]   # today: partial
+        ds = load_dataset(store, ANCHOR)
+        self.assertEqual(ds.metric_on(y, "screen.late_minutes"), 42.5)
+        self.assertIsNone(ds.metric_on(ANCHOR, "screen.minutes"))
+        inp = daily_input(Engine(ds), ANCHOR)
+        self.assertEqual(next(m for m in inp.metrics if m.key == "screen.late_minutes").value, 42.5)
+
     def test_uncategorized_events_are_classified_and_hrv_measure_is_not_mixed(self):
         store = real_store()
         store.tables["calendar_events"][0]["category"] = "uncategorized"

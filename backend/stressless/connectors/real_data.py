@@ -154,6 +154,11 @@ def load_dataset(store, today: date, days: int = DAYS, name: str = "You") -> Dat
     persona = persona_from_history(name, tzname, nights)
     ds = build_dataset(persona, events, [], hr_days, nights, activity, today, days)
     ds.source = "real"
+    # Other per-day values (screen time, ...), up to the last full day like activity.
+    for r in store.rows("daily_metrics", "day", lo, hi):
+        d = parse_date(r["day"])
+        if ds.start <= d <= ds.end and r.get("value") is not None:
+            ds.day_metrics.setdefault(d, {})[r["metric_key"]] = float(r["value"])
     log.info("loaded real data for %s: %d nights, %d heart-rate days, %d activity days, %d events",
              today, len(nights), len(hr_days), len(activity), len(events))
     return ds

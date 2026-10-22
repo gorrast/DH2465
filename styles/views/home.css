@@ -30,3 +30,18 @@
 .v-home-consent { display: flex; gap: 10px; align-items: flex-start; margin: 8px 0; line-height: 1.45; }
 .v-home-consent input { margin-top: 3px; }
 .v-home-error { color: var(--status-critical); }
+
+/* Check-in: coffee and alcohol */
+.v-home-checkin h3 { margin: 0; font-size: 18px; }
+.v-home-intake { list-style: none; padding: 0; margin: 14px 0; display: grid; gap: 10px; }
+.v-home-intake li { display: flex; gap: 12px; align-items: center; border: 1px solid var(--hairline); border-radius: 10px; padding: 10px 12px; }
+.v-home-intake .icon { color: var(--ink-secondary); flex: none; }
+.v-home-intake-label { flex: 1; min-width: 0; }
+.v-home-intake .title { font-weight: 600; }
+.v-home-stepper { display: flex; align-items: center; gap: 6px; flex: none; }
+.v-home-stepper .btn { width: 36px; font-size: 18px; line-height: 1; }
+.v-home-stepper output { min-width: 64px; text-align: center; font-weight: 650; font-variant-numeric: tabular-nums; }
+@media (max-width: 480px) {
+  .v-home-intake li { flex-wrap: wrap; }
+  .v-home-stepper { margin-left: auto; }
+}

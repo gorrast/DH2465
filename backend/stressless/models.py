@@ -443,6 +443,7 @@ class Dataset:
     truth: Optional[SimTruth] = None
     generated_at: Optional[datetime] = None
     showcase: bool = True
+    day_metrics: Dict[date, Dict[str, float]] = field(default_factory=dict)   # day -> {"screen.minutes": ...} (daily_metrics)
 
     def __post_init__(self) -> None:
         self.reindex()
@@ -489,6 +490,9 @@ class Dataset:
 
     def activity_on(self, d: date) -> Optional[DailyActivity]:
         return self._activity.get(d)
+
+    def metric_on(self, d: date, key: str) -> Optional[float]:
+        return self.day_metrics.get(d, {}).get(key)
 
     def night_dates(self) -> List[date]:
         return sorted(self._nights.keys())

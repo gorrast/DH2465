@@ -1,20 +1,15 @@
-"""Narrative writers: an on-device rule-based reasoner and an optional Claude reasoner (SPEC §7.9)."""
+"""The Morning view's narrative, written by rules on the server (SPEC §7.9).
+
+It used to have an optional Claude writer (Opus 5, one call per user per day); the generated daily and weekly
+reports replaced it, so the narrative never calls a model. ``reasoning_mode`` is still the switch for those reports.
+"""
 from __future__ import annotations
 
-import json
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 log = logging.getLogger("stressless.engine.reasoning")
-
-SYSTEM = (
-    "You write the morning explanation for StressLess, an app that explains a person's sleep score from their "
-    "calendar and watch data. Write at most 90 words in plain, warm language. Use only numbers present in the JSON "
-    "you are given; never invent figures. Say 'likely' or 'is associated with', never 'caused'. Never give medical "
-    "advice. Mention the strongest cause first with its evidence, then the second. If the JSON has an "
-    "unexplained_note, include its idea in one sentence. End with a one-line suggestion taken from the JSON."
-)
 
 FORBIDDEN_KEYS = {"start", "end", "location_hint", "attendees", "lat", "lon", "id", "event_ids", "visit_id", "event_id"}
 
@@ -87,50 +82,6 @@ class RuleReasoner(Reasoner):
         return " ".join(parts)
 
 
-class ClaudeReasoner(Reasoner):
-    mode = "claude"
-
-    def __init__(self, client: Any = None, model: Optional[str] = None) -> None:
-        self._client = client
-        self.model = model or os.environ.get("STRESSLESS_CLAUDE_MODEL", "claude-opus-5")
-        self._fallback = RuleReasoner()
-
-    def _get_client(self) -> Any:
-        if self._client is None:
-            import anthropic  # noqa: F401  (optional dependency)
-            self._client = anthropic.Anthropic()
-        return self._client
-
-    @staticmethod
-    def _text(response: Any) -> str:
-        parts = []
-        for block in getattr(response, "content", []) or []:
-            if getattr(block, "type", None) == "text":
-                parts.append(block.text)
-        return " ".join(p.strip() for p in parts).strip()
-
-    def narrate(self, payload: Dict[str, Any]) -> str:
-        try:
-            client = self._get_client()
-            messages = [{"role": "user", "content": json.dumps(payload, ensure_ascii=False)}]
-            try:
-                response = client.beta.messages.create(
-                    model=self.model, max_tokens=4000, system=SYSTEM, messages=messages,
-                    betas=["server-side-fallback-2026-07-01"], fallbacks="default")
-            except Exception as exc:  # BadRequestError on platforms without the fallback beta -> plain call
-                if type(exc).__name__ != "BadRequestError":
-                    raise
-                response = client.messages.create(model=self.model, max_tokens=4000, system=SYSTEM, messages=messages)
-            if getattr(response, "stop_reason", None) == "refusal":
-                log.warning("Claude declined to write the narrative; using rules")
-                return self._fallback.narrate(payload)
-            text = self._text(response)
-            return text or self._fallback.narrate(payload)
-        except Exception as exc:  # any failure -> rules, never a broken UI
-            log.warning("Claude reasoner failed (%s); using rules", exc)
-            return self._fallback.narrate(payload)
-
-
 def reasoning_mode() -> str:
     if os.environ.get("STRESSLESS_REASONER", "").lower() == "claude":
         try:
@@ -142,4 +93,4 @@ def reasoning_mode() -> str:
 
 
 def get_reasoner() -> Reasoner:
-    return ClaudeReasoner() if reasoning_mode() == "claude" else RuleReasoner()
+    return RuleReasoner()

@@ -113,16 +113,7 @@ class Engine:
         return report
 
     def _narrative(self, report: MorningReport, morning: date, history_days: Optional[int]) -> str:
-        payload = build_payload(report)
-        if self.reasoner.mode == "claude" and self.store is not None:
-            key = "%s:%s:claude:%s" % (morning.isoformat(), history_days, self.store.state_version())
-            cached = self.store.get_narrative(key)
-            if cached:
-                return cached
-            text = self.reasoner.narrate(payload)
-            self.store.set_narrative(key, "claude", text)
-            return text
-        return self.reasoner.narrate(payload)
+        return self.reasoner.narrate(build_payload(report))
 
     def week(self, end: date, history_days: Optional[int] = None) -> Dict[str, Any]:
         end = min(end, self.ds.today)

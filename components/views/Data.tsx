@@ -63,7 +63,7 @@ export function DataView() {
           <Conn icon="watch" title="Watch" status={isDemo ? 'Demo data' : 'Imported'} note={isDemo ? 'Simulated Apple Watch: heart rate, sleep stages, HRV, resting heart rate, wrist temperature. In the product: HealthKit on the phone.' : 'Imported from Apple Health.'} />
           <Conn icon="map" title="Maps" status={isDemo ? 'Demo data' : 'Imported'} note={isDemo ? 'Simulated Google Maps timeline. In the product: Google Takeout or the Timeline API, used only to confirm booked events.' : 'Imported from Google Takeout.'} />
           <Conn icon="brain" title="Reasoning" status={meta.reasoning_mode === 'claude' ? 'Claude (opt-in)' : 'Rule-based'}
-            note={meta.reasoning_mode === 'claude' ? 'Claude writes the narrative from a de-identified summary: numbers and titles only, never ids, times, places or people.' : 'The explanation text is written by rules on the StressLess server. Set STRESSLESS_REASONER=claude to let Claude write it (opt-in).'} />
+            note={meta.reasoning_mode === 'claude' ? 'Claude writes the daily and weekly reports from a de-identified summary: numbers and short labels only, never names, calendar titles or places.' : 'The reports are written by rules on the StressLess server. Set STRESSLESS_REASONER=claude to let Claude write them (opt-in).'} />
         </div>
         <div className="card">
           <div className="card-title"><h3>Data classes</h3></div>

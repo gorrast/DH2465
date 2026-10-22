@@ -77,7 +77,7 @@ class WriterTests(unittest.TestCase):
     def test_request_uses_structured_output_and_per_kind_models(self):
         req = build_request(self.inp)
         self.assertIs(req["output_format"], DailyContent)
-        self.assertEqual((req["model"], req["fallbacks"]), ("claude-opus-5-5", "default"))
+        self.assertEqual((req["model"], req["fallbacks"]), ("claude-sonnet-5-5", "default"))
         weekly = build_request(weekly_input(Engine(fresh_dataset()), MONDAY))
         self.assertEqual(weekly["model"], "claude-haiku-5-5")
         self.assertNotIn("fallbacks", weekly)
@@ -100,7 +100,7 @@ class GenerateTests(unittest.TestCase):
         client = FakeClient()
         first = generate(self.engine, self.store, "daily", ANCHOR, ClaudeReportWriter(client))
         again = generate(self.engine, self.store, "daily", ANCHOR, ClaudeReportWriter(client))
-        self.assertEqual((first.mode, first.model, len(client.calls)), ("claude", "claude-opus-5-5", 1))
+        self.assertEqual((first.mode, first.model, len(client.calls)), ("claude", "claude-sonnet-5-5", 1))
         self.assertEqual(again.content.headline, first.content.headline)
         self.assertEqual(self.store.report_row("daily", ANCHOR)["status"], "ready")
 

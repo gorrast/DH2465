@@ -169,16 +169,12 @@ Calendar (Settings → Import & export → Export) and Google Maps (Google Takeo
 monthly Semantic Location History files and the newer `Timeline.json`). Note that Vercel limits request
 bodies to 4.5 MB, so large Apple Health exports will need direct-to-storage uploads.
 
-## Optional: Claude writes the narrative
+## Optional: Claude writes the reports
 
-The narrative on the Morning view is written by a rule-based reasoner by default. To let Claude write it,
-set `STRESSLESS_REASONER=claude` and `ANTHROPIC_API_KEY` (in `.env.local`, or in the Vercel project).
-
-Only a de-identified summary is sent (score, causes, evidence text, sample size — never event ids,
-times, locations or attendees). The model defaults to `claude-opus-5`; override with
-`STRESSLESS_CLAUDE_MODEL`. Server-side refusal fallbacks are enabled by default. On any error the app
-falls back to the rule-based reasoner, and the reasoner badge in the top bar always tells you which one
-wrote the text. Claude-written narratives are cached per user in Supabase.
+The daily and weekly reports on Home are written by rules by default. To let Claude write them, set
+`STRESSLESS_REASONER=claude` and `ANTHROPIC_API_KEY` (in `.env.local`, or in the Vercel project), and pick the
+models with `STRESSLESS_DAILY_MODEL` / `STRESSLESS_WEEKLY_MODEL`. The narrative on the Morning view is always
+written by rules and never calls a model.
 
 ## Scripts
 

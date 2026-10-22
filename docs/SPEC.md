@@ -42,9 +42,9 @@ imported real data.
 5. **Honest**: every number the UI shows is computed by the engine from the data. Simulator ground
    truth appears only in the Lab view, clearly labelled. Confidence, sample size, out-of-sample fit
    and "correlation, not proof" are part of the product.
-6. **Optional AI narrative**: with `STRESSLESS_REASONER=claude`, an importable `anthropic` package
-   and resolvable credentials, Claude writes the narrative; otherwise a rule-based reasoner does.
-   The demo must be complete without it.
+6. **Optional AI reports**: with `STRESSLESS_REASONER=claude`, an importable `anthropic` package
+   and resolvable credentials, Claude writes the daily and weekly reports on Home; otherwise a rule
+   writer does. The Morning narrative is always written by rules. The demo must be complete without AI.
 7. **Privacy by default**: localhost only; data in `./data/`; "Delete all data"; the Data view lists
    exactly which data classes are used.
 8. **JSON safety**: the server serializes with `json.dumps(to_jsonable(obj), ensure_ascii=False,
@@ -76,7 +76,7 @@ calendar, location and body disagree. No logging. The watch measures, the calend
 | 8 | **Honesty layer** — n nights, LOO out-of-sample fit, block-bootstrap intervals, confidence badges, adaptive "unexplained" notes, hidden factors the calendar cannot see (alcohol, caffeine, screens, illness, sleep debt), missing nights that are *not* random | The deck's Open Challenges, answered |
 | 9 | **Cold-start slider** — 7/14/28/all nights; intervals widen, badges drop, and a visible top-bar pill says so until reset | Cold start, shown not told |
 | 10 | **Bring-your-own-data importers** — Apple Health `export.xml`, Google Calendar `.ics`, Google Takeout Semantic Location History | The path to the real product is code |
-| 11 | **Optional Claude narrative** — opt-in, de-identified payload, reasoner badge | The "Reasoning AI" chip, done responsibly |
+| 11 | **Optional Claude reports** — opt-in, de-identified payload, "written by" line (the Morning narrative is rules only) | The "Reasoning AI" chip, done responsibly |
 | 12 | **Terminal report, Markdown export, `--demo-check`** — pre-flight checklist before going on stage | Robustness |
 | 13 | **Recovery markers** — HRV, resting HR, wrist temperature prominent; respiratory rate and SpO2 under "more" | The deck's "then recovery markers" |
 | 14 | **Under the hood** — pipeline, model card with in-sample vs out-of-sample fit, planted-truth scatter (direct vs total), planted null factor, hold-out skill, reality-check accuracy, "why this is not circular" | Credibility for a sharp audience |
@@ -401,7 +401,8 @@ test_sim asserts (a)–(f) for all three personas at seeds 1..5. `run.py --demo-
 `class Store(path)` over sqlite3 (`check_same_thread=False`, one connection, an `RLock` around every
 call, commit after every write). Tables: `meta(key PK, value)`, `dataset(id=1, json)`,
 `answers(check_id PK, answer, event_id, visit_id, ts)`, `user_events(id PK, json)`,
-`accepted(suggestion_id PK, event_id, ts)`, `narratives(key PK, mode, text, ts)`.
+`accepted(suggestion_id PK, event_id, ts)`, `narratives(key PK, mode, text, ts)` (deprecated: only
+the removed Claude narrative used it).
 Methods: `save_dataset(ds)` (stores `persona/seed/days/anchor/source` in meta; **if persona, seed or
 anchor differ from the stored meta, first truncate answers/user_events/accepted/narratives**),
 `load_dataset() -> Optional[Dataset]` (pristine), `apply_to(ds)` (mechanical: add each user_event
@@ -624,17 +625,24 @@ StressLess`, CRLF, lines folded at 75 octets.
   "on days like that…" pattern; helpers; unexplained note; closing "Based on {n} nights of your data ·
   correlation, not proof." Handles missing night ("Your watch has no data for last night…") and
   insufficient history ("Building your baseline: {n} of 10 nights").
-* `ClaudeReasoner` (mode `claude`): lazy `import anthropic`; `client = anthropic.Anthropic()`; model
-  `os.environ.get("STRESSLESS_CLAUDE_MODEL", "claude-opus-5")`; `client.beta.messages.create(model,
-  max_tokens=4000, system=SYSTEM, messages=[{"role":"user","content": json.dumps(payload)}],
-  betas=["server-side-fallback-2026-07-01"], fallbacks="default")`; on `anthropic.BadRequestError`
-  retry once with `client.messages.create` without betas/fallbacks; if `stop_reason == "refusal"` ->
-  rules; join text blocks; any exception -> log + rules. SYSTEM: "You write the morning explanation
-  for StressLess… <= 90 words, plain language, use only numbers present in the JSON, say 'likely',
-  never medical advice, end with a one-line suggestion." Payload = `build_payload(report)`: score,
-  baseline, rating, causes (title/detail/points/confidence), helpers, proximal texts,
-  unexplained_note, n_nights, suggestion title — **never** ids, start/end, location_hint, attendees,
-  lat/lon (test_reasoning asserts no such keys and no `\d{4}-\d{2}-\d{2}T` strings).
+* There is no Claude narrative any more. The old `ClaudeReasoner` (default model `claude-opus-5`, one call
+  per user per day whenever Morning, Planner or Lab loaded `/api/report/{date}`) was removed; the
+  generated reports (§7.9a) replaced it. `build_payload(report)` stays de-identified: **never** ids,
+  start/end, location_hint, attendees, lat/lon (test_reasoning asserts no such keys and no
+  `\d{4}-\d{2}-\d{2}T` strings).
+* `get_reasoner() -> RuleReasoner` always. `reasoning_mode() -> "claude" | "rules"` is now only the
+  switch for the generated reports.
+
+### 7.9a Generated reports (`report_input.py`, `report_writer.py`, `server/reports.py`)
+* Home shows a daily report (this morning) and a weekly report (the last full Monday–Sunday week).
+  Each is generated at most once per user and period; a period is claimed in the store before the model
+  is called. Falls back to the rule writer when AI is off, the global cap
+  (`STRESSLESS_REPORT_DAILY_CAP`, default 50 per 24 h) is reached, the user has not consented, or the call fails.
+* Models: `STRESSLESS_DAILY_MODEL` (default `claude-sonnet-5-5`), `STRESSLESS_WEEKLY_MODEL` (default
+  `claude-haiku-5-5`), effort `STRESSLESS_REPORT_EFFORT` (default `medium`).
+* **Nothing is generated on page load.** The daily report is generated only when the user clicks
+  *Generate today's report*; right after that, the weekly report is generated if the last full week has
+  none yet. Loading Home only shows reports that already exist.
 * `get_reasoner() -> Reasoner`; `reasoning_mode() -> str`.
 
 ### 7.10 `pipeline.py` (engine-app)
@@ -667,8 +675,7 @@ class Engine:
   `rating = sleep_score.rating(score)`; `baseline_score` = 28-night median; `sources = sources_for
   (night_date)`; `confidence_note` = "Based on {n} nights · explains about {r2_loo:.0%} of night-to-
   night variation out of sample · correlation, not proof" (or the insufficient text).
-* **Narratives**: rules recomputed every request; only `claude` narratives cached in the store with
-  key `f"{morning}:{history_days}:claude:{store.state_version()}"`.
+* **Narratives**: written by `RuleReasoner`, recomputed every request, never cached and never sent to a model.
 * `answer(check_id, answer)`: find the check (404); booked_not_seen -> `ds.set_attended(event_id,
   answer == "yes")`; seen_not_booked + yes -> `ds.add_event(check.suggested_event)` +
   `store.add_user_event`; compute the related habit (`late_workout`/`morning_workout` by slot, or
@@ -862,7 +869,7 @@ likely causes* (numbered; title, detail, `−6 pts` chip with "likely −9 to �
 badge, #1's evidence sparkline expanded by default, others expandable) and the **suggestion card**
 (`data-tour="suggestion"`: "Suggestion: protect 21:00 to 22:00 tonight · likely +2 to +6" · **Add to
 calendar** -> POST accept -> "Added ✓" + separate "Download .ics" link; never auto-download). Then
-*What helped*; narrative card with reasoner badge (`data-tour="narrative"`); compact day strip
+*What helped*; narrative card with reasoner badge (always "On-device rules") (`data-tour="narrative"`); compact day strip
 (`Charts.dayTimeline compact`) — click -> `#/replay/{night_date}?t={minute}`; *Last night in
 numbers* (`data-tour="recovery"`): tiles HRV, resting HR, wrist temp (value, delta, 14-night
 sparkline, status icon+label) with resp rate and SpO2 under "more"; night details (bedtime, asleep,

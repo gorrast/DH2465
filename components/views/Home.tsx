@@ -1,6 +1,6 @@
 'use client';
 /* Home: today's AI-written daily report and last week's weekly report (backend: server/reports.py). */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { fmt } from '@/lib/format';
 import { Icon } from '../ui/Icon';
@@ -61,6 +61,8 @@ function sourceLine(s: SourceStatus): string {
 // --------------------------------------------------------------- the view --
 export function HomeView() {
   const overview = useLoad(() => api.get<Overview>('/api/reports'), []);
+  // The weekly report is only generated right after the user generates a daily report, never on page load.
+  const [dailyGenerated, setDailyGenerated] = useState(false);
   if (overview.error) return <ErrorCard error={overview.error} onRetry={overview.reload} view="home" />;
   const o = overview.data;
   return (
@@ -68,15 +70,18 @@ export function HomeView() {
       <ViewHead eyebrow={o ? fmt.dayLong(o.today) : 'Today'} title="Your reports" />
       {!o ? <Skeleton height={260} /> : (
         <>
-          <DailySection o={o} onChange={overview.reload} />
-          <WeeklySection o={o} />
+          <DailySection o={o} onGenerated={() => {
+            overview.setData({ ...o, consented: true, daily: { ...o.daily, status: 'ready' } });
+            setDailyGenerated(true);
+          }} />
+          <WeeklySection o={o} generate={dailyGenerated} />
         </>
       )}
     </div>
   );
 }
 
-function DailySection({ o, onChange }: { o: Overview; onChange: () => void }) {
+function DailySection({ o, onGenerated }: { o: Overview; onGenerated: () => void }) {
   const [report, setReport] = useState<Report | null>(null);
   const [dialog, setDialog] = useState(false);
   const [loading, setLoading] = useState(o.daily.status === 'ready');
@@ -103,27 +108,34 @@ function DailySection({ o, onChange }: { o: Overview; onChange: () => void }) {
         <Icon name="brain" size={16} />Generate today&rsquo;s report
       </button>
       {dialog ? (
-        <GenerateDialog o={o} onClose={() => setDialog(false)} onDone={(r) => { setDialog(false); setReport(r); onChange(); }} />
+        <GenerateDialog o={o} onClose={() => setDialog(false)} onDone={(r) => { setDialog(false); setReport(r); onGenerated(); }} />
       ) : null}
     </div>
   );
 }
 
-function WeeklySection({ o }: { o: Overview }) {
+function WeeklySection({ o, generate }: { o: Overview; generate: boolean }) {
   const [report, setReport] = useState<Report | null>(null);
-  const asked = useRef(false);
+  const [writing, setWriting] = useState(false);
+  const path = '/api/reports/weekly/' + o.weekly.period;
 
+  // A stored weekly report is just shown.
   useEffect(() => {
-    if (asked.current) return;
-    asked.current = true;
-    const path = '/api/reports/weekly/' + o.weekly.period;
-    // A finished week's report is generated the first time it is asked for; "no data" simply shows nothing.
-    const load = o.weekly.status === 'ready' ? api.get<{ report: Report }>(path)
-      : o.weekly.status === 'none' && o.consented ? api.post<{ report: Report }>(path) : null;
-    load?.then((r) => setReport(r.report), (e) => { if (!(e instanceof ApiError && e.status === 400)) toast('Weekly report: ' + e.message, { kind: 'error' }); });
-  }, [o.weekly.period, o.weekly.status, o.consented]);
+    if (o.weekly.status !== 'ready') return;
+    api.get<{ report: Report }>(path).then((r) => setReport(r.report), (e) => toast('Weekly report: ' + e.message, { kind: 'error' }));
+  }, [path, o.weekly.status]);
 
-  return report ? <ReportCard report={report} /> : null;
+  // A finished week's report is generated once the user has generated a daily report; "no data" simply shows nothing.
+  useEffect(() => {
+    if (!generate || o.weekly.status !== 'none') return;
+    setWriting(true);
+    api.post<{ report: Report }>(path)
+      .then((r) => setReport(r.report), (e) => { if (!(e instanceof ApiError && e.status === 400)) toast('Weekly report: ' + e.message, { kind: 'error' }); })
+      .finally(() => setWriting(false));
+  }, [generate, path, o.weekly.status]);
+
+  if (report) return <ReportCard report={report} />;
+  return writing ? <div className="card row small secondary"><span className="spinner" />Writing last week&rsquo;s report…</div> : null;
 }
 
 // ----------------------------------------------------------------- dialog --

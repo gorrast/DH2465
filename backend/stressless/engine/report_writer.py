@@ -2,7 +2,7 @@
 same without a model (fallback, daily cap, no API key).
 
 The model per report kind comes from the environment, so it can be changed and compared without a deploy:
-STRESSLESS_DAILY_MODEL (default claude-opus-5-5), STRESSLESS_WEEKLY_MODEL (default claude-haiku-5-5) and
+STRESSLESS_DAILY_MODEL (default claude-sonnet-5-5), STRESSLESS_WEEKLY_MODEL (default claude-haiku-5-5) and
 STRESSLESS_REPORT_EFFORT (default medium).
 """
 from __future__ import annotations
@@ -16,7 +16,7 @@ from ..reports import CONTENT_MODELS, DayHighlight, Finding, ReportContent, Repo
 
 log = logging.getLogger("stressless.engine.report_writer")
 
-DEFAULT_MODELS = {"daily": "claude-opus-5-5", "weekly": "claude-haiku-5-5"}
+DEFAULT_MODELS = {"daily": "claude-sonnet-5-5", "weekly": "claude-haiku-5-5"}
 MAX_TOKENS = 8000
 
 SYSTEM = """You write short, friendly health reports for StressLess, an app that explains a person's sleep and \

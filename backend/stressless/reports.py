@@ -63,6 +63,10 @@ class Pattern(BaseModel):
     unit: str = "points"                       # what ``effect`` is measured in
     n: int = 0                                 # observations behind it
     confidence: Confidence = "low"
+    outcome: Optional[str] = None              # what ``effect`` is measured on, when not the sleep score ("Time asleep")
+    effect_low: Optional[float] = None         # 95 % interval of ``effect``
+    effect_high: Optional[float] = None
+    n_without: Optional[int] = None            # observations it is compared against
 
 
 class DayPoint(BaseModel):

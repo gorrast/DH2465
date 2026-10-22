@@ -13,6 +13,7 @@ from . import attribution as A
 from . import baselines as bl
 from .features import day_features, describe_features
 from .habits import rank_habits, weekly_insight
+from .lifestyle import LifestylePattern, lifestyle_patterns
 from .matching import event_response, evening_summary, hr_norm_curve
 from .reality import reality_checks
 from .reasoning import build_payload, get_reasoner
@@ -76,6 +77,9 @@ class Engine:
 
     def habits(self, upto: date, history_days: Optional[int] = None) -> List[Habit]:
         return rank_habits(self.ds, upto, history_days, fit=self.fit_for(upto, history_days), cache=self._cache)
+
+    def lifestyle(self, upto: date, history_days: Optional[int] = None) -> List[LifestylePattern]:
+        return lifestyle_patterns(self.ds, upto, history_days, cache=self._cache)
 
     def morning_report(self, morning: date, history_days: Optional[int] = None, narrate: bool = True) -> MorningReport:
         self._check_report_date(morning)

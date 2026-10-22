@@ -5,6 +5,7 @@ import { api, ApiError } from '@/lib/api';
 import { fmt } from '@/lib/format';
 import { Icon } from '../ui/Icon';
 import { toast } from '../ui/overlays';
+import { CheckinCard } from './Checkin';
 import { ErrorCard, Skeleton, ViewHead, useLoad } from './common';
 
 // ------------------------------------------------------------------ types --
@@ -68,6 +69,8 @@ export function HomeView() {
   return (
     <div className="v-home">
       <ViewHead eyebrow={o ? fmt.dayLong(o.today) : 'Today'} title="Your reports" />
+      {/* Before the daily report: yesterday's coffee and drinks are part of what explains last night. */}
+      <CheckinCard />
       {!o ? <Skeleton height={260} /> : (
         <>
           <DailySection o={o} onGenerated={() => {

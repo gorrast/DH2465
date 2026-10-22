@@ -161,6 +161,11 @@ def switch_persona(user_id: str, store: UserStore, persona: str, seed: int) -> N
         _engines.drop(lambda k: k[0] == user_id)
 
 
+def forget(user_id: str) -> None:
+    """Drop the user's cached engines after a write the engine reads (a check-in), so the next request reloads."""
+    _engines.drop(lambda k: k[0] == user_id)
+
+
 def reset(user_id: str, store: UserStore) -> None:
     with _user_lock(user_id):
         store.clear_user_state()

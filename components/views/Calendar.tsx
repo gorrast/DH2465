@@ -8,12 +8,14 @@ import { ViewHead } from './common';
 type Step = 'start' | 'providers' | 'google' | 'connected';
 type Connection = { status?: string; email?: string; last_synced_at?: string };
 
-type Action = 'status' | 'authorize' | 'sync' | 'disconnect';
+type Action = 'status' | 'events' | 'authorize' | 'sync' | 'disconnect';
 
 /** The Google Calendar routes of the FastAPI backend (backend/stressless/server/calendar.py). */
 function calendarRequest(action: Action): Promise<any> {
   const base = '/api/calendar/google';
-  return action === 'status' ? api.get(base) : api.post(base + '/' + action);
+  if (action === 'status') return api.get(base);
+  if (action === 'events') return api.get(base + '/events');
+  return api.post(base + '/' + action);
 }
 
 function connectedCalendar(payload: any): Connection | null {
@@ -29,6 +31,8 @@ export function CalendarView() {
   const [step, setStep] = useState<Step>('start');
   const [email, setEmail] = useState('');
   const [pending, setPending] = useState(false);
+  const [eventsLoading, setEventsLoading] = useState(true);
+  const [events, setEvents] = useState<Record<string, unknown>[]>([]);
   const [connection, setConnection] = useState<Connection | null>(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -41,9 +45,13 @@ export function CalendarView() {
           setPending(true);
           setMessage('Finishing your Google Calendar connection...');
         }
-        const status = await calendarRequest('status');
+        const [status, eventResult] = await Promise.all([
+          calendarRequest('status'),
+          calendarRequest('events'),
+        ]);
         const current = connectedCalendar(status);
         if (!active) return;
+        setEvents(Array.isArray(eventResult?.events) ? eventResult.events : []);
         if (!current) {
           if (syncOnReturn) throw new Error('Google did not finish connecting. Please try again.');
           return;
@@ -54,12 +62,18 @@ export function CalendarView() {
           const result = await calendarRequest('sync');
           if (!active) return;
           setMessage((result.imported || 0) + ' calendar events synced to your account.');
+          const refreshed = await calendarRequest('events');
+          if (!active) return;
+          setEvents(Array.isArray(refreshed?.events) ? refreshed.events : []);
           router.replace('/calendar');
         }
       } catch (cause: any) {
         if (active) setError(cause?.message || String(cause));
       } finally {
-        if (active) setPending(false);
+        if (active) {
+          setPending(false);
+          setEventsLoading(false);
+        }
       }
     }
     void loadConnection();
@@ -98,6 +112,8 @@ export function CalendarView() {
     try {
       const result = await calendarRequest('sync');
       setMessage((result.imported || 0) + ' calendar events synced to your account.');
+      const refreshed = await calendarRequest('events');
+      setEvents(Array.isArray(refreshed?.events) ? refreshed.events : []);
     } catch (cause: any) {
       setError(cause?.message || String(cause));
       setMessage('');
@@ -115,6 +131,8 @@ export function CalendarView() {
       setConnection(null);
       setStep('start');
       setMessage('Google Calendar disconnected.');
+      const refreshed = await calendarRequest('events');
+      setEvents(Array.isArray(refreshed?.events) ? refreshed.events : []);
     } catch (cause: any) {
       setError(cause?.message || String(cause));
     } finally {
@@ -182,6 +200,36 @@ export function CalendarView() {
         {message ? <p className="small secondary v-calendar-message" role="status">{message}</p> : null}
         {error ? <p className="small v-calendar-error" role="alert">{error}</p> : null}
       </section>
+      <section className="v-calendar-events" aria-labelledby="calendar-events-title">
+        <div className="card-title">
+          <h2 id="calendar-events-title">Events stored in Supabase</h2>
+          <span className="tiny muted">{eventsLoading ? 'Loading...' : events.length + ' rows'}</span>
+        </div>
+        {eventsLoading ? <p className="small muted">Loading calendar event rows...</p> : null}
+        {!eventsLoading && events.length === 0 ? <p className="small muted">No calendar event rows found for this account.</p> : null}
+        {events.length > 0 ? <CalendarEventTable events={events} /> : null}
+      </section>
     </>
+  );
+}
+
+function CalendarEventTable({ events }: { events: Record<string, unknown>[] }) {
+  const columns = Array.from(new Set(events.flatMap((event) => Object.keys(event))));
+  const displayValue = (value: unknown) => value === null ? 'null' : typeof value === 'object' ? JSON.stringify(value) : String(value ?? '');
+
+  return (
+    <div className="v-calendar-table-scroll">
+      <table className="v-calendar-table">
+        <caption className="sr-only">All calendar event fields and values stored in Supabase</caption>
+        <thead><tr>{columns.map((column) => <th key={column}>{column}</th>)}</tr></thead>
+        <tbody>
+          {events.map((event, index) => (
+            <tr key={String(event.id ?? event.provider_event_id ?? index)}>
+              {columns.map((column) => <td key={column}>{displayValue(event[column])}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }

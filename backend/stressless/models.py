@@ -111,6 +111,16 @@ class DailyActivity:
 
 
 @dataclass
+class MediaPlay:
+    """One play from an imported listening or viewing history (``media_events``), in local time."""
+    start: datetime
+    minutes: float
+    title: str                                 # track, episode or show
+    creator: Optional[str]                     # artist or podcast; None for Netflix
+    kind: str                                  # music | podcast | video
+
+
+@dataclass
 class HeartRateDay:
     """One calendar day of minute-level heart rate. ``bpm[i]`` is minute i of the
     local day (0..1439); ``None`` means the watch was not worn (charging, off)."""
@@ -444,6 +454,7 @@ class Dataset:
     generated_at: Optional[datetime] = None
     showcase: bool = True
     day_metrics: Dict[date, Dict[str, float]] = field(default_factory=dict)   # day -> {"screen.minutes": ...} (daily_metrics)
+    media: List[MediaPlay] = field(default_factory=list)                      # Spotify / Netflix plays (media_events)
 
     def __post_init__(self) -> None:
         self.reindex()
@@ -466,6 +477,9 @@ class Dataset:
         self._hr: Dict[date, HeartRateDay] = {h.date: h for h in self.hr_days}
         self._nights: Dict[date, SleepNight] = {n.date: n for n in self.nights}
         self._activity: Dict[date, DailyActivity] = {a.date: a for a in self.activity}
+        self._media_by_day: Dict[date, List[MediaPlay]] = {}
+        for m in self.media:
+            self._media_by_day.setdefault(m.start.date(), []).append(m)
 
     def events_on(self, d: date, include_unattended: bool = False) -> List[CalendarEvent]:
         evs = self._events_by_day.get(d, [])
@@ -490,6 +504,9 @@ class Dataset:
 
     def activity_on(self, d: date) -> Optional[DailyActivity]:
         return self._activity.get(d)
+
+    def media_on(self, d: date) -> List[MediaPlay]:
+        return self._media_by_day.get(d, [])
 
     def metric_on(self, d: date, key: str) -> Optional[float]:
         return self.day_metrics.get(d, {}).get(key)

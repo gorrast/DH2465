@@ -54,7 +54,8 @@ class Metric(BaseModel):
 
 
 class Pattern(BaseModel):
-    """A relationship the engine found in the person's history that applies to this period."""
+    """A relationship the engine found in the person's history: a cause behind last night, or a link between two
+    data sources (``lifestyle``)."""
     key: str                                   # "pattern.late_meeting" — unique in a report
     title: str                                 # "Late meetings"
     detail: str                                # one sentence with the numbers, written by code
@@ -67,6 +68,9 @@ class Pattern(BaseModel):
     effect_low: Optional[float] = None         # 95 % interval of ``effect``
     effect_high: Optional[float] = None
     n_without: Optional[int] = None            # observations it is compared against
+    sources: List[str] = Field(default_factory=list)   # data sources it links, cause first: ["music", "sleep"]
+    happened: Optional[int] = None             # days in the report period the cause happened (None: not a link)
+    against_research: bool = False             # goes the other way than sleep research expects: likely something else
 
 
 class DayPoint(BaseModel):
@@ -83,7 +87,7 @@ class ReportInput(BaseModel):
     n_nights: int                              # nights of history behind the baselines and patterns
     metrics: List[Metric] = Field(default_factory=list)
     patterns: List[Pattern] = Field(default_factory=list)
-    days: List[DayPoint] = Field(default_factory=list)       # weekly only
+    days: List[DayPoint] = Field(default_factory=list)       # weekly: each day; daily: the day before
     suggestions: List[str] = Field(default_factory=list)     # ready-made suggestion titles, best first
     notes: List[str] = Field(default_factory=list)           # gaps and caveats the report must respect
 
@@ -99,13 +103,15 @@ class _Content(BaseModel):
 
 
 class Finding(_Content):
-    title: str = Field(description="Three to six words naming the finding.")
-    body: str = Field(description="One or two sentences explaining it in plain, warm language. Say 'likely' or "
-                                  "'is associated with', never 'caused'.")
+    title: str = Field(description="Three to six words naming the link, playful rather than clinical "
+                                   "('Metallica days run hot').")
+    body: str = Field(description="One or two sentences: what the link is, with its numbers, and how it showed up in "
+                                  "this period if it did. Say 'likely' or 'tends to', never 'caused'.")
     tone: Tone = Field(description="good: worth celebrating. watch: worth attention. neutral: just interesting.")
     confidence: Confidence = Field(description="Copy the confidence of the pattern it rests on; low if it rests on none.")
-    evidence: List[str] = Field(description="Keys of the metrics and patterns from the input that back this finding. "
-                                            "At least one; use only keys that exist in the input.")
+    evidence: List[str] = Field(description="Keys of the patterns (and metrics) from the input that back this "
+                                            "finding, the link's pattern first. At least one; use only keys that "
+                                            "exist in the input.")
 
 
 class DayHighlight(_Content):
@@ -114,14 +120,17 @@ class DayHighlight(_Content):
 
 
 class ReportContent(_Content):
-    headline: str = Field(description="At most ten words. The single most important thing, in a friendly voice.")
-    summary: str = Field(description="Two or three sentences giving the overall picture. Use only numbers present in "
-                                     "the input.")
-    findings: List[Finding] = Field(description="Two to four findings, strongest first.")
-    fun_fact: Optional[str] = Field(description="One playful sentence about a surprising number in the input, or null "
-                                                "if nothing stands out.")
-    suggestion: Optional[str] = Field(description="One sentence built on the first entry of the input's suggestions, "
-                                                  "or null if there are none.")
+    headline: str = Field(description="At most ten words, about the most interesting link, not the sleep score. "
+                                      "Friendly and a little playful.")
+    summary: str = Field(description="Two or three sentences: at most one line of context on the night or week, then "
+                                     "the story the links tell. Use only numbers present in the input.")
+    findings: List[Finding] = Field(description="Two to four links worth telling, most interesting first. Leave out "
+                                                "the obvious, the repeated and the same-source ones.")
+    fun_fact: Optional[str] = Field(description="One playful sentence about a curious link or number not already in "
+                                                "the findings, or null if nothing fits.")
+    suggestion: Optional[str] = Field(description="One small experiment to try, built on a finding ('swap the late "
+                                                  "Metallica for something calmer and see what tomorrow says') or on "
+                                                  "the first of the input's suggestions; null if neither fits.")
     caveats: List[str] = Field(description="Short honest limits of this report, taken from the input's notes. Empty "
                                            "if there are none.")
 
@@ -132,11 +141,12 @@ class DailyContent(ReportContent):
 
 class WeeklyContent(ReportContent):
     """Looks back over one whole week."""
-    trend: str = Field(description="One or two sentences on how the week compared with the person's usual.")
+    trend: str = Field(description="One or two sentences on how the week compared with the person's usual, in "
+                                   "the light of the links.")
     best_day: Optional[DayHighlight] = Field(description="The best day of the week, or null if the days barely differ.")
     hardest_day: Optional[DayHighlight] = Field(description="The hardest day of the week, or null if the days barely "
                                                             "differ.")
-    next_week: str = Field(description="One sentence on what to keep or change next week.")
+    next_week: str = Field(description="One sentence on what to keep or try next week, built on a link.")
 
 
 CONTENT_MODELS = {"daily": DailyContent, "weekly": WeeklyContent}

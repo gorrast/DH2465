@@ -14,7 +14,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from ..models import (EVENT_TYPES, STAGE_KINDS, CalendarEvent, DailyActivity, Dataset, HeartRateDay, Persona,
+from ..models import (EVENT_TYPES, STAGE_KINDS, CalendarEvent, DailyActivity, Dataset, HeartRateDay, MediaPlay, Persona,
                       SleepNight, SleepStage, WatchWorkout, new_id)
 from ..reports import SourceStatus
 from ..timeutil import DEFAULT_TZ, parse_date, parse_dt
@@ -88,6 +88,14 @@ def activity_from_row(row: Dict[str, Any], tzname: str) -> DailyActivity:
                          workouts=workouts, hourly_steps=hourly)
 
 
+def media_from_row(row: Dict[str, Any], tzname: str) -> MediaPlay:
+    """Spotify and Netflix stamp a play when it ended, so it started ``minutes`` earlier."""
+    minutes = float(row.get("minutes") or 0)
+    kind = (row.get("source") or {}).get("media_kind") or ("video" if row.get("provider") == "netflix" else "music")
+    return MediaPlay(start=parse_dt(row["occurred_at"], tzname) - timedelta(minutes=minutes), minutes=minutes,
+                     title=row.get("title") or "", creator=row.get("creator") or None, kind=kind)
+
+
 def event_from_row(row: Dict[str, Any], tzname: str) -> CalendarEvent:
     title = row.get("title") or "(no title)"
     kind = row.get("category")
@@ -159,8 +167,12 @@ def load_dataset(store, today: date, days: int = DAYS, name: str = "You") -> Dat
         d = parse_date(r["day"])
         if ds.start <= d <= ds.end and r.get("value") is not None:
             ds.day_metrics.setdefault(d, {})[r["metric_key"]] = float(r["value"])
-    log.info("loaded real data for %s: %d nights, %d heart-rate days, %d activity days, %d events",
-             today, len(nights), len(hr_days), len(activity), len(events))
+    ds.media = [m for m in (media_from_row(r, tzname) for r in store.rows("media_events", "occurred_at", start.isoformat(),
+                                                                          (today + timedelta(days=1)).isoformat()))
+                if ds.start <= m.start.date() <= ds.end]
+    ds.reindex()
+    log.info("loaded real data for %s: %d nights, %d heart-rate days, %d activity days, %d events, %d media plays",
+             today, len(nights), len(hr_days), len(activity), len(events), len(ds.media))
     return ds
 
 

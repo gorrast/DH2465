@@ -79,10 +79,11 @@ class WriterTests(unittest.TestCase):
         self.assertIs(req["output_format"], DailyContent)
         self.assertEqual((req["model"], req["fallbacks"]), ("claude-sonnet-5-5", "default"))
         weekly = build_request(weekly_input(Engine(fresh_dataset()), MONDAY))
-        self.assertEqual(weekly["model"], "claude-haiku-5-5")
-        self.assertNotIn("fallbacks", weekly)
-        with mock.patch.dict(os.environ, {"STRESSLESS_DAILY_MODEL": "claude-sonnet-5-5"}):
-            self.assertEqual(build_request(self.inp)["model"], "claude-sonnet-5-5")
+        self.assertEqual((weekly["model"], weekly["fallbacks"]), ("claude-sonnet-5-5", "default"))
+        with mock.patch.dict(os.environ, {"STRESSLESS_DAILY_MODEL": "claude-haiku-5-5"}):
+            req = build_request(self.inp)
+            self.assertEqual(req["model"], "claude-haiku-5-5")
+            self.assertNotIn("fallbacks", req)
 
     def test_unknown_evidence_is_dropped(self):
         written = ClaudeReportWriter(FakeClient(evidence=["sleep.score", "made.up"])).write(self.inp)

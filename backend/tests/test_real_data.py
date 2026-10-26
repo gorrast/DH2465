@@ -99,6 +99,25 @@ class LoaderTests(unittest.TestCase):
         inp = daily_input(Engine(ds), ANCHOR)
         self.assertEqual(next(m for m in inp.metrics if m.key == "screen.late_minutes").value, 42.5)
 
+    def test_media_plays_are_loaded_in_local_time_from_their_end(self):
+        store = real_store()
+        y = ANCHOR - timedelta(days=1)
+        store.tables["media_events"] = [
+            {"id": "m1", "provider": "spotify", "occurred_at": y.isoformat() + "T21:30:00+00:00", "title": "Holocene",
+             "creator": "Bon Iver", "minutes": 30, "source": {"media_kind": "music"}},
+            {"id": "m2", "provider": "netflix", "occurred_at": y.isoformat() + "T20:00:00+00:00", "title": "Dark",
+             "creator": None, "minutes": 50, "source": {}},
+            {"id": "m3", "provider": "spotify", "occurred_at": ANCHOR.isoformat() + "T08:00:00+00:00", "title": "Today",
+             "creator": "X", "minutes": 3, "source": {}}]                                            # today: not loaded
+        ds = load_dataset(store, ANCHOR)
+        plays = ds.media_on(y)
+        self.assertEqual([(m.creator, m.kind) for m in plays], [(None, "video"), ("Bon Iver", "music")])
+        self.assertEqual((plays[1].start.hour, plays[1].start.minute), (23, 0))                 # 21:30 UTC ends 23:30 CEST
+        self.assertEqual(ds.media_on(ANCHOR), [])
+        inp = daily_input(Engine(ds), ANCHOR)
+        self.assertEqual(next(m for m in inp.metrics if m.key == "music.minutes").value, 30)
+        self.assertIn("30 min of music, mostly Bon Iver", inp.days[0].tags)
+
     def test_uncategorized_events_are_classified_and_hrv_measure_is_not_mixed(self):
         store = real_store()
         store.tables["calendar_events"][0]["category"] = "uncategorized"

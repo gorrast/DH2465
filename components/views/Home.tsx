@@ -19,7 +19,7 @@ interface Overview {
   consented: boolean; ai: boolean;
 }
 interface Metric { key: string; label: string; value: number | null; unit: string; baseline: number | null; status: string }
-interface Pattern { key: string; title: string; detail: string }
+interface Pattern { key: string; title: string; detail: string; sources?: string[] }
 interface Finding { title: string; body: string; tone: 'good' | 'neutral' | 'watch'; confidence: string; evidence: string[] }
 interface DayHighlight { day: string; reason: string }
 interface Content {
@@ -32,6 +32,10 @@ interface Report {
 }
 
 // ---------------------------------------------------------------- helpers --
+const SOURCE_NAMES: Record<string, string> = {
+  sleep: 'Sleep', activity: 'Steps', exercise: 'Workouts', calendar: 'Calendar', music: 'Music', streaming: 'Streaming',
+  phone: 'Phone', 'check-in': 'Check-in', heart: 'Heart rate',
+};
 const MODEL_NAMES: Record<string, string> = { 'claude-opus-5-5': 'Claude Opus 5.5', 'claude-sonnet-5-5': 'Claude Sonnet 5.5', 'claude-haiku-5-5': 'Claude Haiku 5.5' };
 
 function value(v: number | null, unit: string): string {
@@ -185,7 +189,7 @@ function GenerateDialog({ o, onClose, onDone }: { o: Overview; onClose: () => vo
         {!o.consented && o.ai ? (
           <label className="v-home-consent small">
             <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} disabled={working} />
-            <span>I agree that a summary of my data (numbers and short labels; no names, calendar titles or places) is sent to Anthropic&rsquo;s Claude to write my reports.</span>
+            <span>I agree that a summary of my data (numbers, short labels and the artists and shows you play; no people&rsquo;s names, calendar titles or places) is sent to Anthropic&rsquo;s Claude to write my reports.</span>
           </label>
         ) : null}
         {error ? <p className="v-home-error small">{error}</p> : null}
@@ -205,6 +209,7 @@ function ReportCard({ report }: { report: Report }) {
   const metrics = new Map(report.input.metrics.map((m) => [m.key, m]));
   const patterns = new Map(report.input.patterns.map((p) => [p.key, p]));
   const weekly = report.kind === 'weekly';
+
   return (
     <article className="card v-home-report">
       <div className="eyebrow">{weekly ? 'Week of ' + fmt.day(report.period_start) + ' – ' + fmt.day(report.period_end) : 'Daily report · ' + fmt.day(report.period_start)}</div>
@@ -213,8 +218,11 @@ function ReportCard({ report }: { report: Report }) {
       {weekly && c.trend ? <p className="secondary">{c.trend}</p> : null}
 
       <ul className="v-home-findings">
-        {c.findings.map((f, i) => (
+        {c.findings.map((f, i) => {
+          const link = f.evidence.map((k) => patterns.get(k)).find((p) => p?.sources?.length);
+          return (
           <li key={i} className={'tone-' + f.tone}>
+            {link ? <div className="eyebrow">{link.sources!.map((s) => SOURCE_NAMES[s] || s).join(' × ')}</div> : null}
             <div className="row between"><span className="title">{f.title}</span><span className={'badge badge-' + f.confidence}>{f.confidence}</span></div>
             <p className="small">{f.body}</p>
             <div className="row">
@@ -226,7 +234,8 @@ function ReportCard({ report }: { report: Report }) {
               })}
             </div>
           </li>
-        ))}
+          );
+        })}
       </ul>
 
       {weekly && (c.best_day || c.hardest_day) ? (

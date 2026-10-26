@@ -2,7 +2,11 @@
 import unittest
 from datetime import timedelta
 
-from stressless.engine.lifestyle import active_on, lifestyle_patterns
+from datetime import datetime
+
+from stressless.engine.lifestyle import active_on, daytime_hr, lifestyle_patterns
+from stressless.models import MediaPlay, WatchWorkout
+from stressless.timeutil import tz
 from stressless.engine.pipeline import Engine
 from stressless.engine.report_input import daily_input, weekly_input
 from stressless.engine.report_writer import write_rules
@@ -113,6 +117,32 @@ class LifestyleTests(unittest.TestCase):
         # Coffee never varied, so there is nothing to compare.
         self.assertNotIn("more_coffee", {q.key for q in lifestyle_patterns(ds, ANCHOR)})
 
+    def test_links_against_sleep_research_are_flagged_and_their_hints_dropped(self):
+        ds = planted()
+        for d in ds.night_dates():                                # flip it: late phone evenings go with better nights
+            n = ds.night(d)
+            if n.worn and n.score is not None and d.toordinal() % 3 == 0:
+                n.score += 24
+                n.duration_min += 90
+        p = {p.key: p for p in lifestyle_patterns(ds, ANCHOR)}["late_screen"]
+        self.assertEqual(p.direction, "helped")
+        self.assertTrue(p.against_research)
+        self.assertFalse(self.patterns["late_screen"].against_research)
+        links = {q.key: q for q in daily_input(Engine(ds), ANCHOR).patterns}
+        if p.hint:
+            self.assertNotIn("pattern.late_screen", links)
+        else:
+            self.assertTrue(links["pattern.late_screen"].against_research)
+
+    def test_no_calendar_no_meeting_counts(self):
+        ds = fresh_dataset()
+        ds.events = ds.events[:1]                                 # one stray event is not a connected calendar
+        ds.reindex()
+        inp = daily_input(Engine(ds), ANCHOR)
+        self.assertNotIn("calendar.meetings", inp.keys())
+        self.assertNotIn("calm day", inp.days[0].tags)
+        self.assertNotIn("calendar.meetings", weekly_input(Engine(ds), MONDAY).keys())
+
     def test_weak_signal_is_a_hint_with_low_confidence(self):
         from stressless.engine.lifestyle import LifestylePattern, OutcomeEffect
         o = OutcomeEffect(key="score", label="Sleep score", unit="points", good="up", n_with=5, n_without=20, mean_with=78,
@@ -122,6 +152,90 @@ class LifestyleTests(unittest.TestCase):
         self.assertTrue(p.hint)
         self.assertEqual((p.confidence, p.direction), ("low", "hurt"))
         self.assertIn("early hint", p.detail())
+
+
+
+def with_music_and_workouts():
+    """Demo data with planted cross-source links:
+    * days with Metallica (every 4th): 30 min less sleep and a daytime heart rate 6 bpm higher;
+    * gym days (every 5th): a sleep score 15 points lower; run days (every 5th, offset): 15 points higher."""
+    ds = fresh_dataset()
+    z = tz(ds.persona.tz)
+    for a in ds.activity:                     # only the planted workouts below
+        a.workouts = []
+    ds.events = [e for e in ds.events if e.type != "workout"]
+    for d in ds.night_dates():
+        o = d.toordinal()
+        artist = "Metallica" if o % 4 == 0 else "Bon Iver"
+        ds.media.append(MediaPlay(start=datetime(d.year, d.month, d.day, 17, tzinfo=z), minutes=40, title="Track",
+                                  creator=artist, kind="music"))
+        kind = "strength" if o % 5 == 0 else ("run" if o % 5 == 2 else None)
+        a = ds.activity_on(d)
+        if kind and a is not None:
+            a.workouts.append(WatchWorkout(id="w%d" % o, kind=kind, start=datetime(d.year, d.month, d.day, 7, tzinfo=z),
+                                           end=datetime(d.year, d.month, d.day, 8, tzinfo=z), avg_hr=140, max_hr=170))
+        n = ds.night(d)
+        if n.worn and n.score is not None:
+            if artist == "Metallica":
+                n.duration_min -= 30
+            n.score += -15 if kind == "strength" else (15 if kind == "run" else 0)
+        h = ds.hr(d)
+        if h is not None and artist == "Metallica":
+            h.bpm = [None if b is None else b + 6 for b in h.bpm]
+    ds.reindex()
+    return ds
+
+
+class CrossSourceTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.ds = with_music_and_workouts()
+        cls.patterns = {p.key: p for p in lifestyle_patterns(cls.ds, ANCHOR)}
+
+    def test_an_artist_becomes_a_link_with_sleep_and_daytime_heart_rate(self):
+        p = self.patterns["artist_metallica"]
+        self.assertEqual(p.description, "days you listened to Metallica")
+        self.assertEqual(p.sources[0], "music")
+        self.assertTrue(p.cross_source)
+        effects = {o.key: o for o in p.reportable}
+        self.assertLess(effects["duration_min"].effect, -15)
+        self.assertGreater(effects["day_hr"].effect, 3)
+        self.assertIn("daytime heart rate", p.detail())
+        self.assertIn("during those days", p.detail())
+
+    def test_gym_and_runs_are_told_apart(self):
+        gym, cardio = self.patterns["gym_days"], self.patterns["cardio_days"]
+        self.assertEqual((gym.direction, cardio.direction), ("hurt", "helped"))
+        self.assertEqual(gym.sources[0], "exercise")
+
+    def test_daytime_heart_rate_leaves_out_workouts(self):
+        d = next(d for d in self.ds.night_dates() if self.ds.activity_on(d) and self.ds.activity_on(d).workouts
+                 and self.ds.hr(d) and d.toordinal() % 4 != 0)
+        h = self.ds.hr(d)
+        h.bpm = [None if b is None else 60 for b in h.bpm]
+        for m in range(7 * 60, 8 * 60):
+            h.bpm[m] = 180
+        try:
+            self.assertEqual(daytime_hr(self.ds, d), 60)
+        finally:
+            self.ds.reindex()
+
+    def test_links_reach_the_report_input_with_sources_and_days(self):
+        engine = Engine(self.ds)
+        daily = daily_input(engine, ANCHOR)
+        links = [p for p in daily.patterns if p.sources]
+        self.assertTrue(links)
+        self.assertTrue(all(p.happened is not None for p in links))
+        self.assertIn("pattern.artist_metallica", {p.key for p in links})
+        self.assertEqual(daily.days[0].day, NIGHT)
+        self.assertTrue(any("of music, mostly" in t for t in daily.days[0].tags))
+        weekly = weekly_input(engine, MONDAY)
+        self.assertTrue(any(p.happened for p in weekly.patterns))
+        self.assertEqual(len(weekly.keys()), len(weekly.metrics) + len(weekly.patterns))
+
+    def test_no_media_no_music_links(self):
+        keys = {p.key for p in lifestyle_patterns(fresh_dataset(), ANCHOR)}
+        self.assertFalse({k for k in keys if k.startswith("artist_") or k in ("big_listening", "late_listening")})
 
 
 if __name__ == "__main__":

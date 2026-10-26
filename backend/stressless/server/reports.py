@@ -2,7 +2,8 @@
 
 * ``GET  /api/reports``                  — today's periods, their status, and the data sources (readiness dialog)
 * ``GET  /api/reports/{kind}/{period}``  — one stored report
-* ``POST /api/reports/{kind}/{period}``  — generate it: daily only for today, weekly only for the week that just ended
+* ``POST /api/reports/{kind}/{period}``  — generate it: daily only for today, weekly only for the week that just ended;
+  ``?regenerate=true`` throws the stored one away first (dev servers only, ``ENVIRONMENT`` other than ``PROD``)
 * ``POST /api/reports/consent``          — the user agrees to AI-written reports (``profiles.consented_at``)
 
 A period is claimed in the database before the model is called, so it can never cost more than one call. The model
@@ -37,6 +38,15 @@ STALE_AFTER = timedelta(minutes=5)             # a pending claim older than this
 
 class ReportBusy(EngineError):
     status = 409
+
+
+class Forbidden(EngineError):
+    status = 403
+
+
+def is_dev() -> bool:
+    """Anything but ENVIRONMENT=PROD is a dev server, where a stored report may be generated again for testing."""
+    return os.environ.get("ENVIRONMENT", "").strip().upper() != "PROD"
 
 
 def daily_cap() -> int:
@@ -146,6 +156,7 @@ def get_reports(p: Principal = Depends(current_principal)):
             "ready": all(s.ready for s in sources if s.required),
             "consented": e.ds.source == "demo" or p.store.consented(),
             "ai": claude_enabled(),
+            "dev": is_dev(),
         })
 
 
@@ -164,8 +175,10 @@ def get_report(kind: str, period: str, p: Principal = Depends(current_principal)
 
 
 @router.post("/api/reports/{kind}/{period}")
-def post_report(kind: str, period: str, p: Principal = Depends(current_principal)):
+def post_report(kind: str, period: str, regenerate: bool = False, p: Principal = Depends(current_principal)):
     d = _parse(kind, period)
+    if regenerate and not is_dev():
+        raise Forbidden("Reports can only be generated again on a dev server.")
     with session.engine_session(p.user_id, p.store) as e:
         expected = current_periods(e.ds.today)[kind]
         if d != expected:
@@ -175,5 +188,8 @@ def post_report(kind: str, period: str, p: Principal = Depends(current_principal
         if kind == "weekly" and not any(e.ds.night(d + timedelta(days=k)) and e.ds.night(d + timedelta(days=k)).worn
                                         for k in range(7)):
             raise EngineError("There is no watch data for that week.")
+        if regenerate:
+            log.info("dev: discarding the stored %s report for %s", kind, d)
+            p.store.discard_report(kind, d)
         report = generate(e, p.store, kind, d)
         return _json({"status": "ready", "report": report.model_dump(mode="json")})

@@ -77,7 +77,7 @@ class UserStore:
 
     # ------------------------------------------------------------- reports --
     # One report per kind and period. It is claimed before the model is called, so a period can never cost
-    # more than one call; nothing here deletes a report.
+    # more than one call; only ``discard_report`` deletes one, and only on a dev server.
     def report_row(self, kind: str, period_start: date) -> Optional[Dict[str, Any]]:
         """{"status": "pending" | "ready", "report": Report | None, "created_at": ISO string}, or None."""
         raise NotImplementedError
@@ -92,6 +92,10 @@ class UserStore:
 
     def reports_last_day(self) -> int:
         """Reports claimed by all users in the last 24 hours (the global cap on model calls)."""
+        raise NotImplementedError
+
+    def discard_report(self, kind: str, period_start: date) -> None:
+        """Delete a stored report so it can be generated again. Dev servers only (see ``server.reports.is_dev``)."""
         raise NotImplementedError
 
     def media_events(self) -> List[Dict[str, Any]]:

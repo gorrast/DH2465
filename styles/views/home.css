@@ -19,7 +19,8 @@
 .v-home-sugg { margin: 12px 0; }
 .v-home-sugg p { margin: 0; font-weight: 600; }
 .v-home-caveats { padding-left: 18px; margin: 12px 0 0; }
-.v-home-foot { margin-top: 12px; border-top: 1px solid var(--hairline); padding-top: 10px; }
+.v-home-foot { margin-top: 12px; border-top: 1px solid var(--hairline); padding-top: 10px;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 
 .v-home-dialog { width: min(520px, 92vw); }
 .v-home-sources { list-style: none; padding: 0; margin: 12px 0; display: grid; gap: 10px; }

@@ -656,6 +656,10 @@ StressLess`, CRLF, lines folded at 75 octets.
   dropped. The prompt has the model question every link (free days and sleeping in explain a lot) and never
   present such a link as good news or build the suggestion on it. Calendar values are sent only when a calendar
   has events on 5+ days, so "0 meetings" never reads as a free day.
+* **Dev override.** `ENVIRONMENT` is `DEV` or `PROD`; anything but `PROD` is a dev server. There,
+  `POST /api/reports/{kind}/{period}?regenerate=true` deletes the stored report (with
+  `SUPABASE_SERVICE_ROLE_KEY`, since users cannot delete reports) and writes it again, and Home shows a
+  *Regenerate (dev)* button on each report. With `PROD` the flag answers 403. Vercel must set `ENVIRONMENT=PROD`.
 * `get_reasoner() -> Reasoner`; `reasoning_mode() -> str`.
 
 ### 7.10 `pipeline.py` (engine-app)

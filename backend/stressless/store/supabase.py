@@ -6,6 +6,7 @@ class never sees another user's rows. One RPC call loads the whole state snapsho
 from __future__ import annotations
 
 import logging
+import os
 from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -185,6 +186,22 @@ class SupabaseStore(UserStore):
 
     def reports_last_day(self) -> int:
         return int(self._call("POST", "/rpc/stressless_reports_last_day", json={}) or 0)
+
+    def discard_report(self, kind: str, period_start: date) -> None:
+        """Users may not delete reports (row-level security), so this uses the service-role key from the dev env."""
+        key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+        if not key:
+            raise SupabaseError("Regenerating a report needs SUPABASE_SERVICE_ROLE_KEY")
+        headers = {"apikey": key}
+        if not key.startswith("sb_"):          # legacy service_role JWT; the newer sb_secret_ keys go in apikey only
+            headers["Authorization"] = "Bearer " + key
+        params = dict(self._report_filter(kind, period_start), user_id="eq." + self.user_id)
+        try:
+            r = _http().request("DELETE", self.rest + "/reports", params=params, headers=headers)
+        except httpx.HTTPError as exc:
+            raise SupabaseError("Supabase unreachable: %s" % exc) from exc
+        if r.status_code >= 400:
+            raise SupabaseError("Supabase DELETE /reports -> %d %s" % (r.status_code, r.text[:300]))
     def media_events(self) -> List[Dict[str, Any]]:
         # Netflix exports commonly exceed PostgREST's 1,000-row response cap.
         out: List[Dict[str, Any]] = []

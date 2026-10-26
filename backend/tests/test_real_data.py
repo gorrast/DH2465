@@ -156,6 +156,17 @@ class RealApiTests(unittest.TestCase):
         self.assertEqual(r.json()["report"]["mode"], "rules")              # no model configured in tests
         self.assertEqual(self.client.get("/api/meta").json()["source"], "real")
 
+    def test_regenerate_only_off_prod(self):
+        url = "/api/reports/daily/%s" % ANCHOR.isoformat()
+        first = self.client.post(url).json()["report"]
+        self.assertEqual(self.client.post(url).json()["report"]["generated_at"], first["generated_at"])     # stored
+        with mock.patch.dict(os.environ, {"ENVIRONMENT": "PROD"}):
+            self.assertEqual(self.client.post(url + "?regenerate=true").status_code, 403)
+            self.assertFalse(self.client.get("/api/reports").json()["dev"])
+        again = self.client.post(url + "?regenerate=true")                       # unset counts as dev
+        self.assertEqual(again.status_code, 200, again.text[:300])
+        self.assertNotEqual(again.json()["report"]["generated_at"], first["generated_at"])
+
 
 if __name__ == "__main__":
     unittest.main()

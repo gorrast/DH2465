@@ -16,7 +16,7 @@ interface SourceStatus {
 interface PeriodStatus { period: string; status: 'none' | 'pending' | 'ready' }
 interface Overview {
   today: string; daily: PeriodStatus; weekly: PeriodStatus; sources: SourceStatus[]; ready: boolean;
-  consented: boolean; ai: boolean;
+  consented: boolean; ai: boolean; dev: boolean;   // dev: a test server, where reports can be generated again
 }
 interface Metric { key: string; label: string; value: number | null; unit: string; baseline: number | null; status: string }
 interface Pattern { key: string; title: string; detail: string; sources?: string[] }
@@ -101,7 +101,7 @@ function DailySection({ o, onGenerated }: { o: Overview; onGenerated: () => void
   }, [o.daily.period, o.daily.status]);
 
   if (loading) return <Skeleton height={260} />;
-  if (report) return <ReportCard report={report} />;
+  if (report) return <ReportCard report={report} onRegenerate={o.dev ? setReport : undefined} />;
   return (
     <div className="card v-home-empty">
       <div className="eyebrow">Daily report</div>
@@ -141,7 +141,7 @@ function WeeklySection({ o, generate }: { o: Overview; generate: boolean }) {
       .finally(() => setWriting(false));
   }, [generate, path, o.weekly.status]);
 
-  if (report) return <ReportCard report={report} />;
+  if (report) return <ReportCard report={report} onRegenerate={o.dev ? setReport : undefined} />;
   return writing ? <div className="card row small secondary"><span className="spinner" />Writing last week&rsquo;s report…</div> : null;
 }
 
@@ -204,11 +204,20 @@ function GenerateDialog({ o, onClose, onDone }: { o: Overview; onClose: () => vo
 }
 
 // ----------------------------------------------------------------- report --
-function ReportCard({ report }: { report: Report }) {
+function ReportCard({ report, onRegenerate }: { report: Report; onRegenerate?: (r: Report) => void }) {
+  const [regenerating, setRegenerating] = useState(false);
   const c = report.content;
   const metrics = new Map(report.input.metrics.map((m) => [m.key, m]));
   const patterns = new Map(report.input.patterns.map((p) => [p.key, p]));
   const weekly = report.kind === 'weekly';
+
+  // Dev servers only: throw the stored report away and write it again.
+  function regenerate() {
+    setRegenerating(true);
+    api.post<{ report: Report }>('/api/reports/' + report.kind + '/' + report.period_start + '?regenerate=true')
+      .then((r) => onRegenerate!(r.report), (e) => toast('Could not regenerate: ' + e.message, { kind: 'error' }))
+      .finally(() => setRegenerating(false));
+  }
 
   return (
     <article className="card v-home-report">
@@ -253,8 +262,15 @@ function ReportCard({ report }: { report: Report }) {
       ) : null}
       {c.caveats.length ? <ul className="v-home-caveats tiny muted">{c.caveats.map((x, i) => <li key={i}>{x}</li>)}</ul> : null}
       <div className="tiny muted v-home-foot">
-        {report.mode === 'claude' ? 'Written by ' + (MODEL_NAMES[report.model || ''] || report.model) : 'Written without AI'}
-        {' · ' + when(report.generated_at)} · correlation, not proof
+        <span>
+          {report.mode === 'claude' ? 'Written by ' + (MODEL_NAMES[report.model || ''] || report.model) : 'Written without AI'}
+          {' · ' + when(report.generated_at)} · correlation, not proof
+        </span>
+        {onRegenerate ? (
+          <button className="btn btn-ghost btn-sm" type="button" disabled={regenerating} onClick={regenerate}>
+            {regenerating ? <span className="spinner" /> : null}Regenerate (dev)
+          </button>
+        ) : null}
       </div>
     </article>
   );

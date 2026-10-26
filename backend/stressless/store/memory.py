@@ -98,6 +98,9 @@ class MemoryStore(UserStore):
 
     def reports_last_day(self) -> int:
         return len(self._reports)
+
+    def discard_report(self, kind: str, period_start: date) -> None:
+        self._reports.pop((kind, period_start), None)
     def media_events(self) -> List[Dict[str, Any]]:
         return [copy.deepcopy(row) for row in self._media.values()]
 

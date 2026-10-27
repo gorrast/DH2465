@@ -121,7 +121,7 @@ class Engine:
 
     def week(self, end: date, history_days: Optional[int] = None) -> Dict[str, Any]:
         end = min(end, self.ds.today)
-        return weekly_insight(self.ds, end, habits=self.habits(end, history_days), cache=self._cache, history_days=history_days)
+        return weekly_insight(self.ds, end, weeks=4, habits=self.habits(end, history_days), cache=self._cache, history_days=history_days)
 
     def model_summary(self, upto: date, history_days: Optional[int] = None) -> ModelSummary:
         return A.summary(self.fit_for(min(upto, self.ds.today), history_days))

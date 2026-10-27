@@ -38,7 +38,7 @@ const today = href.split('/')[2];
 const views = [
   ['daily', `/daily/${today}`, '.ah-report'],
   ['daily-reveal', `/daily/${today}?reveal=1`, '[data-tour="reveal"]'],
-  ['weekly', '/weekly', '.c-heat'],
+  ['weekly', '/weekly', '.weekly-calendar-cell'],
   ['connect', '/connect', '.media-source-bar'],
   ['account', '/account', '#account-details'],
   ['data', '/data', '.v-data-conn'],

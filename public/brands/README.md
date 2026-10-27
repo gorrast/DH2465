@@ -9,3 +9,9 @@ no remote image service, API key or PNG upload is required.
 
 The TMDB mark is also supplied by Simple Icons and is displayed in the Netflix metadata credits in unchanged
 monochrome form. TMDB catalogue posters require a server-side API Read Access Token, as described in README.
+
+The Weekly heading also uses locally bundled Simple Icons marks for Instagram, TikTok, Discord,
+Reddit, WhatsApp, Snapchat, Google Chrome, and Facebook, alongside the existing media marks.
+Package IDs are mapped in `lib/app-brands.ts`; unknown apps use initials. Apps from the user's
+app-usage and app heart-rate rankings appear in the decorative row. When neither ranking has data,
+a labeled set of seven illustrative app logos is displayed instead; no statistics are fabricated.

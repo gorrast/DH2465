@@ -207,6 +207,12 @@ class SupabaseStore(UserStore):
             "p_provider": provider, "p_events": events, "p_documents": documents,
         }, timeout=120.0)
 
+    def clear_media(self, provider: str, document_kind: str) -> None:
+        # RLS limits both deletes to the caller's rows; the document goes first, so a half-finished disconnect
+        # leaves the user disconnected rather than connected with missing history.
+        self._call("DELETE", "/media_documents", params={"kind": "eq." + document_kind})
+        self._call("DELETE", "/media_events", params={"provider": "eq." + provider})
+
     def pending_netflix_artwork(self, limit: int = 200) -> List[Dict[str, Any]]:
         return self._call("GET", "/media_events", params={
             "select": "id,title,source", "provider": "eq.netflix", "source->>artwork_query": "not.is.null",

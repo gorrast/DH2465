@@ -40,8 +40,22 @@ begin
                                        start_at, end_at, start_offset_min, end_offset_min, payload)
       values (u, conn, 'health_connect', 'sleep_session', 'hc-' || u, 'com.example.watch',
               '2026-10-13 21:30+00', '2026-10-14 05:30+00', 120, 120, '{"stages": []}');
-    insert into public.sleep_nights (user_id, night_date, source, utc_offset_min, asleep_min, score)
-      values (u, '2026-10-13', 'health_connect', 120, 450, 80);
+    insert into public.source_records (user_id, connection_id, source, data_type, source_record_id, data_origin,
+                                       start_at, end_at, value, unit)
+      values (u, conn, 'screen_time', 'app_usage',
+              case when u = 'aaaaaaaa-0000-4000-8000-00000000000a' then 'com.acme.chat:1000' else 'com.acme.mail:1000' end,
+              'com.acme',
+              date_trunc('day', now()) + interval '8 hours',
+              date_trunc('day', now()) + interval '8 hours 30 minutes', 30, 'min');
+    insert into public.source_records (user_id, connection_id, source, data_type, source_record_id, start_at, value, unit)
+      values
+        (u, conn, 'health_connect', 'heart_rate', 'hr-' || u, date_trunc('day', now()) + interval '8 hours 15 minutes', 72, 'bpm'),
+        (u, conn, 'health_connect', 'heart_rate', 'hr-rise-' || u, date_trunc('day', now()) + interval '8 hours 20 minutes', 90, 'bpm');
+    insert into public.media_events (user_id, id, provider, occurred_at, title, creator, minutes)
+      values (u, 'spotify-play-' || u, 'spotify',
+              date_trunc('day', now()) + interval '8 hours 30 minutes', 'Get Moving', 'The Example', 30);
+    insert into public.sleep_nights (user_id, night_date, source, utc_offset_min, asleep_min, score, resting_hr)
+      values (u, current_date - 1, 'health_connect', 120, 450, 80, 60);
     insert into public.heart_rate_days (user_id, day, source, utc_offset_min, bpm, worn_minutes)
       values (u, '2026-10-13', 'health_connect', 120, array_fill(60::smallint, array[1440]), 1440);
     insert into public.daily_activity (user_id, day, source, utc_offset_min, steps, hourly_steps)
@@ -49,8 +63,15 @@ begin
     insert into public.daily_metrics (user_id, day, metric_key, value, source)
       values (u, '2026-10-13', 'test.minutes', 42, 'manual');
     insert into public.calendar_events (user_id, provider, provider_event_id, title, category, starts_at, ends_at, guests)
-      values (u, 'google_calendar', 'cal:ev-' || u, 'Standup', 'meeting', '2026-10-13 07:00+00', '2026-10-13 07:30+00',
+      values (u, 'google_calendar', 'cal:ev-' || u, 'Standup', 'meeting',
+              date_trunc('day', now()) + interval '8 hours', date_trunc('day', now()) + interval '8 hours 30 minutes',
               '[{"response_status": "accepted"}, {"response_status": "needsAction"}]');
+    insert into public.calendar_events (user_id, provider, provider_event_id, title, category, starts_at, ends_at)
+      values
+        (u, 'google_calendar', 'focus-google-' || u, 'Deep Work', 'focus',
+         date_trunc('day', now()) + interval '8 hours', date_trunc('day', now()) + interval '8 hours 30 minutes'),
+        (u, 'manual', 'focus-manual-' || u, 'Deep Work', 'focus',
+         date_trunc('day', now()) + interval '8 hours', date_trunc('day', now()) + interval '8 hours 30 minutes');
   end loop;
 end $$;
 
@@ -58,7 +79,9 @@ end $$;
 do $$
 declare a constant uuid := 'aaaaaaaa-0000-4000-8000-00000000000a';
 begin
-  assert (select attendee_count from public.calendar_events where user_id = a) = 2, 'attendee_count is not computed';
+  assert (
+    select attendee_count = 2 from public.calendar_events where user_id = a and category = 'meeting'
+  ), 'attendee_count is not computed';
 
   perform public.schema_test_expect(format(
     $q$insert into public.source_records (user_id, source, data_type, source_record_id, start_at)
@@ -94,11 +117,75 @@ declare
   n integer;
 begin
   assert (select auth.uid()) = 'aaaaaaaa-0000-4000-8000-00000000000a'::uuid, 'not signed in as A';
+  assert (
+    select count(*) = 1
+      and min(app_name) = 'Chat'
+      and min(package_name) = 'com.acme.chat'
+      and min(gets_you_going_score) = 70.1
+      and min(avg_bpm) = 81
+      and min(peak_bpm) = 90
+      and min(total_minutes) = 30
+      and min(sessions_measured) = 1
+    from public.top_apps_by_heart_rate()
+  ), 'top apps by heart rate returned incorrect or cross-user data';
+  assert (
+    select count(*) = 2
+      and bool_or(event_title = 'Standup')
+      and min(gets_you_going_score) = 70.1
+      and min(avg_bpm) = 81
+      and min(hr_sample_count) = 2
+    from public.top_calendar_events_by_heart_rate()
+  ), 'top calendar events by heart rate returned incorrect or cross-user data';
+  assert (
+    select count(*) = 1
+      and min(song_title) = 'Get Moving'
+      and min(artist_name) = 'The Example'
+      and min(gets_you_going_score) = 70.1
+      and min(avg_bpm) = 81
+      and min(peak_bpm) = 90
+      and min(bpm_above_resting) = 21
+      and min(times_played) = 1
+    from public.top_spotify_tracks_by_gets_you_going()
+  ), 'top Spotify tracks by gets-you-going score returned incorrect or cross-user data';
+  assert (
+    select count(*) = 1
+      and min(song_title) = 'Get Moving'
+      and min(artist_name) = 'The Example'
+      and min(gets_you_going_score) = 70.1
+      and min(avg_bpm) = 81
+      and min(peak_bpm) = 90
+      and min(bpm_above_resting) = 21
+      and min(times_played) = 1
+    from public.top_spotify_track_gets_you_going_this_week()
+  ), 'weekly top Spotify gets-you-going song returned incorrect or cross-user data';
+  assert (
+    select count(*) = 2
+      and count(*) filter (where event_category = 'focus') = 1
+      and min(event_title) filter (where event_category = 'focus') = 'Deep Work'
+      and min(avg_bpm) filter (where event_category = 'focus') = 81
+      and min(hr_variability_bpm) filter (where event_category = 'focus') = 9
+      and min(hr_sample_count) filter (where event_category = 'focus') = 2
+      and min(screen_minutes) filter (where event_category = 'focus') = 30
+      and min(app_sessions) filter (where event_category = 'focus') = 1
+    from public.flow_state_candidates()
+  ), 'Flow State did not deduplicate equivalent calendar events or rank heart-rate and screen-use metrics';
+  assert (
+    select count(*) = 1 and min(archetype) = 'Focus Cadence'
+    from public.cardiac_wrapped()
+  ), 'Cardiac Wrapped returned incorrect focus cadence data';
+  assert not exists (select 1 from public.meeting_hangover_index()),
+    'Meeting Hangover returned results without pre- and post-meeting heart-rate samples';
 
   foreach t in array array['provider_connections', 'connection_streams', 'source_records', 'sleep_nights',
                            'heart_rate_days', 'daily_activity', 'daily_metrics', 'calendar_events', 'profiles'] loop
     execute format('select count(*) from public.%I', t) into n;
-    assert n = 1, format('%s: A sees %s rows, expected only their own 1', t, n);
+    if t = 'source_records' then
+      assert n = 4, format('%s: A sees %s rows, expected only their own 4', t, n);
+    elsif t = 'calendar_events' then
+      assert n = 3, format('%s: A sees %s rows, expected only their own 3', t, n);
+    else
+      assert n = 1, format('%s: A sees %s rows, expected only their own 1', t, n);
+    end if;
   end loop;
 
   foreach t in array array['sources', 'data_types', 'metric_definitions'] loop

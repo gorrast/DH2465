@@ -199,6 +199,7 @@ export function Shell({ children }: { children: ReactNode }) {
               <summary className="rail-link" aria-label="Explore the demo" title="Explore the demo"><Icon name="lab" size={18} /><span className="rail-label">Explore the demo</span></summary>
               <Link className="rail-link" href="/lab" title="Under the hood"><Icon name="lab" size={18} /><span className="rail-label">Under the hood</span></Link>
               <Link className="rail-link" href="/media" title="Media lab"><Icon name="music" size={18} /><span className="rail-label">Media lab</span></Link>
+              <Link className="rail-link" href="/fun-statistics" title="Fun statistics"><Icon name="sparkles" size={18} /><span className="rail-label">Fun statistics</span></Link>
             </details>
           </div>
           <div className="rail-foot">

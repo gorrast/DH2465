@@ -224,6 +224,22 @@ class AttributionTests(unittest.TestCase):
 
 
 class HabitsTests(unittest.TestCase):
+    def test_weekly_meeting_load_excludes_nights_before_four_weeks(self):
+        from stressless.engine.pipeline import Engine
+        from unittest.mock import patch
+
+        start = date(2026, 1, 5)
+        end = start + timedelta(days=42)
+        nights = [night(start + timedelta(days=i), 20 if i < 14 else 80) for i in range(42)]
+        ds = Dataset(persona=P, seed=0, source="demo", start=start, end=end, today=end, nights=nights)
+        engine = Engine(ds)
+        with patch.object(engine, "habits", return_value=[]):
+            result = engine.week(end)
+        self.assertEqual(result["weeks"], 4)
+        calm = result["buckets"][0]
+        self.assertEqual(calm.mean_score, 80)
+        self.assertEqual(calm.n, 20)  # four weeks, five work nights each
+
     def test_stratified_effect_removes_weekend_confound(self):
         # weekend nights score +15; a "habit" that only happens on weekends should show ~0 stratified effect
         start = date(2026, 1, 5)

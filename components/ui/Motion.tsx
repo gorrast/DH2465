@@ -1,7 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode, type HTMLAttributes } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type HTMLAttributes } from 'react';
+import { gsap } from 'gsap';
+import { SplitText } from 'gsap/SplitText';
+
 import { motion, useInView, useReducedMotion, stagger, type HTMLMotionProps } from 'motion/react';
+
+gsap.registerPlugin(SplitText);
 
 export const calmTransition = { duration: 0.6, ease: [0.22, 0.61, 0.36, 1] as const };
 
@@ -59,24 +64,44 @@ export function MetricGroup({ children, paused }: { children: ReactNode; paused:
     variants={reduced || paused ? undefined : quietGroup}>{children}</motion.div>;
 }
 
-/** Shared line reveal: readable initial HTML, one entrance per heading. */
-export function RevealHeading({ as: Heading = 'h2', lines, children, paused = false, ...props }: HTMLAttributes<HTMLHeadingElement> & {
-  as?: 'h1' | 'h2' | 'h3'; lines?: ReactNode[]; paused?: boolean;
+/** GSAP's masked line reveal, shared by Daily, Weekly, Connect Your Data and sign-in. */
+export function RevealHeading({ as: Heading = 'h2', lines, children, paused = false, duration = 1.2, ...props }: HTMLAttributes<HTMLHeadingElement> & {
+  as?: 'h1' | 'h2' | 'h3'; lines?: ReactNode[]; paused?: boolean; duration?: number;
 }) {
   const ref = useRef<HTMLHeadingElement>(null);
   const entered = useInView(ref, { once: true, amount: 0.25 });
   const reduced = useReducedMotion();
-  const [mounted, setMounted] = useState(false);
-  const [finished, setFinished] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
-  useEffect(() => { if (reduced || paused) setFinished(true); }, [reduced, paused]);
-  const content = lines || [children];
-  const instant = !mounted || reduced || paused || finished;
-  return <Heading {...props} ref={ref} onFocusCapture={(event) => { setFinished(true); props.onFocusCapture?.(event); }}>
-    {content.map((line, i) => <motion.span key={i} className="headline-line" initial={false}
-      variants={{ visible: { opacity: 1, y: 0 }, waiting: { opacity: 0.05, y: 24 }, reveal: { opacity: [0.05, 1], y: [24, 0] } }}
-      animate={instant ? 'visible' : entered ? 'reveal' : 'waiting'}
-      transition={{ ...calmTransition, duration: instant || !entered ? 0 : 1.2, delay: instant || !entered ? 0 : i * 0.25 }}
-      onAnimationComplete={(state) => { if (state === 'reveal' && i === content.length - 1) setFinished(true); }}>{line}</motion.span>)}
+  const finished = useRef(false);
+  const animation = useRef<gsap.core.Tween | null>(null);
+  useLayoutEffect(() => {
+    if (paused || reduced) { finished.current = true; return; }
+    if (!entered || finished.current || !ref.current) return;
+    const heading = ref.current;
+    const context = gsap.context(() => {
+      const targets = heading.querySelectorAll('.headline-line');
+      // Keep provider logos and their flex layout intact; GSAP animates that entire line.
+      if (heading.querySelector('.media-heading-content')) {
+        animation.current = gsap.from(targets, { opacity: 0, y: 24, duration, stagger: 0.12, ease: 'power3.out', onComplete: () => { finished.current = true; } });
+        return;
+      }
+      SplitText.create(targets, {
+        type: 'lines', mask: 'lines', linesClass: 'gsap-heading-line', autoSplit: true, aria: 'none',
+        onSplit(split) {
+          animation.current = gsap.from(split.lines, {
+            yPercent: 110, duration, stagger: 0.14, ease: 'power3.out',
+            onComplete: () => { finished.current = true; split.revert(); },
+          });
+          return animation.current;
+        },
+      });
+    }, heading);
+    return () => { context.revert(); animation.current = null; };
+  }, [entered, paused, reduced, duration]);
+  return <Heading {...props} ref={ref} onFocusCapture={event => {
+    finished.current = true;
+    animation.current?.progress(1);
+    props.onFocusCapture?.(event);
+  }}>
+    {(lines || [children]).map((line, i) => <span key={i} className="headline-line">{line}</span>)}
   </Heading>;
 }

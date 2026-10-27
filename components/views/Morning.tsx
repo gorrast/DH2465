@@ -107,9 +107,8 @@ function Finding({ cause: c, date, expanded, onSelect }: { cause: any; date: str
   </li>;
 }
 
-function MorningReport({ report, day, morning, veiled, onReveal }: { report: any; day: any; morning: string; veiled: boolean; onReveal: () => void }) {
+function MorningReport({ report, day, veiled, onReveal, motionPaused, onToggleMotion }: { report: any; day: any; veiled: boolean; onReveal: () => void; motionPaused: boolean; onToggleMotion: () => void }) {
   const { meta, historyDays, setHistoryDays } = useApp();
-  const [motionPaused, setMotionPaused] = useState(false);
   const heroRef = useRef<HTMLElement>(null);
   const reducedMotion = useReducedMotion();
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ['start start', 'end -35%'] });
@@ -138,7 +137,7 @@ function MorningReport({ report, day, morning, veiled, onReveal }: { report: any
         <RevealHeading as="h1" id="morning-title" paused={motionPaused} lines={['Your night,', <em key="light">in a new light.</em>]} />
         <div className="ah-score-stage"><SleepScore report={report} /></div>
       </div>
-      <div className="ah-hero-controls"><a className="ah-text-link" href="#night-explanation">Explore your night <span aria-hidden="true">↓</span></a><button className="ah-text-link ah-motion-toggle" type="button" aria-pressed={motionPaused} onClick={() => setMotionPaused(paused => !paused)}>Pause motion</button></div>
+      <div className="ah-hero-controls"><a className="ah-text-link" href="#night-explanation">Explore your night <span aria-hidden="true">↓</span></a><button className="ah-text-link ah-motion-toggle" type="button" aria-pressed={motionPaused} onClick={onToggleMotion}>Pause motion</button></div>
     </section>
 
     <RevealSection paused={motionPaused} className="ah-section ah-sleep-summary" id="night-explanation" tabIndex={-1}>
@@ -152,10 +151,6 @@ function MorningReport({ report, day, morning, veiled, onReveal }: { report: any
       {veiled ? <ActionButton className="btn btn-primary" data-tour="reveal" onClick={onReveal}>Explore the explanation<Icon name="chevron-right" size={16} /></ActionButton> : null}
     </RevealSection>
 
-    {!veiled ? <RevealSection paused={motionPaused} className="ah-section ah-plan">
-      <header className="ah-section-heading"><div><span className="ah-eyebrow">One change for tonight</span><RevealHeading paused={motionPaused}>Protect space for yourself.</RevealHeading></div></header>
-      {report.suggestions?.[0] ? <TonightAction key={report.suggestions[0].id} suggestion={report.suggestions[0]} morning={morning} paused={motionPaused} /> : <p className="secondary">No suggestion for tonight yet. Review your activities below to keep your patterns up to date.</p>}
-    </RevealSection> : null}
 
     {!veiled ? <RevealSection paused={motionPaused} className="ah-section ah-findings" data-tour="causes">
       <header className="ah-section-heading"><div><span className="ah-eyebrow">Connect the dots</span><RevealHeading paused={motionPaused}>The day behind your night.</RevealHeading></div><p>Patterns from your own history.<br />Associations, never certainties.</p></header>
@@ -195,6 +190,7 @@ export function MorningView({ date, reveal }: { date?: string; reveal?: boolean 
   const { today, meta, go, historyDays } = useApp();
   const morning = date || today;
   const [veiled, setVeiled] = useState(!!reveal);
+  const [motionPaused, setMotionPaused] = useState(false);
   useEffect(() => setVeiled(!!reveal), [reveal]);
   const load = useLoad(async () => {
     const report = await api.get('/api/report/' + morning + (historyDays ? '?history_days=' + historyDays : ''));
@@ -203,7 +199,16 @@ export function MorningView({ date, reveal }: { date?: string; reveal?: boolean 
   }, [morning, historyDays, meta.persona.key]);
   return <div className="after-hours">
     <header className="ah-page-header view-head"><div><span className="ah-eyebrow">Daily Tab</span><p>{fmt.dayLong(morning)}<span className="ah-demo-label">{meta.source === 'demo' ? 'Simulated example' : 'Your data'}</span></p></div><DateNav label={morning === today ? 'This morning' : fmt.day(morning)} prevHref={'/daily/' + dates.addDays(morning, -1)} nextHref={'/daily/' + dates.addDays(morning, 1)} prevDisabled={!!meta.start && morning <= dates.addDays(meta.start, 1)} nextDisabled={morning >= today} extra={morning !== today ? <button className="btn btn-sm" onClick={() => go('/daily/' + today)}>Today</button> : null} /></header>
-    {load.loading ? <div className="ah-loading" aria-busy="true"><Skeleton height={400} /><p>Preparing your daily brief…</p></div> : load.error || !load.data ? <section className="ah-empty" role="alert"><span className="ah-eyebrow">Your daily brief</span><RevealHeading as="h1">A moment out of reach.</RevealHeading><p>{load.error?.message || 'We could not load this report.'}</p><ActionButton className="btn btn-primary" onClick={load.reload}>Try again</ActionButton></section> : <MorningReport key={`${morning}-${historyDays}-${meta.persona.key}`} report={load.data.report} day={load.data.day} morning={morning} veiled={veiled} onReveal={() => setVeiled(false)} />}
-    <section id="reality-check" className="ah-section"><RealityView embedded onAnswered={load.reload} /></section>
+    {load.loading ? <div className="ah-loading" aria-busy="true"><Skeleton height={400} /><p>Preparing your daily brief…</p></div> : load.error || !load.data ? <section className="ah-empty" role="alert"><span className="ah-eyebrow">Your daily brief</span><RevealHeading as="h1">A moment out of reach.</RevealHeading><p>{load.error?.message || 'We could not load this report.'}</p><ActionButton className="btn btn-primary" onClick={load.reload}>Try again</ActionButton></section> : <MorningReport key={`${morning}-${historyDays}-${meta.persona.key}`} report={load.data.report} day={load.data.day} veiled={veiled} onReveal={() => setVeiled(false)} motionPaused={motionPaused} onToggleMotion={() => setMotionPaused(paused => !paused)} />}
+    <div className={'ah-section daily-actions-grid' + (veiled ? ' is-single' : '')}>
+      <section id="reality-check" className="daily-reality-check" aria-label="Reality check"><RealityView embedded onAnswered={load.reload} /></section>
+      {!veiled ? <section className="daily-protect-space" aria-labelledby="protect-space-title">
+        <header className="view-head"><div><div className="eyebrow">One change for tonight</div><RevealHeading id="protect-space-title" paused={motionPaused}>Protect your space</RevealHeading></div></header>
+        {load.loading ? <Skeleton height={180} /> : load.data ? load.data.report.suggestions?.[0]
+          ? <TonightAction key={`${morning}-${load.data.report.suggestions[0].id}`} suggestion={load.data.report.suggestions[0]} morning={morning} paused={motionPaused} />
+          : <p className="secondary">No suggestion for tonight yet. Review your activities to keep your patterns up to date.</p>
+          : <div className="card stack"><p className="secondary">Your suggestion will appear when your daily report is available.</p><button className="btn" type="button" onClick={load.reload}>Retry report</button></div>}
+      </section> : null}
+    </div>
   </div>;
 }

@@ -214,3 +214,24 @@
 .after-hours .c-cursor { stroke: var(--recovery); }
 
 .ah-section:focus, .section-snap-boundary:focus { outline-offset: 8px; }
+
+/* Confirm the day and protect tonight in two equal columns. */
+.daily-actions-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(24px, 4vw, 56px); align-items: start; }
+.daily-actions-grid > section { min-width: 0; }
+.daily-actions-grid.is-single { grid-template-columns: minmax(0, 1fr); }
+.daily-actions-grid .view-head { align-items: flex-start; min-height: 116px; margin-bottom: 24px; }
+.daily-actions-grid h2 { font-size: clamp(30px, 3.2vw, 44px); line-height: 1.15; margin: 8px 0 0; }
+.daily-reality-check .v-reality > .grid { grid-template-columns: minmax(0, 1fr); }
+.daily-reality-check .v-reality > .grid > .span-2 { grid-column: auto; }
+.daily-reality-check .v-reality-intro { align-items: flex-start; }
+.daily-reality-check .v-reality-intro .icon { flex-shrink: 0; margin-top: 3px; }
+.daily-protect-space .ah-tonight { margin: 0; }
+@media (max-width: 850px) {
+  .daily-actions-grid { grid-template-columns: minmax(0, 1fr); gap: 48px; }
+  .daily-actions-grid .view-head { min-height: 0; }
+}
+.daily-protect-space .ah-tonight { max-width: none; padding: 24px; text-align: left; background: var(--card); border: 1px solid var(--hairline); border-radius: 20px; }
+.daily-protect-space .ah-tonight-icon { justify-content: flex-start; margin-bottom: 16px; }
+.daily-protect-space .ah-tonight h3 { font-size: clamp(23px, 2.4vw, 30px); line-height: 1.4; }
+.daily-protect-space .ah-tonight-copy > p { margin-inline: 0; }
+.daily-protect-space .ah-tonight:not(.is-saved) .ah-tonight-copy > .ah-eyebrow { display: none; }

@@ -22,6 +22,7 @@ export const NAV: NavItem[] = [
   { name: 'lab', label: 'Under the hood', icon: 'lab', key: '8', title: 'Under the hood' },
   { name: 'calendar', label: 'Calendar', icon: 'calendar', key: '9', title: 'Calendar' },
   { name: 'media', label: 'Media lab', icon: 'music', key: '9', title: 'Media lab' },
+  { name: 'fun-statistics', label: 'Fun statistics', icon: 'sparkles', key: 'f', title: 'Fun statistics' },
 ];
 
 export function defaultHref(item: NavItem, today: string): string {

@@ -100,7 +100,7 @@ function displayAppName(packageName: string): string {
   return cleaned ? cleaned.replace(/\b[a-z]/g, (letter) => letter.toUpperCase()) : packageName;
 }
 
-export function FunStatisticsView() {
+export function FunStatisticsView({ embedded = false }: { embedded?: boolean }) {
   const [apps, setApps] = useState<AppUsage[]>([]);
   const [appsLoaded, setAppsLoaded] = useState(false);
   const [appsPending, setAppsPending] = useState(false);
@@ -312,7 +312,7 @@ export function FunStatisticsView() {
 
   return (
     <>
-      <ViewHead eyebrow="Fun statistics" title="Fun statistics" />
+      {embedded ? <h2>Your week in numbers</h2> : <ViewHead eyebrow="Weekly" title="Your week in numbers" />}
       <section className="card stack" aria-live="polite">
         <button className="btn btn-primary" type="button" onClick={showTopApps} disabled={appsPending}>
           {appsPending ? 'Loading...' : 'Show my top five apps from the last week'}

@@ -1,8 +1,3 @@
-import type { Metadata } from 'next';
-import { RealityView } from '@/components/views/Reality';
+import { redirect } from 'next/navigation';
 
-export const metadata: Metadata = { title: 'Reality check' };
-
-export default function Page() {
-  return <RealityView />;
-}
+export default function Page() { redirect('/daily#reality-check'); }

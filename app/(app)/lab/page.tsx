@@ -1,8 +1,3 @@
-import type { Metadata } from 'next';
-import { LabView } from '@/components/views/Lab';
+import { redirect } from 'next/navigation';
 
-export const metadata: Metadata = { title: 'Under the hood' };
-
-export default function Page() {
-  return <LabView />;
-}
+export default function Page() { redirect('/data'); }

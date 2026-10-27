@@ -8,7 +8,7 @@ import { dates, fmt } from '@/lib/format';
 import { DataTable } from '../charts/basic';
 import { EffectBars } from '../charts/analysis';
 import { useApp } from '../shell/AppContext';
-import { ErrorCard, Skeleton, ViewHead, useLoad } from './common';
+import { ErrorCard, Skeleton, useLoad } from './common';
 
 const GROUPS = ['all', 'good', 'bad', 'calendar', 'workout', 'social', 'travel', 'routine'];
 let filterMemo = 'all'; // the filter survives navigating away and back, as before
@@ -23,8 +23,6 @@ export function HabitsView() {
   const items = data ? data.habits.filter((h: any) => filter === 'all' || h.direction === filter || h.group === filter) : [];
   return (
     <>
-      <ViewHead eyebrow="Habits" title="Your patterns, ranked by effect" />
-      <nav className="view-tabs" aria-label="Insights"><Link href="/week" >Overview</Link><Link href="/habits" aria-current="page">Your patterns</Link></nav>
       <div className="v-habits stack">
         {load.loading ? <Skeleton height={200} /> : load.error || !data ? <ErrorCard error={load.error!} onRetry={load.reload} view="habits" /> : (
           <>
@@ -71,7 +69,7 @@ export function HabitsView() {
                     {h.example_dates && h.example_dates.length ? (
                       <div className="row tiny">
                         <span className="muted">Recent:</span>
-                        {h.example_dates.slice(-4).map((d: string) => <Link key={d} href={'/morning/' + dates.addDays(d, 1)}>{fmt.day(d)}</Link>)}
+                        {h.example_dates.slice(-4).map((d: string) => <Link key={d} href={'/daily/' + dates.addDays(d, 1)}>{fmt.day(d)}</Link>)}
                       </div>
                     ) : null}
                   </div>

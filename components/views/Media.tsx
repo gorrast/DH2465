@@ -322,13 +322,13 @@ export function MediaView() {
   const totalGamesMinutes = games.reduce((sum, game) => sum + game.minutes, 0);
 
   return <div className={'v-media media-world' + (paused ? ' is-motion-paused' : '')}>
-    <header className="media-page-header"><span className="eyebrow">Your media journal</span><button className="media-motion-toggle" aria-pressed={paused} onClick={() => setPaused(!paused)}><Icon name={paused ? 'play' : 'pause'} size={13} />{paused ? 'Resume motion' : 'Pause motion'}</button></header>
-    <section className="media-hero" aria-labelledby="media-title">
+    <header className="media-page-header"><span className="eyebrow">Connect Your Data</span><button className="media-motion-toggle" aria-pressed={paused} onClick={() => setPaused(!paused)}><Icon name={paused ? 'play' : 'pause'} size={13} />{paused ? 'Resume motion' : 'Pause motion'}</button></header>
+    <section data-tour="connections" className="media-hero" aria-labelledby="media-title">
       <div className="media-hero-glow" aria-hidden="true" />
       <MediaLogoBubbles />
       <span className="media-kicker">Soundtracks. Stories. Other worlds.</span>
-      <RevealHeading as="h1" id="media-title" paused={paused} lines={['A little more', <em key="you">of your world.</em>]} />
-      <p>The songs on repeat. The next episode.<br />The games you come back to. A place for it all.</p>
+      <RevealHeading as="h1" id="media-title" paused={paused} lines={['Connect your data.', <em key="you">See your world.</em>]} />
+      <p>The songs on repeat. The next episode.<br />The games you come back to. Import or sync them here.</p>
       <span className="media-optional-note">Start with one source, or just explore. Every connection is optional.</span>
       <nav className="media-jump-links" aria-label="Media sections">{(['spotify', 'netflix', 'youtube', 'steam'] as const).map((provider, index) => <a href={'#media-' + provider} key={provider}><span>0{index + 1}</span><Icon name={icons[provider]} size={17} />{names[provider]}<Icon name="arrow-down" size={14} /></a>)}</nav>
       <a className="media-scroll-hint" href="#media-spotify">Explore your collection <Icon name="arrow-down" size={15} /></a>

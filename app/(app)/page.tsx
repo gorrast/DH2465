@@ -1,8 +1,3 @@
-import type { Metadata } from 'next';
-import { HomeView } from '@/components/views/Home';
+import { redirect } from 'next/navigation';
 
-export const metadata: Metadata = { title: 'Home' };
-
-export default function Page() {
-  return <HomeView />;
-}
+export default function Page() { redirect('/daily'); }

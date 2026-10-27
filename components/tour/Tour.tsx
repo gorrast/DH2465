@@ -1,23 +1,18 @@
 'use client';
 /* Presenter tour: ten steps in pitch order, spotlighting the [data-tour] anchors the views render (SPEC §9.4). */
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
-import { dates } from '@/lib/format';
 import type { ReplayControls, TourControls } from '../shell/AppContext';
 
 interface Step { title: string; text: string; href: string; anchor: string; onEnter?: () => void }
 
 function buildSteps(today: string, replay: MutableRefObject<ReplayControls | null>): Step[] {
   return [
-    { title: 'A score. No why.', text: 'This is what a wearable gives you this morning: a number and a word. The watch knows how the night went — not what happened yesterday.', href: '/morning/' + today + '?reveal=1', anchor: 'watch-card' },
-    { title: 'Why?', text: 'One click. StressLess matches the night to yesterday’s calendar, Maps history and heart rate, and names the three most likely causes — with evidence and a suggestion you can add to the calendar.', href: '/morning/' + today + '?reveal=1', anchor: 'causes', onEnter: () => { const b = document.querySelector<HTMLElement>('[data-tour="reveal"]'); if (b) b.click(); } },
-    { title: 'The body rode the meetings', text: 'Watch the evening: after the late meeting the heart rate stays above the dotted line — your usual heart rate at that hour — until well past ten.', href: '/replay/' + dates.addDays(today, -1) + '?t=1020', anchor: 'timeline', onEnter: () => { setTimeout(() => { replay.current?.playRange(17 * 60, 23.5 * 60, 64); }, 400); } },
-    { title: 'No logging. Only confirmations.', text: 'The watch saw a workout the calendar did not know about. Answer once, and the pattern updates in front of you.', href: '/reality', anchor: 'inbox' },
-    { title: 'Patterns over weeks', text: 'Six weeks in: how meeting load, late finishes and evenings out relate to the sleep score — with sample sizes and intervals, not just averages.', href: '/week', anchor: 'buckets' },
-    { title: 'Change tomorrow', text: 'End tonight’s late meeting at 18:00 and the predicted score moves, with a likely range. The block you accepted a minute ago is already in the plan.', href: '/planner/' + today, anchor: 'prediction' },
-    { title: 'Same engine, different person', text: 'Open the persona menu and switch to Robin: different life, different first cause. The engine is the same; the person is not.', href: '/morning/' + today, anchor: 'persona' },
-    { title: 'Under the hood', text: 'Because this is a simulation, we can check the engine against the truth we planted: rank agreement, out-of-sample skill, and a planted null factor to catch false alarms.', href: '/lab', anchor: 'validation' },
-    { title: 'What the calendar can’t see', text: 'Alcohol, caffeine, screens, sleep debt, illness, unworn nights. The honest answer is on the screen, not hidden.', href: '/lab', anchor: 'challenges' },
-    { title: 'The watch measures. The calendar explains.', text: 'Back to this morning: a score with a why, and one concrete change already on the calendar for tonight.', href: '/morning/' + today, anchor: 'suggestion' },
+    { title: 'Your daily brief', text: 'Start with last night’s sleep score, then explore how your day may have shaped your night.', href: '/daily/' + today, anchor: 'watch-card' },
+    { title: 'Connect the dots', text: 'Explore patterns from your calendar, location and heart rate. These are associations from your history, never certainties.', href: '/daily/' + today, anchor: 'causes' },
+    { title: 'Confirm your activities', text: 'When the signals disagree, confirm or deny an activity. Your answers update the patterns behind your report.', href: '/daily/' + today + '#reality-check', anchor: 'inbox' },
+    { title: 'Your weekly patterns', text: 'Weekly brings your statistics and sleep patterns together. Explore meeting load, recent nights and recurring activities.', href: '/weekly', anchor: 'buckets' },
+    { title: 'Connect your world', text: 'Import your media exports or use optional sync. Each source has its own setup guide and works independently.', href: '/connect', anchor: 'connections' },
+    { title: 'Your data, your choice', text: 'See what StressLess reads, why it is used, and how to delete your data. Account and appearance controls live in My Account.', href: '/data', anchor: 'privacy' },
   ];
 }
 

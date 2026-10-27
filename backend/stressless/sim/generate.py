@@ -9,7 +9,7 @@ import logging
 import random
 import statistics
 from datetime import date, datetime, timedelta
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
 
 from ..engine.features import day_features
 from ..models import (CalendarEvent, Dataset, DayFeatures, HeartRateDay, Persona, SimTruth, SimTruthEvent,
@@ -335,15 +335,21 @@ def realised_truth(persona: Persona, nights: Sequence[SimTruthNight]) -> Tuple[D
 # main entry
 # --------------------------------------------------------------------------- #
 def generate_dataset(persona_key: str = "alex", seed: int = 7, days: int = 70, anchor: Optional[date] = None,
-                     showcase: bool = True) -> Dataset:
-    persona = get_persona(persona_key)
+                     showcase: bool = True, persona: Optional[Persona] = None,
+                     hidden_hook: Optional[Callable[[date, DayFeatures, Dict[str, Any]], None]] = None,
+                     calendar: Optional[Callable[..., Tuple[List[CalendarEvent], List[SimTruthEvent], Dict[date, str]]]] = None
+                     ) -> Dataset:
+    """For tools/seed_demo.py: ``persona`` replaces the named one, ``calendar(persona, start, end, today, rng)``
+    replaces the generated week (and the coverage fix-up, which adds the personas' own events), and
+    ``hidden_hook(day, features, hidden)`` may change a day's hidden factors before the day is simulated."""
+    persona = persona or get_persona(persona_key)
     rng = random.Random("%s-%d" % (persona_key, seed))
     today = anchor or today_local(persona.tz)
     end = today - timedelta(days=1)
     start = end - timedelta(days=days - 1)
     end_cal = today + timedelta(days=7)
 
-    events, truth_events, day_kind = generate_events(persona, start, end_cal, today, rng)
+    events, truth_events, day_kind = (calendar or generate_events)(persona, start, end_cal, today, rng)
     book = Book(persona, events, truth_events, today)
     shell = _shell(persona, start, end, today)
     forced: Dict[str, Any] = {"protected_window": set(), "illness_days": [], "unworn_night": None,
@@ -353,7 +359,8 @@ def generate_dataset(persona_key: str = "alex", seed: int = 7, days: int = 70, a
     else:
         i0 = rng.randint(10, days - 12)
         forced["illness_days"] = [start + timedelta(days=i0 + k) for k in range(3)]
-    ensure_coverage(book, shell, start, end, rng, forced["protected_window"])
+    if calendar is None:
+        ensure_coverage(book, shell, start, end, rng, forced["protected_window"])
     events.sort(key=lambda e: e.start)
 
     visits, unbooked_ids = generate_visits(
@@ -376,6 +383,8 @@ def generate_dataset(persona_key: str = "alex", seed: int = 7, days: int = 70, a
         attended = book.attended_on(d)
         f = day_features(shell, d, events=attended)
         hidden = draw_hidden(rng, f, d, forced["illness_days"], d in bar_days)
+        if hidden_hook:
+            hidden_hook(d, f, hidden)
         hidden["debt"] = round(float(state.get("debt", 0.0)), 1)
         noise = draw_noise(rng)
         in_last7 = (end - d).days < 7

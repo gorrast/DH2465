@@ -80,11 +80,13 @@ def compute_sleep(persona: Persona, ratios: Dict[str, float], reg: Dict[str, flo
 
     shift = persona.weekend_shift_min if weekend else 0.0
     usual_bed = to_night_min(persona.usual_bedtime) + 0.6 * shift + 12.0 * noise["jitter"]
-    bed_delay = (20 * late_h + 45 * soc + 20 * wl + 20 * trv - 10 * prot + 20 * screens - 0.05 * debt + 14 * noise["bed"])
+    bed_delay = (20 * late_h + 45 * soc + 20 * wl + 20 * trv - 10 * prot + 20 * screens - 0.05 * debt + 14 * noise["bed"]
+                 + float(hidden.get("extra_bed_delay_min") or 0))   # set only by tools/seed_demo.py
     bedtime = usual_bed + bed_delay
     if last_event_end_min is not None:
         bedtime = max(bedtime, last_event_end_min + 30.0)
-    onset = max(3.0, 12 + 6 * late_h + 10 * wl + 3 * m3 + 4 * b2b + 5 * caff - 3 * wm - 6 * prot - 0.02 * debt + 4 * noise["onset"])
+    onset = max(3.0, 12 + 6 * late_h + 10 * wl + 3 * m3 + 4 * b2b + 5 * caff - 3 * wm - 6 * prot - 0.02 * debt + 4 * noise["onset"]
+                + float(hidden.get("extra_onset_min") or 0))                # set only by tools/seed_demo.py
     lam = max(0.2, 1.0 + 0.3 * alc + 0.3 * m3 + 0.5 * trv + 0.8 * ill - 0.3 * wm - 0.4 * prot)
     interrupt = poisson_invcdf(lam, noise["interrupt_u"])
     awake = max(0.0, 8 + 10 * interrupt - 4 * wm - 4 * prot - 0.03 * debt + 4 * noise["awake"])

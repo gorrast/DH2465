@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
 import { api } from '@/lib/api';
 import { Icon } from '../ui/Icon';
 import { ActionButton, RevealHeading, RevealSection } from '../ui/Motion';
@@ -12,7 +12,7 @@ type MediaEvent = { id: string; provider: string; occurred_at: string; title: st
 type SteamGame = { appid: number; name: string; minutes: number; recent_minutes: number; last_played: string | null; artwork_url?: string };
 type PosterPatch = { query: string; source: NonNullable<MediaEvent['source']> };
 type MediaDocument = { id: string; filename: string; kind: string; payload: { taste?: Record<string, string>; albums?: { artist: string; album: string }[]; shows?: { name: string; publisher: string }[]; saved_track_count?: number; followed_artist_count?: number; games?: SteamGame[]; snapshot_at?: string; origin?: string; steam_id?: string; username?: string; profile_url?: string; last_synced_at?: string; history_has_more?: boolean; pending?: { page: number } | null; top_artists?: { numUniqueArtists?: number }; top_tracks?: { numUniqueTracks?: number }; top_genres?: { totalNumGenres?: number } } };
-type LastfmStatus = { configured: boolean; message: string; user_id: string; username: string | null; profile_url: string | null };
+type LastfmStatus = { available: boolean; connected: boolean; configured: boolean; message: string; username: string | null; profile_url: string | null };
 type SteamStatus = { configured: boolean; message: string; user_id: string; steam_id: string | null };
 type MediaPayload = { events: MediaEvent[]; recent_by_provider: Record<string, MediaEvent[]>; total: number; totals: Record<string, { items: number; minutes: number }>; documents: MediaDocument[] };
 type HistoryPage = { events: MediaEvent[]; total: number };
@@ -127,9 +127,7 @@ function SteamSync({ busy, setBusy, disabled, onSynced }: { busy: boolean; setBu
     {status.error && <p className="media-error" role="alert">Couldn’t check Steam setup: {status.error.message} <button className="media-inline-button" onClick={status.reload}>Retry</button></p>}
     {status.data && <details className="media-sync-setup"><summary>{status.data.configured ? 'Steam account details' : 'How to enable Steam sync'}</summary><div>
       {status.data.configured ? <><p>{status.data.message}</p><p>SteamID64: <code>{status.data.steam_id}</code></p></> : <>
-        <p>This is optional. If you’re using your group’s shared app, ask the person running it to help. The current server setup connects one Steam account to one StressLess user; it does not connect each group member automatically.</p>
-        <ol className="media-setup-steps"><li>Sign in to <a href="https://steamcommunity.com/dev/apikey" target="_blank" rel="noreferrer">register a Steam Web API key ↗</a> and find your 17-digit SteamID64.</li><li>In your Steam profile’s privacy settings, make your profile and game details public so Steam can return your library and playtime. Only do this if you’re comfortable sharing them.</li><li>Configure the server using the local setup below, then return here and click Sync now. Future refreshes only need that button.</li></ol>
-        <details className="media-sync-setup"><summary>Running the app locally? Server configuration</summary><p>Add these values to <code>.env.local</code> on the server. Keep your API key there.</p><pre className="media-setup-code">{`STEAM_WEB_API_KEY=your_api_key\nSTEAM_ID=your_17_digit_steam_id\nSTEAM_SYNC_USER_ID=${status.data.user_id}`}</pre><p>Restart the backend, then reload this page. The user ID above belongs to your signed-in StressLess account.</p></details>
+        <p>Steam sync isn’t enabled for your account yet. You can still bring in your games with a JSON import below.</p>
       </>}
     </div></details>}
     {error && <p className="media-error" role="alert">{error}</p>}
@@ -189,8 +187,9 @@ function SteamCover({ game, rank }: { game: SteamGame; rank: number }) {
 
 function LastfmPanel({ data, disabled, onSynced }: { data: MediaPayload | null; disabled: boolean; onSynced: (data: MediaPayload) => void }) {
   const status = useLoad(() => api.get<LastfmStatus>('/api/media/lastfm'), []);
-  const [busy, setBusy] = useState<'latest' | 'older' | null>(null);
+  const [busy, setBusy] = useState<'latest' | 'older' | 'connect' | 'disconnect' | null>(null);
   const [error, setError] = useState('');
+  const [username, setUsername] = useState('');
   const state = data?.documents.find((doc) => doc.kind === 'lastfm_sync')?.payload;
   const events = data?.recent_by_provider.lastfm || emptyHistory;
   const total = data?.totals.lastfm?.items || 0;
@@ -205,22 +204,44 @@ function LastfmPanel({ data, disabled, onSynced }: { data: MediaPayload | null; 
     } catch (err) { setError(err instanceof Error ? err.message : 'Last.fm sync failed. Please try again.'); }
     finally { setBusy(null); }
   };
+  const connect = async (e: FormEvent) => {
+    e.preventDefault();
+    if (busy || !username.trim()) return;
+    setBusy('connect'); setError('');
+    try {
+      status.setData(await api.post<LastfmStatus>('/api/media/lastfm/connect', { username: username.trim() }));
+      setUsername('');
+      toast('Last.fm connected. Click Sync now to bring in your listening.', { kind: 'success' });
+    } catch (err) { setError(err instanceof Error ? err.message : 'Could not connect Last.fm. Please try again.'); }
+    finally { setBusy(null); }
+  };
+  const disconnect = async () => {
+    if (busy || !window.confirm('Disconnect ' + status.data?.username + ' from Last.fm? Your saved scrobbles in StressLess are deleted; nothing changes on Last.fm.')) return;
+    setBusy('disconnect'); setError('');
+    try {
+      const result = await api.post<MediaPayload & { status: LastfmStatus }>('/api/media/lastfm/disconnect');
+      status.setData(result.status);
+      onSynced(result);
+      toast('Last.fm disconnected.', { kind: 'success' });
+    } catch (err) { setError(err instanceof Error ? err.message : 'Could not disconnect Last.fm. Please try again.'); }
+    finally { setBusy(null); }
+  };
   return <div className="media-lastfm-panel" id="media-lastfm">
     <div className="media-source-bar"><span><Icon name="music" size={20} /> Last.fm</span><span className="media-source-status" role="status">{state?.last_synced_at ? 'Last synced ' + new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(state.last_synced_at)) : 'Your ongoing listening journal'}</span></div>
-    <div className="media-lastfm-controls"><div><h3>Your soundtrack, kept up to date.</h3><p>{status.loading ? 'Checking your Last.fm setup…' : status.data?.configured ? 'Bring your scrobbles into StressLess, with artwork from Last.fm.' : status.error ? 'Setup is temporarily unavailable. Spotify imports and saved listening still work.' : 'Optional Last.fm sync is available. Set it up whenever you’re ready, or keep using Spotify file imports.'}</p></div>
+    <div className="media-lastfm-controls"><div><h3>Your soundtrack, kept up to date.</h3><p>{status.loading ? 'Checking your Last.fm setup…' : status.data?.connected ? 'Connected as ' + status.data.username + '. Bring your scrobbles into StressLess, with artwork from Last.fm.' : status.error ? 'Setup is temporarily unavailable. Spotify imports and saved listening still work.' : status.data && !status.data.available ? 'Last.fm sync isn’t available right now. Your saved listening is still here.' : 'Connect your Last.fm account to bring in your listening, or keep using Spotify file imports.'}</p></div>
       <ActionButton className="btn btn-primary" disabled={!!busy || disabled || !status.data?.configured} aria-busy={busy === 'latest'} onClick={() => sync()}><Icon name="refresh" size={16} />{busy === 'latest' ? 'Syncing…' : state?.pending ? 'Continue sync' : 'Sync now'}</ActionButton></div>
     {status.error && <p className="media-error" role="alert">Couldn’t check Last.fm setup: {status.error.message} <button className="media-inline-button" onClick={status.reload}>Retry</button></p>}
-    {status.data && <details className="media-sync-setup"><summary>{status.data.configured ? 'Last.fm account details' : 'How to enable Last.fm sync'}</summary><div>
-      {status.data.configured ? <><p>{status.data.message}</p><p>Last.fm username: {status.data.username}</p></> : <><p>Optional: Spotify file imports work without Last.fm. This connection brings in completed listens and available album covers when you click Sync now.</p>
-        <ol className="media-setup-steps"><li>Create a Last.fm account and <a href="https://www.last.fm/about/trackmymusic" target="_blank" rel="noreferrer">connect Spotify scrobbling ↗</a> to start recording new listens.</li><li><a href="https://www.last.fm/api/account/create" target="_blank" rel="noreferrer">Create a Last.fm API account ↗</a> to get an API key.</li><li>Ask the app’s host to configure your account, or use the local setup below. Reload this page and click Sync now.</li></ol>
-        <details className="media-sync-setup"><summary>Running the app locally? Server configuration</summary><pre className="media-setup-code">{`LASTFM_API_KEY=your_api_key\nLASTFM_USERNAME=your_lastfm_username\nLASTFM_SYNC_USER_ID=${status.data.user_id}`}</pre><p>Add these to <code>.env.local</code>, restart the backend and reload. No shared secret or callback is needed. The current server setup connects one Last.fm account to one StressLess user.</p></details>
-      </>}
-    </div></details>}
+    {status.data?.available && !status.data.connected && <form className="media-lastfm-connect" onSubmit={connect}>
+      <ol className="media-setup-steps"><li><a href="https://www.last.fm/join" target="_blank" rel="noreferrer">Create a free Last.fm account ↗</a> and <a href="https://www.last.fm/about/trackmymusic" target="_blank" rel="noreferrer">connect Spotify scrobbling ↗</a>, so new listens are recorded.</li><li>Make sure “Hide recent listening information” is off in your <a href="https://www.last.fm/settings/privacy" target="_blank" rel="noreferrer">Last.fm privacy settings ↗</a>.</li><li>Enter your Last.fm username below. No password needed: StressLess only reads your public listening.</li></ol>
+      <div className="row"><input className="input" type="text" name="lastfm-username" aria-label="Last.fm username" placeholder="Last.fm username" autoComplete="username" spellCheck={false} maxLength={15} value={username} disabled={!!busy || disabled} onChange={(e) => setUsername(e.target.value)} />
+        <ActionButton type="submit" className="btn btn-primary" disabled={!!busy || disabled || !username.trim()} aria-busy={busy === 'connect'}>{busy === 'connect' ? 'Checking…' : 'Connect'}</ActionButton></div>
+    </form>}
+    {status.data?.connected && <p className="media-data-note">Connected as <a href={status.data.profile_url || undefined} target="_blank" rel="noreferrer">{status.data.username} ↗</a> · <button type="button" className="media-inline-button" disabled={!!busy} onClick={disconnect}>{busy === 'disconnect' ? 'Disconnecting…' : 'Disconnect'}</button></p>}
     {error && <p className="media-error" role="alert">{error}</p>}
     {state?.pending && <p className="media-data-note" role="status">More new listening is waiting. Continue sync to save the next batch without skipping any tracks.</p>}
     {latest && <div className="media-lastfm-feature"><Artwork key={latest.id + latest.source?.artwork_url} event={latest} featured /><div><span className="eyebrow">Latest saved listen</span><h3>{latest.source?.url ? <a href={latest.source.url} target="_blank" rel="noreferrer">{latest.title}</a> : latest.title}</h3><p>{latest.creator}</p>{latest.source?.album && <span>{latest.source.album}</span>}<time dateTime={latest.occurred_at}>{new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(latest.occurred_at))}</time></div></div>}
     {!!total && <History provider="lastfm" seed={events} total={total} />}
-    {!total && state?.last_synced_at && <p className="media-empty">No completed scrobbles yet. Play some music with scrobbling connected, then sync again.</p>}
+    {!total && state?.last_synced_at && <p className="media-empty">No scrobbles found yet. If your Last.fm profile shows listens, turn off “Hide recent listening information” in your Last.fm privacy settings and sync again.</p>}
     {state?.history_has_more && <ActionButton className="btn media-more" disabled={!!busy || disabled || !status.data?.configured} aria-busy={busy === 'older'} onClick={() => sync(true)}>{busy === 'older' ? 'Loading older listening…' : 'Load older listening'}<Icon name="arrow-down" size={14} /></ActionButton>}
     {(!!total || status.data?.configured) && <p className="media-data-note">{total.toLocaleString()} saved scrobbles · Up to 200 per sync. Last.fm does not supply playback duration. Spotify exports are shown separately and are not added to these counts. Sync runs when you click.</p>}
     <p className="media-lastfm-credit">Listening data and artwork from <a href={state?.profile_url || status.data?.profile_url || 'https://www.last.fm'} target="_blank" rel="noreferrer">Last.fm ↗</a></p>
@@ -350,7 +371,6 @@ export function MediaView() {
       <div className="media-source-bar"><span><Icon name="screen" size={20} /> Netflix</span><span className="media-source-status">{viewing?.items ? 'Imported viewing activity' : 'CSV import available'}</span></div>
       <div className="media-facts"><div><strong>{media.loading ? '—' : (viewing?.items || 0).toLocaleString()}</strong><span>viewing entries</span></div><div><strong className="media-word-value">By date</strong><span>your viewing journal</span></div><div className="media-fact-note"><Icon name="screen" size={24} /><p>A night in.<br />Somewhere else entirely.</p></div></div>
       <div className="media-poster-tools"><div><strong>Posters are a little extra</strong><p>{posters.loading ? 'Checking poster setup…' : posters.data?.configured ? 'Available posters are added when you import. You can fetch missing ones here, too.' : 'Titles, dates and imports work without posters. If artwork is unavailable, a simple icon takes its place.'}</p></div>{posters.data?.configured && <ActionButton className="btn" disabled={posterBusy || netflixImportBusy || media.loading || !viewing?.items} aria-busy={posterBusy} onClick={fetchPosters}>{posterBusy ? 'Fetching posters…' : 'Fetch missing posters'}</ActionButton>}</div>
-      {posters.data && !posters.data.configured && <details className="media-sync-setup"><summary>How to enable optional Netflix posters</summary><ol className="media-setup-steps"><li>Ask the app’s host to enable TMDB poster lookups. Group members don’t each need a key.</li><li>If you run the app yourself, get a read access token from <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noreferrer">TMDB’s API settings ↗</a>, set <code>TMDB_READ_ACCESS_TOKEN</code> in the server’s <code>.env.local</code> and restart the backend.</li><li>Reload this page, then import a Netflix CSV or click Fetch missing posters for an existing import.</li></ol></details>}
       {posterBusy && <p className="media-data-note" role="status">Looking up posters · {posterCount} titles checked. Your viewing history is already saved.</p>}
       {posterNote && <p className="media-data-note" role="status">{posterNote}</p>}
       {posterError && <p className="media-error" role="alert">{posterError}</p>}

@@ -24,7 +24,7 @@ from ..engine.reasoning import reasoning_mode
 from ..models import to_jsonable
 from ..connectors.media import parse_media, parse_spotify_file, parse_steam_file
 from ..connectors.steam import SteamSyncError, fetch_steam_library, steam_sync_status
-from ..connectors.lastfm import LastfmError, fetch_lastfm, lastfm_status, lastfm_artwork
+from ..connectors.lastfm import LastfmError, fetch_lastfm, lastfm_artwork, lastfm_status, profile_url, verify_username
 from ..connectors.media_artwork import artwork_status, netflix_artwork_batch
 from ..engine.media_insights import analyze_media
 from ..sim.personas import PERSONA_ORDER, PERSONAS
@@ -272,30 +272,62 @@ def post_steam_sync(p: Principal = Depends(current_principal)):
     return get_media(p=p)
 
 
+LASTFM_DOC_ID = hashlib.sha256(b"lastfm-sync").hexdigest()[:32]
+
+
+def _lastfm_saved(store) -> Optional[Dict[str, Any]]:
+    """The user's lastfm_sync payload: their connected username plus sync progress (None if never connected)."""
+    return next((doc["payload"] for doc in store.media_documents() if doc.get("kind") == "lastfm_sync"), None)
+
+
+def _lastfm_doc(payload: Dict[str, Any]) -> Dict[str, Any]:
+    return {"id": LASTFM_DOC_ID, "filename": "Last.fm API", "kind": "lastfm_sync", "payload": payload}
+
+
 @app.get("/api/media/lastfm")
 def get_lastfm_status(p: Principal = Depends(current_principal)):
-    return J(lastfm_status(p.user_id))
+    return J(lastfm_status(_lastfm_saved(p.store)))
+
+
+@app.post("/api/media/lastfm/connect")
+def post_lastfm_connect(body: Optional[Dict[str, Any]] = Body(None), p: Principal = Depends(current_principal)):
+    """Link the signed-in user to a Last.fm username, after Last.fm confirms it exists and is public."""
+    saved = _lastfm_saved(p.store)
+    try:
+        username = verify_username(str((body or {}).get("username") or ""))
+    except LastfmError as exc:
+        return _error(exc.status, str(exc))
+    current = (saved or {}).get("username")
+    if current and current.casefold() != username.casefold():
+        return _error(409, "You are connected as %s. Disconnect first to switch Last.fm accounts." % current)
+    if not current:
+        p.store.replace_media("lastfm", [], [_lastfm_doc({"username": username, "profile_url": profile_url(username)})])
+    return J(lastfm_status(_lastfm_saved(p.store)))
+
+
+@app.post("/api/media/lastfm/disconnect")
+def post_lastfm_disconnect(p: Principal = Depends(current_principal)):
+    """Forget the username and the scrobbles saved from it, so two Last.fm accounts never mix."""
+    p.store.clear_media("lastfm", "lastfm_sync")
+    return J({**_media_payload(p.store.media_events()), "documents": p.store.media_documents(),
+              "status": lastfm_status(None)})
 
 
 @app.get("/api/media/lastfm/artwork")
 def get_lastfm_artwork(artist: str, album: str, p: Principal = Depends(current_principal)):
     try:
-        return J({"artwork_url": lastfm_artwork(p.user_id, artist, album)})
+        return J({"artwork_url": lastfm_artwork(_lastfm_saved(p.store), artist, album)})
     except LastfmError as exc:
         return _error(exc.status, str(exc))
 
 
 @app.post("/api/media/lastfm/sync")
 def post_lastfm_sync(older: bool = False, p: Principal = Depends(current_principal)):
-    previous = next((doc["payload"] for doc in p.store.media_documents() if doc.get("kind") == "lastfm_sync"), None)
     try:
-        rows, state = fetch_lastfm(p.user_id, previous, older=older)
+        rows, state = fetch_lastfm(_lastfm_saved(p.store), older=older)
     except LastfmError as exc:
         return _error(exc.status, str(exc))
-    p.store.replace_media("lastfm", rows, [{
-        "id": hashlib.sha256(b"lastfm-sync").hexdigest()[:32], "filename": "Last.fm API",
-        "kind": "lastfm_sync", "payload": state,
-    }])
+    p.store.replace_media("lastfm", rows, [_lastfm_doc(state)])
     return get_media(p=p)
 
 

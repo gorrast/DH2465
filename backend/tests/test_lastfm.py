@@ -1,4 +1,4 @@
-"""Last.fm account isolation, resumable paging, artwork and incremental storage."""
+"""Last.fm per-user connections, account isolation, resumable paging, artwork and incremental storage."""
 import json
 import unittest
 from unittest.mock import patch, MagicMock
@@ -11,7 +11,7 @@ from stressless.server.app import app
 from stressless.server.auth import Principal, current_principal
 from stressless.store import MemoryStore
 
-CONFIG = {"LASTFM_API_KEY": "test-secret", "LASTFM_USERNAME": "listener", "LASTFM_SYNC_USER_ID": "owner"}
+CONFIG = {"LASTFM_API_KEY": "test-secret"}
 ART = "https://lastfm.freetls.fastly.net/i/u/300x300/cover.jpg"
 
 
@@ -37,6 +37,12 @@ class LastfmTests(unittest.TestCase):
         self.outbound = MagicMock()
         self.http = patch("stressless.connectors.lastfm.httpx.Client")
         self.http.start().return_value.__enter__.return_value = self.outbound
+        self.assertEqual(self.connect().status_code, 200)
+        self.outbound.reset_mock()
+
+    def connect(self, username="listener", upstream=None):
+        self.outbound.get.return_value = upstream or response()
+        return self.client.post("/api/media/lastfm/connect", json={"username": username})
 
     def tearDown(self):
         self.http.stop()
@@ -50,20 +56,41 @@ class LastfmTests(unittest.TestCase):
     def state(self):
         return next(doc["payload"] for doc in self.store.media_documents() if doc["kind"] == "lastfm_sync")
 
-    def test_config_account_binding_and_auth(self):
+    def test_each_user_connects_their_own_account(self):
         setup = self.client.get("/api/media/lastfm").json()
-        self.assertTrue(setup["configured"])
+        self.assertTrue(setup["connected"])
+        self.assertEqual(setup["username"], "listener")
         self.assertNotIn(CONFIG["LASTFM_API_KEY"], json.dumps(setup))
-        self.user = "other"
-        self.assertFalse(self.client.get("/api/media/lastfm").json()["configured"])
-        self.assertEqual(self.sync().status_code, 403)
+        # A second StressLess user has their own store: not connected until they enter their own username.
+        owner_store, self.store = self.store, MemoryStore()
+        self.assertFalse(self.client.get("/api/media/lastfm").json()["connected"])
+        self.assertEqual(self.sync().status_code, 409)
         self.outbound.get.assert_not_called()
-        self.user = "owner"
+        self.assertEqual(self.connect("second_user").status_code, 200)
+        self.assertEqual(self.sync().status_code, 200)
+        self.assertEqual(self.outbound.get.call_args.kwargs["params"]["user"], "second_user")
+        self.assertEqual(self.state()["username"], "second_user")
+        self.store = owner_store
+        self.assertEqual(self.client.get("/api/media/lastfm").json()["username"], "listener")
         with patch.dict("os.environ", {"LASTFM_API_KEY": ""}):
+            self.assertFalse(self.client.get("/api/media/lastfm").json()["available"])
             self.assertEqual(self.sync().status_code, 503)
         app.dependency_overrides.clear()
         self.assertEqual(self.sync().status_code, 401)
+
+    def test_connect_checks_the_username_with_lastfm(self):
+        self.store = MemoryStore()
+        self.assertEqual(self.connect("1bad name").status_code, 400)
         self.outbound.get.assert_not_called()
+        missing = self.connect("nobody", httpx.Response(200, json={"error": 6, "message": "User not found"}))
+        self.assertEqual(missing.status_code, 404)
+        self.assertIn("nobody", missing.json()["error"])
+        private = self.connect("hidden", httpx.Response(200, json={"error": 17, "message": "Login required"}))
+        self.assertEqual(private.status_code, 403)
+        self.assertIn("private", private.json()["error"])
+        self.assertFalse(self.client.get("/api/media/lastfm").json()["connected"])
+        spelled = httpx.Response(200, json={"recenttracks": {"@attr": {"user": "Listener", "totalPages": "1", "page": "1"}, "track": []}})
+        self.assertEqual(self.connect("listener", spelled).json()["username"], "Listener")
 
     def test_dedup_artwork_and_no_engine_or_spotify_replacement(self):
         self.store.replace_media("spotify", [{"id": "song", "provider": "spotify", "occurred_at": "2026-10-01", "title": "Exported song", "minutes": 2}], [])
@@ -134,6 +161,16 @@ class LastfmTests(unittest.TestCase):
         self.assertNotIn(CONFIG["LASTFM_API_KEY"], result.text)
         self.assertEqual((self.store.media_events(), self.store.media_documents()), before)
 
+    def test_empty_first_sync_does_not_skip_existing_history(self):
+        # e.g. the profile was still hidden: Last.fm answers with an empty list, later with the full history
+        self.assertEqual(self.sync(response([], pages=0)).status_code, 200)
+        result = self.sync(response([track("Old 1", 1792000000), track("Old 2", 1791000000)]))
+        self.assertEqual(result.status_code, 200, result.text)
+        self.assertNotIn("from", self.outbound.get.call_args.kwargs["params"])     # the whole history, not only new
+        self.assertEqual(result.json()["totals"]["lastfm"]["items"], 2)
+        self.sync(response([track("New", 1792100000)]))
+        self.assertEqual(self.outbound.get.call_args.kwargs["params"]["from"], 1791999999)   # incremental from here on
+
     def test_empty_history_and_unsafe_or_missing_artwork(self):
         self.assertEqual(self.sync(response([], pages=0)).status_code, 200)
         self.assertFalse(self.state()["history_has_more"])
@@ -144,14 +181,21 @@ class LastfmTests(unittest.TestCase):
         self.assertEqual(result.status_code, 200, result.text)
         self.assertIsNone(result.json()["recent_by_provider"]["lastfm"][0]["source"]["artwork_url"])
 
-    def test_switching_usernames_does_not_mix_accounts(self):
+    def test_switching_accounts_needs_a_disconnect_that_clears_history(self):
         self.sync()
-        self.outbound.get.reset_mock()
-        with patch.dict("os.environ", {"LASTFM_USERNAME": "different-profile"}):
-            self.assertEqual(self.sync().status_code, 409)
-        self.outbound.get.assert_not_called()
+        self.store.replace_media("spotify", [{"id": "song", "provider": "spotify", "occurred_at": "2026-10-01", "title": "Exported song", "minutes": 2}], [])
+        self.assertEqual(self.connect("different").status_code, 409)
+        self.assertEqual(self.connect("listener").status_code, 200)            # same account: nothing changes
+        self.assertEqual(len([e for e in self.store.media_events() if e["provider"] == "lastfm"]), 1)
+        result = self.client.post("/api/media/lastfm/disconnect")
+        self.assertEqual(result.status_code, 200, result.text)
+        self.assertFalse(result.json()["status"]["connected"])
+        self.assertEqual([e["provider"] for e in self.store.media_events()], ["spotify"])
+        self.assertFalse([d for d in self.store.media_documents() if d["kind"] == "lastfm_sync"])
+        self.assertEqual(self.connect("different").status_code, 200)
+        self.assertIsNone(self.state().get("last_synced_at"))                 # a fresh first sync for the new account
 
-    def test_album_cover_fallback_is_cached_and_owner_only(self):
+    def test_album_cover_fallback_is_cached_and_needs_a_connection(self):
         art = "https://lastfm-img.freetls.fastly.net/i/u/300x300/real-cover.jpg"
         self.outbound.get.return_value = httpx.Response(200, json={"album": {"image": [{"size": "extralarge", "#text": art}]}})
         for _ in range(2):
@@ -161,8 +205,8 @@ class LastfmTests(unittest.TestCase):
             self.assertNotIn(CONFIG["LASTFM_API_KEY"], result.text)
         self.assertEqual(self.outbound.get.call_count, 1)
         self.assertEqual(self.outbound.get.call_args.kwargs["params"]["method"], "album.getInfo")
-        self.user = "other"
-        self.assertEqual(self.client.get("/api/media/lastfm/artwork?artist=Artist&album=Album").status_code, 403)
+        self.store = MemoryStore()
+        self.assertEqual(self.client.get("/api/media/lastfm/artwork?artist=Artist&album=Album").status_code, 409)
         self.assertEqual(self.outbound.get.call_count, 1)
 
     def test_cover_lookup_failure_does_not_break_listening(self):

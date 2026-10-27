@@ -38,7 +38,7 @@ def netflix_query(title: str) -> str | None:
 def artwork_status() -> dict[str, Any]:
     configured = bool(os.environ.get("TMDB_READ_ACCESS_TOKEN", "").strip())
     return {"configured": configured, "message": "Posters are fetched automatically after Netflix imports." if configured else
-            "Add TMDB_READ_ACCESS_TOKEN to .env.local and restart the backend to fetch Netflix posters automatically."}
+            "Netflix posters aren't available right now."}
 
 
 def _normalized(value: str) -> str:
@@ -62,7 +62,7 @@ def _poster(token: str, query_key: str, language: str, day: int) -> dict[str, An
             except httpx.HTTPError:
                 raise ArtworkError("TMDB could not be reached. Your history is saved; try fetching posters again.") from None
             if response.status_code in (401, 403):
-                raise ArtworkError("TMDB rejected the read access token. Check TMDB_READ_ACCESS_TOKEN and restart the backend.")
+                raise ArtworkError("Netflix posters aren't available right now. Try again later.")
             if response.status_code == 429:
                 raise ArtworkError("TMDB is limiting requests. Your history is saved; wait before retrying posters.")
             if response.status_code != 200:

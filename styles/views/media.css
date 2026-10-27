@@ -119,6 +119,9 @@
 .media-lastfm-controls h3 { font-family: 'Newsreader', Georgia, serif; font-size: clamp(25px, 3vw, 34px); font-weight: 400; margin: 0 0 12px; }
 .media-lastfm-controls p { font-size: 13px; line-height: 1.8; color: var(--ink-secondary); margin: 0; }
 .media-lastfm-controls .btn { flex-shrink: 0; }
+.media-lastfm-connect { margin: 0 0 20px; }
+.media-lastfm-connect .input { flex: 1 1 200px; max-width: 320px; min-height: 44px; font: inherit; }
+.media-lastfm-connect .input:focus-visible { outline: 2px solid var(--interactive); outline-offset: 1px; }
 .media-artwork { width: 52px; height: 52px; flex: 0 0 52px; display: grid; place-items: center; border-radius: 10px; overflow: hidden; background: var(--card-2); color: var(--media-tone); }
 .media-artwork img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .media-artwork.is-featured { width: 180px; height: 180px; flex-basis: 180px; border-radius: 18px; box-shadow: 0 12px 36px rgb(0 0 0 / .12); }

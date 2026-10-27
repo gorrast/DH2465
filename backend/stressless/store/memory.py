@@ -112,6 +112,10 @@ class MemoryStore(UserStore):
         if provider in ("spotify", "steam", "lastfm") and documents:
             self._media_documents.update({row["id"]: copy.deepcopy(row) for row in documents})
 
+    def clear_media(self, provider: str, document_kind: str) -> None:
+        self._media_documents = {k: row for k, row in self._media_documents.items() if row.get("kind") != document_kind}
+        self._media = {k: row for k, row in self._media.items() if row.get("provider") != provider}
+
     def pending_netflix_artwork(self, limit: int = 200) -> List[Dict[str, Any]]:
         rows = [row for row in self.media_events() if row.get("provider") == "netflix"
                 and row.get("source", {}).get("artwork_query") and not row.get("source", {}).get("artwork_status")]

@@ -104,6 +104,10 @@ class UserStore:
         """Replace file histories/snapshots; Last.fm batches merge by event ID and update sync metadata atomically."""
         raise NotImplementedError
 
+    def clear_media(self, provider: str, document_kind: str) -> None:
+        """Delete the user's events of ``provider`` and their media documents of ``document_kind`` (a disconnect)."""
+        raise NotImplementedError
+
     def pending_netflix_artwork(self, limit: int = 200) -> List[Dict[str, Any]]:
         raise NotImplementedError
 

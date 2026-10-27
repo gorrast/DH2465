@@ -185,18 +185,18 @@ from Spotify exports to avoid adding overlapping play counts together. No playba
 
 ### Last.fm listening and artwork
 
-1. Enable [Spotify scrobbling in Last.fm](https://www.last.fm/about/trackmymusic) and create a
-   [Last.fm API account](https://www.last.fm/api/account/create). Reading listening history requires an API key
-   and profile username, without a shared secret, authentication callback or Spotify developer application.
-2. Set the server-only variables in `.env.local`:
+1. Create a [Last.fm API account](https://www.last.fm/api/account/create) for the app. One API key serves every
+   user; no shared secret, authentication callback or Spotify developer application is needed.
+2. Set the server-only variable in `.env.local` (and in the Vercel project's environment variables):
 
    ```env
    LASTFM_API_KEY=your_lastfm_api_key
-   LASTFM_USERNAME=your_lastfm_profile_username
-   LASTFM_SYNC_USER_ID=your_supabase_auth_user_uuid
    ```
 
-   Use the same app user UUID as Steam, or copy it from Media → Last.fm → Set up Last.fm sync.
+   Each user then connects their own account under Media → Last.fm: they create a Last.fm account, enable
+   [Spotify scrobbling](https://www.last.fm/about/trackmymusic), keep their recent listening public and enter
+   their username. The API checks the username with Last.fm and keeps it in the user's `lastfm_sync` document.
+   **Disconnect** deletes that document and the user's saved scrobbles, so two Last.fm accounts never mix.
 3. Apply `supabase/migrations/20261022133929_lastfm_media_sync.sql` in Supabase's SQL editor (or your normal
    migration workflow). It extends the `media_events` provider constraint and the existing atomic import RPC.
    Last.fm events merge by a stable ID; file histories keep their replacement behavior. Sync progress is a

@@ -26,11 +26,11 @@ def steam_sync_status(user_id: str) -> dict[str, Any]:
     owner = os.environ.get("STEAM_SYNC_USER_ID", "").strip()
     configured = False
     if not key or not steam_id or not owner:
-        message = "Set STEAM_WEB_API_KEY, STEAM_ID and STEAM_SYNC_USER_ID in .env.local, then restart the backend."
+        message = "Steam sync isn't available right now."
     elif owner != user_id:
         message = "Steam sync is not enabled for this signed-in account."
     elif not re.fullmatch(r"[0-9]{17}", steam_id):
-        message = "STEAM_ID must be your 17-digit SteamID64, not your profile name."
+        message = "Steam sync isn't available right now."
     else:
         configured = True
         message = "Ready to refresh your Steam library."
@@ -57,7 +57,7 @@ def fetch_steam_library(user_id: str) -> dict[str, Any]:
     except httpx.HTTPError:
         raise SteamSyncError("Could not reach Steam. Your saved library is unchanged; try again.") from None
     if response.status_code in (401, 403):
-        raise SteamSyncError("Steam rejected the API key. Check STEAM_WEB_API_KEY and restart the backend.")
+        raise SteamSyncError("Steam sync isn't available right now. Try again later.")
     if response.status_code == 429:
         raise SteamSyncError("Steam is limiting requests. Wait a little before syncing again.", 503)
     if response.status_code != 200:

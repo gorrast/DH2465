@@ -2,6 +2,7 @@
 import json
 import os
 import unittest
+from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor
 
 from fastapi.testclient import TestClient
@@ -205,6 +206,111 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(summary.status_code, 200, summary.text)
         self.assertEqual(summary.json()["total"], 1)
         self.assertEqual([doc["kind"] for doc in summary.json()["documents"]], ["taste_profile"])
+
+    def test_youtube_reimport_removes_previously_saved_ad(self):
+        basketball = {"header": "YouTube", "title": "Tittade på NBA highlights", "titleUrl": "https://www.youtube.com/watch?v=ynm4r8qqMwA", "time": "2026-10-22T08:58:19.164Z", "products": ["YouTube"], "activityControls": ["Visningshistorik på YouTube"]}
+        ad = {"header": "YouTube", "title": "Tittade på P Max 16x9 Drom Kop Kor", "titleUrl": "https://www.youtube.com/watch?v=QNN-PzLb8LI", "description": "Du tittade på detta kl. 08:57", "time": "2026-10-22T08:57:30.021Z", "products": ["YouTube"], "activityControls": ["Webb- och appaktivitet", "Visningshistorik på YouTube", "Sökhistorik på YouTube"]}
+        def upload(rows):
+            return self.client.post("/api/media/import?provider=youtube&youtube_range=all", files={"files": ("watch-history.json", json.dumps(rows), "application/json")})
+        # Simulate history saved before ad metadata was excluded.
+        self.assertEqual(upload([basketball, ad]).json()["imported"], 2)
+        ad["details"] = [{"name": "Från en annons på Google"}]
+        result = upload([basketball, ad])
+        self.assertEqual(result.status_code, 200, result.text)
+        self.assertEqual(result.json()["imported"], 1)
+        saved = self.jget("/api/media?provider=youtube")["events"]
+        self.assertEqual(len(saved), 1)
+        self.assertEqual(saved[0]["source"]["video_id"], "ynm4r8qqMwA")
+        self.assertEqual(saved[0]["title"], "NBA highlights")
+
+    def test_youtube_recent_import_selection_and_cap(self):
+        now = datetime.now(timezone.utc)
+        def video(i, days):
+            return {"title": "Watched Video %s" % i, "titleUrl": "https://www.youtube.com/watch?v=abcdefghijk", "time": (now - timedelta(days=days)).isoformat()}
+        def upload(rows, period=None):
+            path = "/api/media/import?provider=youtube" + ("&youtube_range=" + period if period else "")
+            return self.client.post(path, files={"files": ("watch-history.json", json.dumps(rows), "application/json")})
+        videos = [video(0, 10), video(1, 60), video(2, 120)]
+        result = upload(videos).json()
+        self.assertEqual(result["imported"], 2)
+        self.assertEqual(result["skipped"], 1)
+        self.assertEqual(upload(videos, "30").json()["imported"], 1)
+        self.assertEqual(upload([video(3, 120)], "30").status_code, 400)
+        self.assertEqual(self.jget("/api/media?provider=youtube")["total"], 1)
+        self.assertEqual(upload(videos, "bad").status_code, 400)
+        self.assertEqual(upload(videos, "all").json()["imported"], 3)
+        large = [video(i, 1) for i in range(5000)] + [video(5000, 2)]
+        result = upload(list(reversed(large)), "all").json()
+        self.assertEqual(result["imported"], 5000)
+        self.assertEqual(result["skipped"], 1)
+        self.assertEqual(result["entry_limit"], 5000)
+        self.assertEqual(self.jget("/api/media?provider=youtube")["total"], 5000)
+
+    def test_youtube_import_deduplicates_paginates_and_preserves_other_sources(self):
+        netflix = self.client.post("/api/media/import?provider=netflix", files={"files": ("netflix.csv", "Title,Date\nShow,10/1/26\n", "text/csv")})
+        self.assertEqual(netflix.status_code, 200)
+        videos = [{"title": "Watched Video %s" % i, "titleUrl": "https://www.youtube.com/watch?v=abcdefghijk", "time": "2026-10-21T19:%02d:00Z" % i} for i in range(55)]
+        content = json.dumps(videos + [videos[0]])
+        result = self.client.post("/api/media/import?provider=youtube", files={"files": ("watch-history.json", content, "application/json")})
+        self.assertEqual(result.status_code, 200, result.text)
+        self.assertEqual(result.json()["imported"], 55)
+        self.assertEqual(result.json()["totals"]["netflix"]["items"], 1)
+        self.assertEqual(len(result.json()["recent_by_provider"]["youtube"]), 50)
+        page = self.jget("/api/media?provider=youtube&offset=50&limit=50")
+        self.assertEqual(len(page["events"]), 5)
+        self.assertEqual(page["total"], 55)
+        bad = self.client.post("/api/media/import?provider=youtube", files={"files": ("watch-history.json", '[{"title":"Watched broken","time":"bad"}]', "application/json")})
+        self.assertEqual(bad.status_code, 400)
+        self.assertEqual(self.jget("/api/media?provider=youtube")["total"], 55)
+        repeat = self.client.post("/api/media/import?provider=youtube", files={"files": ("watch-history.json", content, "application/json")})
+        self.assertEqual(repeat.json()["totals"]["youtube"]["items"], 55)
+
+    def test_netflix_profiles_dates_deduplication_and_failed_replacement(self):
+        csv = 'Title,Date\n"A show, episode one",10/17/26\nAnother episode,9/15/26\n'
+        files = [("files", (name, csv, "text/csv")) for name in ("profile-a.csv", "profile-b.csv", "profile-a.csv")]
+        response = self.client.post("/api/media/import?provider=netflix", files=files)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["imported"], 4)
+        event = response.json()["events"][0]
+        self.assertTrue(event["occurred_at"].startswith("2026-10-17"))
+        self.assertFalse(event["source"]["duration_known"])
+        self.assertTrue(event["source"]["date_only"])
+        bad = 'Title,Date\nGood,10/17/26\nBad,not-a-date\n'
+        response = self.client.post("/api/media/import?provider=netflix", files={"files": ("bad.csv", bad, "text/csv")})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(self.jget("/api/media")["total"], 4)
+
+    def test_provider_history_is_paginated_independently(self):
+        spotify = [{"ts": "2026-10-20T12:00:00Z", "master_metadata_track_name": "Song %s" % i} for i in range(120)]
+        self.client.post("/api/media/import?provider=spotify", files={"files": ("history.json", json.dumps(spotify), "application/json")})
+        self.client.post("/api/media/import?provider=netflix", files={"files": ("viewing.csv", "Title,Date\nShow,10/1/26\n", "text/csv")})
+        media = self.jget("/api/media")
+        self.assertEqual(len(media["recent_by_provider"]["spotify"]), 50)
+        self.assertEqual(len(media["recent_by_provider"]["netflix"]), 1)
+        page = self.jget("/api/media?provider=spotify&offset=100&limit=50")
+        self.assertEqual(page["total"], 120)
+        self.assertEqual(len(page["events"]), 20)
+        self.jget("/api/media?provider=netflix&offset=-1", expect=400)
+
+    def test_steam_snapshots_replace_without_fabricating_sessions(self):
+        steam = {"response": {"games": [{"appid": 10, "name": "A game", "playtime_forever": 125, "playtime_2weeks": 20}]}}
+        response = self.client.post("/api/media/import?provider=steam", files={"files": ("games.json", json.dumps(steam), "application/json")})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["imported"], 1)
+        self.assertEqual(response.json()["events"], [])
+        game = response.json()["documents"][0]["payload"]["games"][0]
+        self.assertEqual(game["minutes"], 125)
+        self.assertIsNone(game["last_played"])
+        steam["response"]["games"][0]["appid"] = 20
+        response = self.client.post("/api/media/import?provider=steam", files={"files": ("new-games.json", json.dumps(steam), "application/json")})
+        self.assertEqual(len(response.json()["documents"]), 1)
+        self.assertEqual(response.json()["documents"][0]["payload"]["games"][0]["appid"], 20)
+        steam["response"]["games"][0]["playtime_forever"] = -1
+        response = self.client.post("/api/media/import?provider=steam", files={"files": ("bad.json", json.dumps(steam), "application/json")})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(self.jget("/api/media")["documents"][0]["payload"]["games"][0]["minutes"], 125)
+        type(self).user = "another-steam-user"
+        self.assertEqual(self.jget("/api/media")["documents"], [])
 
     def test_media_insights_use_overlapping_health_days(self):
         music = [

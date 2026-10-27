@@ -101,6 +101,14 @@ class UserStore:
         raise NotImplementedError
 
     def replace_media(self, provider: str, events: List[Dict[str, Any]], documents: List[Dict[str, Any]]) -> None:
+        """Replace file histories/snapshots; Last.fm batches merge by event ID and update sync metadata atomically."""
+        raise NotImplementedError
+
+    def pending_netflix_artwork(self, limit: int = 200) -> List[Dict[str, Any]]:
+        raise NotImplementedError
+
+    def update_netflix_artwork(self, updates: List[Dict[str, Any]]) -> None:
+        """Patch only artwork fields for matching Netflix lookup keys, preserving all history."""
         raise NotImplementedError
 
     # ------------------------------------------------------------- derived --

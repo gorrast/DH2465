@@ -106,8 +106,20 @@ class MemoryStore(UserStore):
 
     def replace_media(self, provider: str, events: List[Dict[str, Any]], documents: List[Dict[str, Any]]) -> None:
         if events:
-            retained = {key: row for key, row in self._media.items() if row.get("provider") != provider}
+            retained = {key: row for key, row in self._media.items() if provider == "lastfm" or row.get("provider") != provider}
             retained.update({row["id"]: copy.deepcopy(row) for row in events})
             self._media = retained
-        if provider == "spotify" and documents:
+        if provider in ("spotify", "steam", "lastfm") and documents:
             self._media_documents.update({row["id"]: copy.deepcopy(row) for row in documents})
+
+    def pending_netflix_artwork(self, limit: int = 200) -> List[Dict[str, Any]]:
+        rows = [row for row in self.media_events() if row.get("provider") == "netflix"
+                and row.get("source", {}).get("artwork_query") and not row.get("source", {}).get("artwork_status")]
+        return sorted(rows, key=lambda row: (row.get("occurred_at", ""), row.get("id", "")), reverse=True)[:limit]
+
+    def update_netflix_artwork(self, updates: List[Dict[str, Any]]) -> None:
+        patches = {update["query"]: update["source"] for update in updates}
+        for row in self._media.values():
+            query = row.get("source", {}).get("artwork_query")
+            if row.get("provider") == "netflix" and query in patches:
+                row["source"] = {**row.get("source", {}), **copy.deepcopy(patches[query])}

@@ -49,9 +49,11 @@ WORKOUT_HR_AFTER = 30                          # minutes after a workout left ou
 LATE_HOUR = 22                                 # listening or streaming from this hour counts as late
 MIN_ARTIST_MIN = 5.0                           # minutes of an artist before a day counts as a day with them
 MAX_ARTISTS = 6                                # most-played artists and podcasts tested as their own cause
-MAX_FOCUS_ARTISTS = 2                          # artists most often played during focus time, tested on focus days
+MAX_PAIRS = 4                                  # activity x media pairs ("Einaudi during Study session") tested
+PAIR_ACTIVITIES = 5                            # most frequent calendar activities looked at for pairs
+AFTER_HOURS = 4                                # media starting this long after an activity ended counts as "after" it
 MAX_SERIES = 4                                 # most frequent recurring calendar series tested as their own cause
-FOCUS_HR_MIN_MINUTES = 30                      # worn minutes of focus time needed for a heart rate during it
+ACTIVITY_HR_MIN_MINUTES = 30                   # worn minutes of an activity needed for a heart rate during it
 GYM_WORDS = ("gym", "strength", "weight", "functional", "crossfit", "sats", "styrka")
 CARDIO_WORDS = ("run", "jog", "cycl", "bik", "ride", "swim", "walk", "hik", "row", "ski", "elliptical", "löp")
 
@@ -110,20 +112,6 @@ def daytime_hr(ds: Dataset, d: date) -> Optional[float]:
     return statistics.fmean(vals) if len(vals) >= DAY_HR_MIN_MINUTES else None
 
 
-def _focus_windows(ds: Dataset, d: date) -> List[Tuple[datetime, datetime]]:
-    return [(e.start, e.end) for e in ds.events_on(d) if e.type == "focus" and e.start.date() == d]
-
-
-def focus_hr(ds: Dataset, d: date) -> Optional[float]:
-    """Mean heart rate during the day's focus time (study blocks, deep work)."""
-    hr = ds.hr(d)
-    if hr is None:
-        return None
-    vals = [b for s, e in _focus_windows(ds, d)
-            for b in hr.bpm[s.hour * 60 + s.minute:(e.hour * 60 + e.minute) if e.date() == d else 1440] if b is not None]
-    return statistics.fmean(vals) if len(vals) >= FOCUS_HR_MIN_MINUTES else None
-
-
 OUTCOMES: Dict[str, OutcomeDef] = {o.key: o for o in (
     OutcomeDef("score", "Sleep score", "points", "up", 1.5, "sleep score %s points higher", "sleep score %s points lower",
                _night("score"), True),
@@ -141,8 +129,6 @@ OUTCOMES: Dict[str, OutcomeDef] = {o.key: o for o in (
                _metric("screen.pickups"), False, "phone"),
     OutcomeDef("day_hr", "Daytime heart rate", "bpm", "down", 2, "daytime heart rate %s higher",
                "daytime heart rate %s lower", daytime_hr, False, "heart", True),
-    OutcomeDef("focus_hr", "Heart rate during focus time", "bpm", "down", 2, "heart rate during focus time %s higher",
-               "heart rate during focus time %s lower", focus_hr, False, "heart", True),
 )}
 NIGHT = ("score", "duration_min", "onset_min", "hrv_ms", "resting_hr")
 NIGHT_AND_DAY = NIGHT + ("day_hr",)
@@ -237,6 +223,8 @@ class CauseDef:
     min_days: int = MIN_DAYS
     source: str = "activity"                   # which data the cause comes from (see SOURCES)
     expected: Optional[str] = None             # the direction sleep research expects ("hurt"/"helped"); None: no clear view
+    others: Optional[str] = None               # what the days without it are ("days with Study session"); None: days/nights
+    hints: bool = True                         # False: only strong links count (causes picked from many candidates)
 
 
 def _q(p: float, floor: float = 0.0) -> Callable[[List[float]], float]:
@@ -346,40 +334,106 @@ def artist_causes(ds: Dataset, days: Sequence[date]) -> List[CauseDef]:
             for c in top]
 
 
-def focus_music_causes(ds: Dataset, days: Sequence[date]) -> List[CauseDef]:
-    """Artists played during focus time, compared with focus days without them: 'focus time with Ludovico Einaudi'.
-    Days without focus time are left out, so the comparison is between study or deep-work days only."""
+def _activity_key(e) -> str:
+    """Events that are the same activity: one recurring series, or one title used on many days ("Study session")."""
+    return e.recurring_key or "title:" + " ".join(e.title.lower().split())
+
+
+def _activity_windows(ds: Dataset, d: date, key: str) -> List[Tuple[datetime, datetime]]:
+    return [(e.start, e.end) for e in ds.events_on(d) if e.start.date() == d and _activity_key(e) == key]
+
+
+def _media_name(m) -> Optional[str]:
+    """The artist or podcast, or for a show the part before "Show: Episode"."""
+    return m.creator or (m.title.split(":")[0].strip() if m.kind == "video" and m.title else None)
+
+
+def _paired_minutes(ds: Dataset, d: date, key: str) -> Dict[Tuple[str, str], float]:
+    """{(media name, "during" | "after"): minutes} for activity ``key`` on day ``d``."""
+    windows = _activity_windows(ds, d, key)
+    out: Dict[Tuple[str, str], float] = {}
+    if not windows:
+        return out
+    last_end = max(e for _, e in windows)
+    for m in ds.media_on(d):
+        name = _media_name(m)
+        if not name:
+            continue
+        end = m.start + timedelta(minutes=m.minutes)
+        during = sum(max(0.0, (min(end, e) - max(m.start, s)).total_seconds() / 60.0) for s, e in windows)
+        if during >= MIN_ARTIST_MIN:
+            out[(name, "during")] = out.get((name, "during"), 0.0) + during
+        elif last_end <= m.start < last_end + timedelta(hours=AFTER_HOURS):
+            out[(name, "after")] = out.get((name, "after"), 0.0) + m.minutes
+    return out
+
+
+def activity_hr_outcome(key: str, title: str) -> str:
+    """Registers (once) and returns the outcome "heart rate during <activity>"."""
+    okey = "hr_during_" + _slug(title)
+    if okey not in OUTCOMES:
+        def get(ds: Dataset, d: date) -> Optional[float]:
+            hr = ds.hr(d)
+            if hr is None:
+                return None
+            vals = [b for s, e in _activity_windows(ds, d, key)
+                    for b in hr.bpm[s.hour * 60 + s.minute:(e.hour * 60 + e.minute) if e.date() == d else 1440]
+                    if b is not None]
+            return statistics.fmean(vals) if len(vals) >= ACTIVITY_HR_MIN_MINUTES else None
+        OUTCOMES[okey] = OutcomeDef(okey, "Heart rate during " + title, "bpm", "down", 2,
+                                    "heart rate during %s %%s higher" % title, "heart rate during %s %%s lower" % title,
+                                    get, False, "heart", True)
+    return okey
+
+
+def pair_causes(ds: Dataset, days: Sequence[date]) -> List[CauseDef]:
+    """Media played during or after a calendar activity, compared with the same activity without it: "Ludovico Einaudi
+    during Study session" (against phone use and heart rate during it), "Breaking Bad after Tennis practice" (against
+    the night after). Only days with the activity are compared, so the activity itself is not what differs. Picked
+    from many possible pairs, so only strong links count."""
     if _media_days(ds) is None or not _has_calendar(ds):
         return []
-
-    def during(d: date, creator: Optional[str] = None) -> Dict[str, float]:
-        played: Dict[str, float] = {}
-        windows = _focus_windows(ds, d)
-        for m in ds.media_on(d):
-            if m.creator and m.kind == "music" and (creator is None or m.creator == creator):
-                end = m.start + timedelta(minutes=m.minutes)
-                mins = sum(max(0.0, (min(end, e) - max(m.start, s)).total_seconds() / 60.0) for s, e in windows)
-                played[m.creator] = played.get(m.creator, 0.0) + mins
-        return played
-
-    n_days: Dict[str, int] = {}
+    act_days: Dict[str, set] = {}
+    titles: Dict[str, Dict[str, int]] = {}
     for d in days:
-        for creator, minutes in during(d).items():
-            if minutes >= MIN_ARTIST_MIN:
-                n_days[creator] = n_days.get(creator, 0) + 1
-    top = sorted((c for c, n in n_days.items() if n >= MIN_GROUP), key=lambda c: -n_days[c])[:MAX_FOCUS_ARTISTS]
+        for e in ds.events_on(d):
+            k = _activity_key(e)
+            act_days.setdefault(k, set()).add(d)
+            t = titles.setdefault(k, {})
+            t[e.title] = t.get(e.title, 0) + 1
+    acts = sorted((k for k, on in act_days.items() if len(on) >= 2 * MIN_GROUP), key=lambda k: -len(act_days[k]))
+    pairs: Dict[Tuple[str, str, str], int] = {}
+    for k in acts[:PAIR_ACTIVITIES]:
+        for d in act_days[k]:
+            for (name, rel), minutes in _paired_minutes(ds, d, k).items():
+                if minutes >= MIN_ARTIST_MIN:
+                    pairs[(k, name, rel)] = pairs.get((k, name, rel), 0) + 1
+    top = sorted((p for p, n in pairs.items() if n >= MIN_GROUP and len(act_days[p[0]]) - n >= MIN_GROUP),
+                 key=lambda p: -pairs[p])[:MAX_PAIRS]
 
-    def value(creator: str) -> Callable[[Dataset, date], Optional[float]]:
+    def value(k: str, name: str, rel: str) -> Callable[[Dataset, date], Optional[float]]:
         def f(ds: Dataset, d: date) -> Optional[float]:
             span = _media_days(ds)
-            if span is None or not (span[0] <= d <= span[1]) or not _focus_windows(ds, d):
+            if span is None or not (span[0] <= d <= span[1]) or not _activity_windows(ds, d, k):
                 return None
-            return float(during(d, creator).get(creator, 0.0) >= MIN_ARTIST_MIN)
+            return float(_paired_minutes(ds, d, k).get((name, rel), 0.0) >= MIN_ARTIST_MIN)
         return f
-    return [CauseDef("focus_music_" + _slug(c), "Focus time with " + c, value(c), "high", _fixed(1.0), "count",
-                     "focus days with " + c, "On your %d %s", ("pickups", "screen_minutes", "focus_hr"),
-                     MIN_GROUP * 2, source="music")
-            for c in top]
+    out = []
+    for k, name, rel in top:
+        title = max(titles[k], key=titles[k].get)
+        video = any(_media_name(m) == name and m.kind == "video" for m in ds.media)
+        verb = "watched" if video else "listened to"
+        if rel == "during":
+            outcomes = ("pickups", "screen_minutes", activity_hr_outcome(k, title))
+            lead = "On the %d days you %s"
+        else:
+            outcomes = NIGHT
+            lead = "On the nights after the %d days you %s"
+        out.append(CauseDef("pair_%s_%s_%s" % (_slug(name), rel, _slug(title)), "%s %s %s" % (name, rel, title),
+                            value(k, name, rel), "high", _fixed(1.0), "count",
+                            "%s %s %s %s" % (verb, name, rel, title), lead, outcomes, 2 * MIN_GROUP,
+                            source="streaming" if video else "music", others="days with " + title, hints=False))
+    return out
 
 
 def series_causes(ds: Dataset, days: Sequence[date]) -> List[CauseDef]:
@@ -517,7 +571,7 @@ class LifestylePattern:
         else:
             text = "On your %d %s: a %s" % (self.n_with, self.description, joined(same))
             other = "days"
-        text += ", compared with your other %d %s." % (self.n_without, other)
+        text += ", compared with your other %d %s." % (self.n_without, cause.others or other)
         if self.hint:
             text += " An early hint: the difference is small or rests on few days, so it may not hold."
         return text
@@ -635,7 +689,7 @@ def lifestyle_patterns(ds: Dataset, upto: date, history_days: Optional[int] = No
     days = [start + timedelta(days=k) for k in range((upto - start).days)]
     rng = random.Random(seed)
     out: List[LifestylePattern] = []
-    for c in CAUSES + tuple(artist_causes(ds, days) + focus_music_causes(ds, days) + series_causes(ds, days)):
+    for c in CAUSES + tuple(artist_causes(ds, days) + pair_causes(ds, days) + series_causes(ds, days)):
         values = {d: c.value(ds, d) for d in days}
         known = [v for v in values.values() if v is not None]
         if len(known) < c.min_days:
@@ -646,6 +700,9 @@ def lifestyle_patterns(ds: Dataset, upto: date, history_days: Optional[int] = No
         if min(n_with, len(active) - n_with) < MIN_GROUP:
             continue
         effects = [e for e in (_outcome_effect(ds, OUTCOMES[o], active, rng, bootstrap) for o in c.outcomes) if e is not None]
+        for e in effects:
+            if e.tier == "hint" and not c.hints:
+                e.tier = None
         if not effects:
             continue
         desc = c.describe % _threshold_text(c, t) if "%s" in c.describe else c.describe

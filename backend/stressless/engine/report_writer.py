@@ -19,12 +19,12 @@ log = logging.getLogger("stressless.engine.report_writer")
 DEFAULT_MODELS = {"daily": "claude-sonnet-5-5", "weekly": "claude-sonnet-5-5"}
 MAX_TOKENS = 8000
 
-SYSTEM = """You write short, playful reports for StressLess. The person's watch app already shows their sleep \
+SYSTEM = """You write short, clear reports for StressLess. The person's watch app already shows their sleep \
 and heart rate, so repeating those numbers adds nothing. What StressLess adds is the links between their data \
 sources: watch (sleep, heart rate, steps), calendar, workouts, music and podcasts, streaming, phone use and \
-coffee/alcohol check-ins. A good report reads like a curious friend who noticed something in their data: "on days \
-you listen to Metallica your daytime heart rate runs 5 bpm higher" or "you sleep better after a run, but not after \
-the gym".
+coffee/alcohol check-ins. A good report reads like a calm, attentive coach who noticed something in their data and \
+says it plainly: "on your 12 days with Metallica, your daytime heart rate was 5 bpm higher than on your other 40 \
+days" or "you sleep better after a run, but not after the gym".
 
 You get one JSON object computed by the app. The app has done all the maths; you choose what is worth telling and \
 put it into words.
@@ -54,10 +54,26 @@ like this. Never present such a link as good news, never tell the person to do m
 says harms sleep, and never build the suggestion on it. Either leave it out or, if it is a fun puzzle, tell it as \
 a puzzle and name the likely real reason ("late scrolling evenings went with longer sleep, but those were probably \
 nights you could sleep in"). Use at most one such link.
-- The findings, summary and suggestion must agree with each other: do not praise a habit in one finding and \
-suggest cutting it in the suggestion.
+- The findings, summary and suggestion (next_week in a weekly report) must agree with each other: do not praise a \
+habit in one finding and suggest cutting it in the suggestion.
 - Mention the sleep score or other plain metrics at most once, as context, never as a finding of their own.
-- Artist, podcast and show names may be used freely; they make the report personal.
+- Artist, podcast and show names, and the titles of calendar activities in the links (a course, a shift, a study \
+session), may be used freely; they make the report personal. Keep the activity in what you write: "you study with \
+fewer phone pickups when Ludovico Einaudi is playing", not "Einaudi days".
+- Each event once: when two links are the same days seen twice (a recurring evening shift and late meetings; a \
+podcast and podcast days), tell the more specific one and leave the other out.
+- Never argue with a link from a handful of days. Two good days with Metallica say nothing against a link measured \
+over weeks; do not mention them. Anything you say must rest on a pattern or a metric, not on a few days' tags.
+
+Writing:
+- Plain words. No puns, metaphors, slang or hype ("secret weapon", "run hot", "team up", "wound-up"). A title says \
+what goes with what: "Statistics days: higher heart rate", "Study music: fewer phone pickups".
+- Say each fact once. The headline names the main link; the summary tells how the links fit together without \
+repeating the findings' numbers; each finding gives its own numbers once.
+- Give every number its comparison and its days, from n and n_without: "on your 9 study days with Ludovico \
+Einaudi, 29 fewer pickups than on your other 11 study days". A bare "8 bpm lower" is not enough.
+- No filler and no guessing at feelings or the body ("your evening probably started with a busier body").
+- Short sentences. Leave a field empty or null rather than fill it with something weak.
 
 Rules:
 - Use only numbers that appear in the JSON, rounded the way a person would say them. Never compute new figures.
@@ -65,7 +81,7 @@ Rules:
 - No medical advice, no diagnoses, and no alarm. If something looks off, say it is worth keeping an eye on.
 - Every finding must list the pattern (and metric) keys it rests on, exactly as they appear in the JSON.
 - If notes say data is missing or history is short, make that clear in caveats and keep claims modest.
-- Write in English, warm, light and plain, without jargon. Spell out what HRV is the first time you use it."""
+- Write in English, friendly and plain, without jargon. Spell out what HRV is the first time you use it."""
 
 TASK = {
     "daily": "Write this morning's daily report: what in yesterday likely shaped last night and today, told through "
@@ -201,10 +217,9 @@ def rule_content(inp: ReportInput) -> ReportContent:
         summary = "Your sleep score %s %s, %s points %s your usual %s." % (
             "was" if inp.kind == "daily" else "averaged", _fmt(score.value, "points"), _fmt(abs(score.delta), "points"),
             word, _fmt(score.baseline, "points"))
-    common = dict(headline=headline, summary=summary, findings=_findings(inp), fun_fact=None,
-                  suggestion=(inp.suggestions[0].rstrip(".") + ".") if inp.suggestions else None, caveats=list(inp.notes))
+    common = dict(headline=headline, summary=summary, findings=_findings(inp), fun_fact=None, caveats=list(inp.notes))
     if inp.kind == "daily":
-        return CONTENT_MODELS["daily"](**common)
+        return CONTENT_MODELS["daily"](**common, suggestion=(inp.suggestions[0].rstrip(".") + ".") if inp.suggestions else None)
     scored = [d for d in inp.days if d.score is not None]
     best = max(scored, key=lambda d: d.score) if len(scored) >= 2 else None
     worst = min(scored, key=lambda d: d.score) if len(scored) >= 2 else None
@@ -214,7 +229,7 @@ def rule_content(inp: ReportInput) -> ReportContent:
         return DayHighlight(day=d.day, reason="Sleep score %d. The day: %s." % (d.score, ", ".join(d.tags) if d.tags else "nothing special in the calendar"))
     top = next((p for p in inp.patterns if p.direction == "hurt"), None)
     return CONTENT_MODELS["weekly"](
-        **common, trend=summary, best_day=hi(best) if spread else None, hardest_day=hi(worst) if spread else None,
+        **common, best_day=hi(best) if spread else None, hardest_day=hi(worst) if spread else None,
         next_week=("Watch out for %s next week; it is your strongest pattern." % top.title.lower()) if top
         else "Keep the rhythm that worked this week.")
 

@@ -17,7 +17,7 @@ DAILY = {
     "suggestion": "Protect 21:00 to 22:00 tonight.",
     "caveats": [],
 }
-WEEKLY = dict(DAILY, trend="A little below your usual week.", best_day={"day": "2026-10-03", "reason": "A calm day."},
+WEEKLY = dict({k: v for k, v in DAILY.items() if k != "suggestion"}, best_day={"day": "2026-10-03", "reason": "A calm day."},
               hardest_day=None, next_week="Keep the morning workouts.")
 
 
@@ -40,6 +40,13 @@ class ReportSchemaTests(unittest.TestCase):
             back = Report.model_validate_json(report(kind, raw).model_dump_json())
             self.assertIsInstance(back.content, cls)
             self.assertEqual(type(back.content), cls)
+
+    def test_a_stored_weekly_report_with_the_old_fields_still_loads(self):
+        old = json.loads(report("weekly", WEEKLY).model_dump_json())
+        old["content"].update(trend="A little below your usual week.", suggestion="Protect 21:00 to 22:00.")
+        back = Report.model_validate(old)
+        self.assertIsInstance(back.content, WeeklyContent)
+        self.assertFalse({"trend", "suggestion"} & set(back.content.model_dump()))
 
     def test_content_must_match_kind(self):
         with self.assertRaises(ValidationError):

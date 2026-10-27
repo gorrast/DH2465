@@ -38,8 +38,8 @@
     },
     "series_caf\u00e9_shift": {
       "direction": "hurt",
-      "strength": "weak",
-      "how": "early Saturday and late Sunday shifts",
+      "strength": "strong",
+      "how": "early Saturday and late Sunday shifts: later bedtime, earlier wake (simulator)",
       "found": {
         "direction": "hurt",
         "tier": "strong",
@@ -55,22 +55,18 @@
     "busy_days": {
       "direction": "hurt",
       "strength": "weak",
-      "how": "Statistics and caf\u00e9 shift days",
+      "how": "the long Statistics days",
       "found": {
         "direction": "hurt",
         "tier": "strong",
         "outcomes": [
-          "score",
           "duration_min",
-          "onset_min",
-          "hrv_ms",
-          "resting_hr",
           "day_hr"
         ]
       },
       "ok": true
     },
-    "focus_music_ludovico_einaudi": {
+    "pair_ludovico_einaudi_during_study_session": {
       "direction": "helped",
       "strength": "strong",
       "how": "study blocks with it: 40 % fewer pickups, less screen time, HR -4 while studying",
@@ -78,8 +74,7 @@
         "direction": "helped",
         "tier": "strong",
         "outcomes": [
-          "pickups",
-          "focus_hr"
+          "pickups"
         ]
       },
       "ok": true
@@ -92,22 +87,6 @@
         "direction": "helped",
         "tier": "hint",
         "outcomes": [
-          "resting_hr"
-        ]
-      },
-      "ok": true
-    },
-    "late_meetings": {
-      "direction": "hurt",
-      "strength": "strong",
-      "how": "late Sunday caf\u00e9 shifts: later bedtime (simulator)",
-      "found": {
-        "direction": "hurt",
-        "tier": "strong",
-        "outcomes": [
-          "score",
-          "duration_min",
-          "onset_min",
           "resting_hr"
         ]
       },
@@ -425,6 +404,9 @@
         null
       ]
     ],
+    "stored_as": {
+      "Caf\u00e9 shift": "personal"
+    },
     "class_effects": {
       "stress": {
         "day_hr": 6,
@@ -478,7 +460,7 @@
     "focus_effects": {
       "pickups": 0.6,
       "screen_minutes": -40,
-      "focus_hr": -4
+      "hr": -4
     },
     "workouts": [
       [

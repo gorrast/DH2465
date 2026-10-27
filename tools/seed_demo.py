@@ -59,6 +59,9 @@ CONFIG: Dict[str, Any] = {
     "week": [("Statistics lecture", [(1, 8.25, 12.0), (3, 8.25, 12.0)], "meeting", "Lecture hall F1", 30, "stress"),
              ("Interaction Design studio", [(0, 13.0, 15.0), (4, 9.0, 11.0)], "meeting", "Design studio", 12, "enjoy"),
              ("Café shift", [(5, 7.0, 13.0), (6, 16.0, 21.0)], "meeting", "Café", 3, None)],
+    # stored with another category than the simulator uses: the shift is a meeting to the simulator (so the late
+    # shift delays bedtime), but the app would call it a meeting ("late meetings", "time in meetings")
+    "stored_as": {"Café shift": "personal"},
     # per class day: daytime heart rate from the class to 22:00, minutes to fall asleep, overnight HRV and resting HR
     "class_effects": {"stress": {"day_hr": 6, "onset_min": 30, "hrv": -0.20, "resting_hr": 3},
                       "enjoy": {"day_hr": -3, "onset_min": -8, "hrv": 0.06, "resting_hr": -1}},
@@ -67,7 +70,7 @@ CONFIG: Dict[str, Any] = {
     # focus music: on this share of study blocks the artist plays through it; those days have fewer pickups, less
     # screen time and a calmer heart rate during the block
     "focus_artist": ("Ludovico Einaudi", "modern classical", 0.55),
-    "focus_effects": {"pickups": 0.6, "screen_minutes": -40, "focus_hr": -4},
+    "focus_effects": {"pickups": 0.6, "screen_minutes": -40, "hr": -4},
     # on days without a class effect, so the class links and the workout links stay apart
     "workouts": [("Morning run", "Djurgården", [(2, 7.0, 7.75, 0.95)]),
                  ("Gym", "SATS KTH", [(2, 18.0, 19.0, 0.6), (5, 15.0, 16.0, 0.6)])],
@@ -107,12 +110,12 @@ PLANTED: Dict[str, Dict[str, str]] = {
                                   "how": "stressful class: daytime HR +6, 30 min slower to sleep, HRV -20 %"},
     "series_interaction_design_studio": {"direction": "helped", "strength": "strong",
                                          "how": "enjoyed class: daytime HR -3, 8 min faster to sleep, HRV +6 %"},
-    "series_café_shift":  {"direction": "hurt", "strength": "weak", "how": "early Saturday and late Sunday shifts"},
-    "busy_days":          {"direction": "hurt", "strength": "weak", "how": "Statistics and café shift days"},
-    "focus_music_ludovico_einaudi": {"direction": "helped", "strength": "strong",
+    "series_café_shift":  {"direction": "hurt", "strength": "strong",
+                           "how": "early Saturday and late Sunday shifts: later bedtime, earlier wake (simulator)"},
+    "busy_days":          {"direction": "hurt", "strength": "weak", "how": "the long Statistics days"},
+    "pair_ludovico_einaudi_during_study_session": {"direction": "helped", "strength": "strong",
                                      "how": "study blocks with it: 40 % fewer pickups, less screen time, HR -4 while studying"},
     "artist_ludovico_einaudi": {"direction": "helped", "strength": "weak", "how": "follows from the calmer study blocks"},
-    "late_meetings":      {"direction": "hurt", "strength": "strong", "how": "late Sunday café shifts: later bedtime (simulator)"},
     "social_evenings":    {"direction": "hurt", "strength": "strong", "how": "~90 min later bedtime, often drinks (simulator)"},
     "cardio_days":        {"direction": "helped", "strength": "strong", "how": "morning runs: faster onset, less waking, higher HRV (simulator)"},
     "early_starts":       {"direction": "hurt", "strength": "weak", "how": "Saturday opening shifts: wake earlier (simulator)"},
@@ -369,7 +372,7 @@ def generate(cal: Dict[str, Any], today: date) -> Dict[str, Any]:
                 s0 = ev.start.hour * 60 + ev.start.minute
                 for m in range(s0, min(1440, s0 + ev.duration_min)):
                     if h.bpm[m] is not None:
-                        h.bpm[m] += CONFIG["focus_effects"]["focus_hr"]
+                        h.bpm[m] += CONFIG["focus_effects"]["hr"]
         # class days: daytime heart rate from the class to 22:00, and that night's HRV and resting heart rate
         eff = class_effect(events, d)
         if eff and h is not None:
@@ -445,7 +448,8 @@ def to_rows(gen: Dict[str, Any], hrv_key: str) -> Dict[str, List[Dict[str, Any]]
                  "workouts": [{"kind": w.kind, "start": _iso(w.start), "end": _iso(w.end), "avg_hr": w.avg_hr,
                                "max_hr": w.max_hr, "calories": w.calories, "data_origin": SEED} for w in a.workouts]}
                 for a in ds.activity]
-    events = [{"provider": "manual", "provider_event_id": "%s-%s" % (SEED, e.id), "title": e.title, "category": e.type,
+    events = [{"provider": "manual", "provider_event_id": "%s-%s" % (SEED, e.id), "title": e.title,
+               "category": CONFIG["stored_as"].get(e.title, e.type),
                "starts_at": _iso(e.start), "ends_at": _iso(e.end), "location": e.location_hint,
                "guests": [{"response_status": "accepted"}] * max(0, e.attendees - 1), "recurring_key": e.recurring_key}
               for e in ds.events]

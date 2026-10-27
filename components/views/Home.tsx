@@ -23,8 +23,8 @@ interface Pattern { key: string; title: string; detail: string; sources?: string
 interface Finding { title: string; body: string; tone: 'good' | 'neutral' | 'watch'; confidence: string; evidence: string[] }
 interface DayHighlight { day: string; reason: string }
 interface Content {
-  headline: string; summary: string; findings: Finding[]; fun_fact: string | null; suggestion: string | null;
-  caveats: string[]; trend?: string; best_day?: DayHighlight | null; hardest_day?: DayHighlight | null; next_week?: string;
+  headline: string; summary: string; findings: Finding[]; fun_fact: string | null; suggestion?: string | null;
+  caveats: string[]; best_day?: DayHighlight | null; hardest_day?: DayHighlight | null; next_week?: string;
 }
 interface Report {
   kind: 'daily' | 'weekly'; period_start: string; period_end: string; generated_at: string; mode: 'claude' | 'rules';
@@ -224,7 +224,6 @@ function ReportCard({ report, onRegenerate }: { report: Report; onRegenerate?: (
       <div className="eyebrow">{weekly ? 'Week of ' + fmt.day(report.period_start) + ' – ' + fmt.day(report.period_end) : 'Daily report · ' + fmt.day(report.period_start)}</div>
       <h2>{c.headline}</h2>
       <p className="v-home-summary">{c.summary}</p>
-      {weekly && c.trend ? <p className="secondary">{c.trend}</p> : null}
 
       <ul className="v-home-findings">
         {c.findings.map((f, i) => {

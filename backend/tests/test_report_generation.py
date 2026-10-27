@@ -29,11 +29,13 @@ class FakeClient:
         self.calls.append(req)
         if self.fail:
             raise RuntimeError("network down")
-        fields = dict(headline="A short night", summary="Your score was 64.", fun_fact=None, suggestion=None, caveats=[],
+        fields = dict(headline="A short night", summary="Your score was 64.", fun_fact=None, caveats=[],
                       findings=[{"title": "Late meeting", "body": "Likely a factor.", "tone": "watch", "confidence": "high",
                                  "evidence": self.evidence}])
-        if req["output_format"].__name__ == "WeeklyContent":
-            fields.update(trend="Below usual.", best_day=None, hardest_day=None, next_week="Fewer late meetings.")
+        if req["output_format"].__name__ == "DailyContent":
+            fields.update(suggestion=None)
+        else:
+            fields.update(best_day=None, hardest_day=None, next_week="Fewer late meetings.")
         return SimpleNamespace(parsed_output=req["output_format"](**fields), stop_reason=self.stop_reason,
                                model=req["model"], usage=SimpleNamespace(input_tokens=1200, output_tokens=400))
 
@@ -45,7 +47,7 @@ class InputTests(unittest.TestCase):
         cls.engine = Engine(cls.ds)
 
     def test_daily_input_has_metrics_patterns_and_no_event_names(self):
-        """No event titles, except those of recurring series that became a link (an agreed exception)."""
+        """No event titles, except those of recurring activities that became a link (an agreed exception)."""
         inp = daily_input(self.engine, ANCHOR)
         self.assertEqual((inp.kind, inp.period_start, inp.period_end), ("daily", ANCHOR, ANCHOR))
         self.assertIn("sleep.score", inp.keys())
@@ -53,9 +55,9 @@ class InputTests(unittest.TestCase):
         self.assertEqual(len(inp.keys()), len(inp.metrics) + len(inp.patterns))     # keys are unique
         text = inp.model_dump_json()
         night = ANCHOR - timedelta(days=1)
-        series = {p.title[len("Days with "):] for p in inp.patterns if p.key.startswith("pattern.series_")}
+        linked = [p.title for p in inp.patterns if p.key.startswith(("pattern.series_", "pattern.pair_"))]
         for ev in self.ds.events_on(night, include_unattended=True) + self.ds.events_on(ANCHOR, include_unattended=True):
-            if not (ev.recurring_key and ev.title in series):
+            if not any(ev.title in t for t in linked):
                 self.assertNotIn(ev.title, text)
 
     def test_weekly_input_covers_monday_to_sunday(self):

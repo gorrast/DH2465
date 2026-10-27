@@ -1,8 +1,3 @@
-import type { Metadata } from 'next';
-import { HabitsView } from '@/components/views/Habits';
+import { redirect } from 'next/navigation';
 
-export const metadata: Metadata = { title: 'Habits' };
-
-export default function Page() {
-  return <HabitsView />;
-}
+export default function Page() { redirect('/weekly#weekly-patterns'); }

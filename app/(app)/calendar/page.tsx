@@ -1,8 +1,3 @@
-import type { Metadata } from 'next';
-import { CalendarView } from '@/components/views/Calendar';
+import { redirect } from 'next/navigation';
 
-export const metadata: Metadata = { title: 'Calendar' };
-
-export default function Page() {
-  return <CalendarView />;
-}
+export default function Page() { redirect('/daily'); }

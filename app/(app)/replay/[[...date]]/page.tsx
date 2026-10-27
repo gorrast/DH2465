@@ -1,9 +1,7 @@
-import type { Metadata } from 'next';
-import { ReplayView } from '@/components/views/Replay';
+import { redirect } from 'next/navigation';
+import { dates } from '@/lib/format';
 
-export const metadata: Metadata = { title: 'Replay' };
-
-export default async function Page({ params, searchParams }: { params: Promise<{ date?: string[] }>; searchParams: Promise<{ t?: string }> }) {
-  const [{ date }, { t }] = await Promise.all([params, searchParams]);
-  return <ReplayView key={(date?.[0] ?? '') + ':' + (t ?? '')} date={date?.[0]} t={t} />;
+export default async function Page({ params }: { params: Promise<{ date?: string[] }> }) {
+  const { date } = await params;
+  redirect('/daily' + (date?.[0] ? '/' + dates.addDays(date[0], 1) : ''));
 }

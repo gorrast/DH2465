@@ -1,8 +1,3 @@
-import type { Metadata } from 'next';
-import { MediaView } from '@/components/views/Media';
+import { redirect } from 'next/navigation';
 
-export const metadata: Metadata = { title: 'Media lab' };
-
-export default function Page() {
-  return <MediaView />;
-}
+export default function Page() { redirect('/connect'); }

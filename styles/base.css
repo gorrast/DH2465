@@ -388,3 +388,13 @@ a.btn-primary { transition: background-color 160ms, border-color 160ms, transfor
 @media (prefers-reduced-motion: no-preference) { a.btn-primary:active { transform: scale(.965); } }
 
 .headline-line { display: block; }
+
+/* Consolidated views keep the primary navigation consistent on every screen. */
+.section-heading { margin: 32px 0 16px; }
+.weekly-patterns { margin-top: 24px; scroll-margin-top: 88px; }
+.weekly-patterns > summary { cursor: pointer; font-size: 18px; font-weight: 600; padding: 8px 0; }
+.weekly-patterns[open] > summary { margin-bottom: 16px; }
+#reality-check { scroll-margin-top: 88px; }
+@media (max-width: 760px) {
+  .mobile-nav a { min-width: 0; padding: 7px 3px; text-align: center; font-size: 10px; }
+}

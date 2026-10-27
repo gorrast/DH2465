@@ -1,4 +1,4 @@
-import { dates } from './format';
+import { dates } from "./format";
 
 export interface NavItem {
   name: string;
@@ -11,33 +11,65 @@ export interface NavItem {
 }
 
 export const NAV: NavItem[] = [
-  { name: 'home', label: 'Home', icon: 'brain', key: '0', title: 'Home' },
-  { name: 'morning', label: 'Morning', icon: 'moon', key: '1', withDate: true, title: 'Morning' },
-  { name: 'replay', label: 'Replay', icon: 'pulse', key: '2', withDate: true, dateOffset: -1, title: 'Replay' },
-  { name: 'week', label: 'Insights', icon: 'week', key: '3', title: 'Week' },
-  { name: 'habits', label: 'Habits', icon: 'habits', key: '4', title: 'Habits' },
-  { name: 'reality', label: 'Reality check', icon: 'inbox', key: '5', title: 'Reality check' },
-  { name: 'planner', label: 'Plan', icon: 'planner', key: '6', title: 'Planner' },
-  { name: 'data', label: 'Data & privacy', icon: 'lock', key: '7', title: 'Data & privacy' },
-  { name: 'lab', label: 'Under the hood', icon: 'lab', key: '8', title: 'Under the hood' },
-  { name: 'calendar', label: 'Calendar', icon: 'calendar', key: '9', title: 'Calendar' },
-  { name: 'media', label: 'Media lab', icon: 'music', key: '9', title: 'Media lab' },
-  { name: 'fun-statistics', label: 'Fun statistics', icon: 'sparkles', key: 'f', title: 'Fun statistics' },
+  {
+    name: "daily",
+    label: "Daily Report",
+    icon: "sun",
+    key: "1",
+    withDate: true,
+    title: "Daily",
+  },
+  {
+    name: "weekly",
+    label: "Weekly Report",
+    icon: "week",
+    key: "2",
+    title: "Weekly",
+  },
+  {
+    name: "connect",
+    label: "Connect Your Data",
+    icon: "upload",
+    key: "3",
+    title: "Connect Your Data",
+  },
+  {
+    name: "account",
+    label: "My Account",
+    icon: "users",
+    key: "4",
+    title: "My Account",
+  },
+  {
+    name: "data",
+    label: "Data and Privacy",
+    icon: "lock",
+    key: "5",
+    title: "Data and Privacy",
+  },
 ];
 
 export function defaultHref(item: NavItem, today: string): string {
-  if (item.name === 'home') return '/';
-  if (!item.withDate) return '/' + item.name;
-  return '/' + item.name + '/' + (item.dateOffset ? dates.addDays(today, item.dateOffset) : today);
+  if (item.name === "home") return "/";
+  if (!item.withDate) return "/" + item.name;
+  return (
+    "/" +
+    item.name +
+    "/" +
+    (item.dateOffset ? dates.addDays(today, item.dateOffset) : today)
+  );
 }
 
 export function hrefFor(name: string, today: string): string {
   const item = NAV.find((n) => n.name === name);
-  return item ? defaultHref(item, today) : '/' + name;
+  return item ? defaultHref(item, today) : "/" + name;
 }
 
 /** Split a pathname like /morning/2026-09-27 into the view name and its params. */
-export function parsePath(pathname: string): { name: string; params: string[] } {
-  const segs = pathname.split('/').filter(Boolean);
-  return { name: segs[0] || 'home', params: segs.slice(1) };
+export function parsePath(pathname: string): {
+  name: string;
+  params: string[];
+} {
+  const segs = pathname.split("/").filter(Boolean);
+  return { name: segs[0] || "home", params: segs.slice(1) };
 }

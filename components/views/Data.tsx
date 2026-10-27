@@ -1,6 +1,6 @@
 'use client';
 /* Data & privacy: what is connected, what is read, persona/seed, import, delete (SPEC §9.4). */
-import { useState } from 'react';
+import Link from 'next/link';
 import { api } from '@/lib/api';
 import { fmt } from '@/lib/format';
 import { Icon } from '../ui/Icon';
@@ -30,9 +30,7 @@ function Conn({ icon, title, status, note }: { icon: string; title: string; stat
 }
 
 export function DataView() {
-  const { meta, switchPersona, refreshMeta, setHistoryDays, go } = useApp();
-  const [chosen, setChosen] = useState(meta.persona.key);
-  const [seed, setSeed] = useState(String(meta.seed));
+  const { meta, refreshMeta, setHistoryDays, go } = useApp();
   const facts = useLoad(() => api.get('/api/validation').catch(() => null), []);
   const isDemo = meta.source === 'demo';
   const hidden = facts.data && facts.data.available ? facts.data.hidden : null;
@@ -47,7 +45,7 @@ export function DataView() {
       setHistoryDays(null);
       busy(null);
       toast('All data deleted. Fresh demo ready.', { kind: 'success' });
-      go('/morning/' + m.today);
+      go('/daily/' + m.today);
     } catch (e: any) {
       busy(null);
       toast(e.message, { kind: 'error' });
@@ -56,8 +54,8 @@ export function DataView() {
 
   return (
     <>
-      <ViewHead eyebrow="Data & privacy" title="What StressLess reads, and why" />
-      <div className="v-data stack">
+      <ViewHead eyebrow="Data and Privacy" title="What StressLess reads, and why" />
+      <div className="v-data stack" data-tour="privacy">
         <div className="grid grid-4">
           <Conn icon="calendar" title="Calendar" status={isDemo ? 'Demo data' : 'Imported'} note={isDemo ? 'Ten weeks of a simulated calendar. In the product: Google Calendar or EventKit, read-only, plus one write per accepted suggestion.' : 'Imported from your .ics export.'} />
           <Conn icon="watch" title="Watch" status={isDemo ? 'Demo data' : 'Imported'} note={isDemo ? 'Simulated Apple Watch: heart rate, sleep stages, HRV, resting heart rate, wrist temperature. In the product: HealthKit on the phone.' : 'Imported from Apple Health.'} />
@@ -72,37 +70,12 @@ export function DataView() {
             <tbody>{CLASSES.map((r) => <tr key={r[0]}>{r.map((c, i) => <td key={i}>{c}</td>)}</tr>)}</tbody>
           </table>
         </div>
-        <div className="card" data-tour="personas">
-          <div className="card-title"><h3>Demo dataset</h3><span className="tiny muted">{(meta.days || 70) + ' nights · today ' + fmt.day(meta.today) + (meta.anchor_mode ? ' (fixed)' : '')}</span></div>
-          <p className="small secondary">Three simulated people with different lives and different true sensitivities. Same seed, same story, every time.</p>
-          <div className="grid grid-3">
-            {(meta.personas || []).map((p) => (
-              <button key={p.key} type="button" className={'card soft v-data-persona' + (chosen === p.key ? ' chosen' : '')} onClick={() => setChosen(p.key)}>
-                <div className="row between">
-                  <span className="avatar">{p.name.slice(0, 1)}</span>
-                  {p.key === meta.persona.key ? <span className="badge badge-accent">current</span> : p.ready ? <span className="badge badge-good">ready</span> : <span className="badge badge-low">preparing</span>}
-                </div>
-                <strong>{p.name}</strong>
-                <div className="small secondary">{p.tagline}</div>
-              </button>
-            ))}
-          </div>
-          <div className="row" style={{ marginTop: '12px' }}>
-            <label className="row small">Seed
-              <input className="input" type="number" value={seed} min={0} max={9999} style={{ width: '90px' }} aria-label="Seed" onChange={(e) => setSeed(e.target.value)} />
-            </label>
-            <button className="btn btn-primary" type="button" onClick={() => switchPersona(chosen, Math.min(9999, Math.max(0, +seed || 0)))}><Icon name="refresh" size={16} />Regenerate</button>
-          </div>
-        </div>
         <div className="grid grid-2">
           <div className="card">
-            <div className="card-title"><h3>Bring your own data</h3><span className="badge badge-low">coming soon</span></div>
-            <p className="small secondary">The same engine runs on real exports. Uploading your own files to the web app is coming soon; these are the exports it will read:</p>
-            <ul className="small secondary v-data-list">
-              <li>Apple Health: Settings → Health → Export All Health Data (export.xml)</li>
-              <li>Google Calendar: Settings → Import &amp; export → Export (.ics)</li>
-              <li>Google Maps: Google Takeout → Location History (Semantic Location History or Timeline.json)</li>
-            </ul>
+            <div className="card-title"><h3>Bring your own data</h3></div>
+            <p className="small secondary">Connect Your Data is the home for imports and optional sync. Import Spotify listening history, Netflix viewing CSVs, YouTube watch history, or a Steam library JSON. Steam and Last.fm sync are available when configured.</p>
+            <p className="small secondary">Health, calendar and location exports cannot currently be uploaded through the web app. Each supported source includes its own setup instructions and file requirements.</p>
+            <Link className="btn btn-primary" href="/connect"><Icon name="upload" size={16} />Connect Your Data</Link>
           </div>
           <div className="stack">
             <div className="card">

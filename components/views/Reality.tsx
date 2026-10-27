@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRef, useState } from 'react';
 import { api } from '@/lib/api';
-import { fmt } from '@/lib/format';
+import { dates, fmt } from '@/lib/format';
 import { Icon } from '../ui/Icon';
 import { ScoreChange } from '../ui/ScoreChange';
 import { toast } from '../ui/overlays';
@@ -54,18 +54,18 @@ function ResolvedCard({ c, extra }: { c: any; extra?: any }) {
         <span className="tiny muted">{fmt.day(c.date)}</span>
       </div>
       {extra ? (
-        <div className="row small"><HabitLine a={extra} /><Link className="btn btn-sm btn-ghost" href={'/replay/' + extra.replay_date}>See that day →</Link></div>
+        <div className="row small"><HabitLine a={extra} /><Link className="btn btn-sm btn-ghost" href={'/daily/' + dates.addDays(extra.replay_date, 1)}>See that day →</Link></div>
       ) : (
         <div className="row tiny muted">
           {c.consequence ? <span>{c.consequence.replace(/^If (yes|no), /, (m: string, w: string) => (w === c.status ? '' : m))}</span> : null}
-          <Link href={'/replay/' + c.date}>See that day →</Link>
+          <Link href={'/daily/' + dates.addDays(c.date, 1)}>See that day →</Link>
         </div>
       )}
     </div>
   );
 }
 
-export function RealityView() {
+export function RealityView({ embedded = false, onAnswered }: { embedded?: boolean; onAnswered?: () => void }) {
   const recent = useRef<Record<string, any>>({});
   const [questionIndex, setQuestionIndex] = useState(0);
   const load = useLoad(() => api.get('/api/reality'), []);
@@ -78,6 +78,7 @@ export function RealityView() {
       toast(value === 'yes' ? (c.kind === 'seen_not_booked' ? 'Added to your calendar and patterns' : 'Kept in your patterns') : 'Removed from your patterns', { kind: 'success' });
       load.setData(await api.get('/api/reality'));
       setQuestionIndex(0);
+      onAnswered?.();
       return true;
     } catch (e: any) {
       toast('Could not save: ' + e.message, { kind: 'error' });
@@ -87,7 +88,7 @@ export function RealityView() {
 
   return (
     <>
-      <ViewHead eyebrow="Reality check" title="Did that actually happen?" />
+      {embedded ? <header className="view-head"><div><div className="eyebrow">Reality check</div><h2>Did that actually happen?</h2></div></header> : <ViewHead eyebrow="Reality check" title="Did that actually happen?" />}
       <div className="v-reality stack">
         <p className="secondary v-reality-intro"><Icon name="info" size={16} />{' We never ask you to log. We only ask when your calendar, your location and your body disagree.'}</p>
         {load.loading ? <Skeleton height={200} /> : load.error || !data ? <ErrorCard error={load.error!} onRetry={load.reload} view="reality" /> : (

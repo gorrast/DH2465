@@ -33,22 +33,27 @@ await page.waitForURL((u) => !u.pathname.startsWith('/login'));
 
 // "today" as the app sees it: once a view has rendered, the rail's Morning link carries the server's date
 await page.locator('main#view .view-head').waitFor();
-const href = await page.locator('a.rail-link[data-view="morning"]').getAttribute('href');
+const href = await page.locator('a.rail-link[data-view="daily"]').getAttribute('href');
 const today = href.split('/')[2];
-const yesterday = new Date(Date.parse(today + 'T12:00:00Z') - 86400000).toISOString().slice(0, 10);
-
 const views = [
-  ['morning', `/morning/${today}`, '.ah-finding, .ah-empty'],
-  ['morning-reveal', `/morning/${today}?reveal=1`, '[data-tour="reveal"]'],
-  ['replay', `/replay/${yesterday}?t=1020`, '.c-timeline'],
-  ['week', '/week', '.c-heat'],
-  ['habits', '/habits', '.v-habits-card'],
-  ['reality', '/reality', '[data-tour="inbox"]'],
-  ['planner', `/planner/${today}`, '.v-planner-event, .v-planner-hero'],
-  ['data', '/data', '.v-data-persona'],
-  ['media', '/media', '.media-source-bar'],
-  ['lab', '/lab', '.c-effects'],
+  ['daily', `/daily/${today}`, '.ah-report'],
+  ['daily-reveal', `/daily/${today}?reveal=1`, '[data-tour="reveal"]'],
+  ['weekly', '/weekly', '.c-heat'],
+  ['connect', '/connect', '.media-source-bar'],
+  ['account', '/account', '#account-details'],
+  ['data', '/data', '.v-data-conn'],
 ];
+// The drawer opens only on click and contains exactly the five destinations.
+const menu = page.getByRole('button', { name: 'Open navigation', exact: true });
+if (!args.mobile) {
+  await menu.hover();
+  if (await menu.getAttribute('aria-expanded') !== 'false') throw new Error('Hover opened navigation');
+  await menu.click();
+  const labels = await page.locator('#rail-nav .rail-label').allTextContents();
+  if (JSON.stringify(labels) !== JSON.stringify(['Daily Tab', 'Weekly Tab', 'Connect Your Data', 'My Account', 'Data and Privacy'])) throw new Error('Unexpected navigation: ' + labels.join(', '));
+  await page.keyboard.press('Escape');
+  if (await menu.getAttribute('aria-expanded') !== 'false') throw new Error('Escape did not close navigation');
+}
 let failures = 0;
 for (const [name, path, ready] of views) {
   errors = [];
@@ -65,7 +70,7 @@ for (const [name, path, ready] of views) {
 }
 
 // presenter tour, step 3 (the replay playing the evening)
-await page.goto(base + `/morning/${today}`);
+await page.goto(base + `/daily/${today}`);
 await page.locator('.ah-report').waitFor();
 await page.keyboard.press('t');
 await page.locator('.tour-card').waitFor();

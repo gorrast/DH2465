@@ -2,6 +2,10 @@ import type { NextConfig } from 'next';
 
 // /api/* is the FastAPI app: uvicorn on :8000 in development, the Python function api/index.py on Vercel.
 const nextConfig: NextConfig = {
+  experimental: {
+    // YouTube exports allow 32 MB; leave room for multipart form overhead.
+    proxyClientMaxBodySize: '36mb',
+  },
   rewrites: async () => [
     {
       source: '/api/:path*',

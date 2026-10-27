@@ -158,10 +158,116 @@ the date with `STRESSLESS_ANCHOR`.
 
 ## Bring your own data
 
-The Media lab view now accepts two media-only exports: Spotify Extended Streaming History JSON and Netflix
-ViewingActivity.csv. The server parses each file, discards the upload, and stores normalized rows in the per-user
-Supabase `media_events` table. The view shows provider totals and recent records; health and sleep data are not
-imported by this prototype.
+The Media tab has separate Spotify, Netflix and Steam sections, with scrollable histories, library browsing,
+and the Morning view's typography and section reveals. It displays imported data without requesting media
+insights, statistical correlations, or Claude analysis.
+
+- **Spotify:** import music/podcast history JSON, including Extended Streaming History. Taste Profile,
+  Your Library and Wrapped summaries are also supported. Select history files together.
+- **Netflix:** download Viewing activity from each Netflix profile and select the CSVs together.
+  `Title,Date` exports accept `M/D/YY`, `M/D/YYYY`, and ISO dates. Each filename labels its profile;
+  keep filenames stable when reimporting. Missing titles remain visible as “Title unavailable”. Dates
+  carry no time of day, and duration is unavailable unless the CSV supplies `Duration` as `HH:MM:SS`.
+- **Steam:** import one JSON response from [GetOwnedGames or GetRecentlyPlayedGames](https://partner.steamgames.com/doc/webapi/IPlayerService).
+  Request `include_appinfo=true` for GetOwnedGames to include names. Both the full `{ "response": { "games": [...] } }`
+  envelope and `{ "games": [...] }` work. Displayed playtime is in-game cumulative minutes, converted to hours;
+  snapshots do not supply individual play sessions. Library search and sorting happen locally.
+  Steam can also refresh directly using **Sync now** after the setup below. Scheduled sync is not enabled.
+
+History imports replace that provider's history; choose all files to retain in one import (up to 20 files,
+4 MB combined). Overlapping records in the same import are deduplicated. A Steam import replaces its previous
+library snapshot. The server discards the original uploads and persists normalized history in `media_events`
+and summaries/snapshots in `media_documents`, protected by per-user row-level security. Apply migrations,
+including `20261022000000_steam_library_import.sql`, before using Steam imports against Supabase.
+
+Last.fm provides ongoing listening history through its official API. Its scrobbles are displayed separately
+from Spotify exports to avoid adding overlapping play counts together. No playback duration is inferred.
+
+### Last.fm listening and artwork
+
+1. Enable [Spotify scrobbling in Last.fm](https://www.last.fm/about/trackmymusic) and create a
+   [Last.fm API account](https://www.last.fm/api/account/create). Reading listening history requires an API key
+   and profile username, without a shared secret, authentication callback or Spotify developer application.
+2. Set the server-only variables in `.env.local`:
+
+   ```env
+   LASTFM_API_KEY=your_lastfm_api_key
+   LASTFM_USERNAME=your_lastfm_profile_username
+   LASTFM_SYNC_USER_ID=your_supabase_auth_user_uuid
+   ```
+
+   Use the same app user UUID as Steam, or copy it from Media → Last.fm → Set up Last.fm sync.
+3. Apply `supabase/migrations/20261022133929_lastfm_media_sync.sql` in Supabase's SQL editor (or your normal
+   migration workflow). It extends the `media_events` provider constraint and the existing atomic import RPC.
+   Last.fm events merge by a stable ID; file histories keep their replacement behavior. Sync progress is a
+   `lastfm_sync` document in `media_documents`. Existing media remains intact.
+4. Restart `npm run dev`, reload Media and click **Sync now** in Last.fm under Listening. Each request reads
+   up to 200 completed scrobbles. **Load older listening** pages through older history. **Continue sync** appears
+   when a large new-listening backlog needs another batch; fixed time windows keep new tracks from shifting
+   those pages. Repeating a sync does not duplicate saved scrobbles. Now-playing tracks are not saved as plays.
+
+Album artwork is displayed in the featured latest listen and history thumbnails. Safe HTTPS image URLs from
+Last.fm's image CDNs are used directly. If a track has no artwork, a visible cover triggers a cached
+`album.getInfo` lookup through the authenticated backend. Repeated album lookups share requests and are paced;
+missing or broken covers fall back to a music icon. Listening data/artwork link back to Last.fm.
+
+Last.fm calls use your server-side key and are limited to the configured app user. API errors preserve saved
+history and paging progress; no credentials are returned to the browser. Username changes are rejected while
+history for a different username is saved. Scrobbles have no exact listening duration, and enabling scrobbling
+does not recover listening Last.fm never recorded. Sync runs on button presses, without Claude, statistical
+analysis or scheduled polling.
+
+### Steam Sync now (your own account)
+
+1. Sign in locally and open **Media → Steam → Set up Steam sync**. Copy **Your app user ID**.
+   This is your Supabase Auth UUID; it is also listed under Supabase → Authentication → Users.
+2. Register a personal [Steam Web API key](https://steamcommunity.com/dev/apikey) and find your **SteamID64**
+   (17 digits, not your login name or custom profile URL). Check your Steam account details for the Steam ID.
+3. Under Steam → Edit Profile → Privacy Settings, make **My profile** and **Game details** public.
+   To expose playtime, also disable “Always keep my total playtime private”.
+4. Add these server-only variables to the existing `.env.local`:
+
+   ```env
+   STEAM_WEB_API_KEY=your_personal_steam_api_key
+   STEAM_ID=your_17_digit_steam_id
+   STEAM_SYNC_USER_ID=your_supabase_auth_user_uuid
+   ```
+
+5. Apply `supabase/migrations/20261022000000_steam_library_import.sql` if it has not already been applied.
+   No additional migration is needed for the button. Restart `npm run dev` so the backend reloads `.env.local`.
+6. Reload [Media](http://localhost:3000/media), go to Steam, and click **Sync now**. The games, playtime and
+   last-synced timestamp update after the snapshot is saved. Errors leave the previous snapshot intact.
+
+The configured Steam library can only be synced by `STEAM_SYNC_USER_ID`. The API key is sent to Steam in
+the `x-webapi-key` header, never returned to the browser or persisted in `media_documents`. No service-role
+key, Claude key, statistical-engine connection or scheduler is required. This is a personal server-side
+configuration; other users can continue to import their own files. Both `media_events` and `media_documents`
+remain in use. Steam sync updates its snapshot in `media_documents` without changing Spotify or Netflix data.
+
+### Automatic Netflix and Steam artwork
+
+Steam imports and Sync now attach official header-image URLs using each game's app ID. Game cards display
+these images automatically; missing/removed artwork keeps the existing gamepad placeholder. No new Steam
+credential, image upload or database migration is needed for Steam artwork. Sync/import once to populate old
+snapshots with the new image URLs.
+
+Netflix's CSV does not include artwork. StressLess can fetch series/movie posters from TMDB automatically
+after a successful import:
+
+1. Create a [TMDB API account](https://www.themoviedb.org/settings/api) and copy its **API Read Access Token**
+   (the Bearer token, not the shorter v3 API key).
+2. Add `TMDB_READ_ACCESS_TOKEN=...` to `.env.local`. Optionally set `TMDB_LANGUAGE=sv-SE` (the default).
+3. Apply `supabase/migrations/20261022142351_netflix_artwork.sql`. It adds a user-scoped RPC/index to patch
+   poster metadata in `media_events.source` while preserving titles, dates, profiles and all other records.
+4. Restart `npm run dev` and import all Netflix CSVs together. Existing uploads need one reimport to attach
+   catalogue lookup keys. No individual images need to be supplied.
+
+After the history is saved, the import UI automatically processes small poster batches and displays progress.
+Episodes share a show lookup/poster. Exact normalized titles and original titles are matched; ambiguous titles,
+remakes without a distinguishing year, missing covers and unknown titles remain placeholders. Only title search
+queries are sent to TMDB, without viewing dates or profile filenames. Requests are cached and credentials stay
+on the server. **Fetch missing posters** resumes interrupted work; no metadata lookup starts just by opening
+the page. Network/API failures do not discard imported history. TMDB attribution is displayed under Netflix.
 
 The original health and calendar importers already exist and are tested
 (`backend/stressless/connectors/`): Apple Health (Settings → Health → Export All Health Data), Google
@@ -226,3 +332,25 @@ tools/                 screenshots (Playwright) and palette validation
   `STRESSLESS_ANCHOR` to keep one date).
 * The calendar misses coffee, alcohol, screens and unbooked stress; the demo shows how the product
   copes with that rather than pretending otherwise.
+# YouTube watch-history import
+
+YouTube imports default to the last 90 days, with a choice of 30 days or all history. Every choice is capped
+at the latest 5,000 unique viewing entries across the selected files, before the Supabase write. The result
+shows imported and skipped counts. Empty date selections preserve existing history. This limits bulk-write
+cost without changing database execution timeouts; the earlier YouTube provider migration is still required.
+
+Apply `supabase/migrations/20261023000000_youtube_media_import.sql` after the existing media migrations.
+This extends the media provider constraint and atomic replacement RPC; it keeps using `media_events`.
+No YouTube API key or OAuth setup is needed. In Media, below Netflix, open **Import YouTube JSON** and
+upload the extracted Google Takeout `watch-history.json`. Select all parts together for split exports:
+each successful import replaces only YouTube history. Invalid or search-only uploads preserve existing data.
+
+Viewing entries include exported timestamps (displayed in the browser's local timezone), channel names
+when present, canonical video links, and lazy YouTube thumbnails with icon fallbacks. Actual watch duration
+is unknown and is not inferred from video runtime. Search/channel activity is excluded. Exact duplicate
+entries are deduplicated, while repeat views at different timestamps are retained.
+
+The backend accepts up to 32 MB total for YouTube JSON (other sources remain 4 MB). Your hosting provider
+may enforce a smaller request-body limit; if so, split a large JSON array into valid smaller arrays and
+select the parts together within that deployment's limit. Larger histories exceeding the deployment's
+combined limit will need a future chunked-upload flow. No AI or statistical analysis is connected.

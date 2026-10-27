@@ -46,7 +46,7 @@ const views = [
   ['reality', '/reality', '[data-tour="inbox"]'],
   ['planner', `/planner/${today}`, '.v-planner-event, .v-planner-hero'],
   ['data', '/data', '.v-data-persona'],
-  ['media', '/media', '.v-media-recent-scroll, .v-media-insights'],
+  ['media', '/media', '.media-source-bar'],
   ['lab', '/lab', '.c-effects'],
 ];
 let failures = 0;

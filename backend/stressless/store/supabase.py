@@ -44,12 +44,17 @@ class SupabaseStore(UserStore):
 
     # ---------------------------------------------------------------- http --
     def _call(self, method: str, path: str, *, params: Optional[Dict[str, str]] = None, json: Any = None,
-              prefer: Optional[str] = None) -> Any:
+              prefer: Optional[str] = None, timeout: Optional[float] = None) -> Any:
         headers = dict(self.headers)
         if prefer:
             headers["Prefer"] = prefer
         try:
-            r = _http().request(method, self.rest + path, params=params, json=json, headers=headers)
+            options = {"timeout": timeout} if timeout is not None else {}
+            r = _http().request(method, self.rest + path, params=params, json=json, headers=headers, **options)
+        except httpx.TimeoutException as exc:
+            if path == "/rpc/stressless_replace_media":
+                raise SupabaseError("Media import timed out waiting for storage. The database may still finish saving; reload your media before retrying. No automatic retry was made.") from exc
+            raise SupabaseError("Supabase timed out during %s %s" % (method, path)) from exc
         except httpx.HTTPError as exc:
             raise SupabaseError("Supabase unreachable: %s" % exc) from exc
         if r.status_code >= 400:
@@ -181,12 +186,32 @@ class SupabaseStore(UserStore):
     def reports_last_day(self) -> int:
         return int(self._call("POST", "/rpc/stressless_reports_last_day", json={}) or 0)
     def media_events(self) -> List[Dict[str, Any]]:
-        return self._call("GET", "/media_events", params={"select": "id,provider,occurred_at,title,creator,minutes,source,imported_at", "order": "occurred_at.desc"}) or []
+        # Netflix exports commonly exceed PostgREST's 1,000-row response cap.
+        out: List[Dict[str, Any]] = []
+        while True:
+            page = self._call("GET", "/media_events", params={
+                "select": "id,provider,occurred_at,title,creator,minutes,source,imported_at",
+                "order": "occurred_at.desc,id.desc", "limit": str(PAGE), "offset": str(len(out)),
+            }) or []
+            out.extend(page)
+            if len(page) < PAGE:
+                return out
 
     def media_documents(self) -> List[Dict[str, Any]]:
         return self._call("GET", "/media_documents", params={"select": "id,filename,kind,payload,imported_at", "order": "imported_at.desc"}) or []
 
     def replace_media(self, provider: str, events: List[Dict[str, Any]], documents: List[Dict[str, Any]]) -> None:
+        # Large Takeout histories must complete as one atomic replacement. Keep
+        # ordinary requests fast, but allow this bulk write longer than 10 seconds.
         self._call("POST", "/rpc/stressless_replace_media", json={
             "p_provider": provider, "p_events": events, "p_documents": documents,
-        })
+        }, timeout=120.0)
+
+    def pending_netflix_artwork(self, limit: int = 200) -> List[Dict[str, Any]]:
+        return self._call("GET", "/media_events", params={
+            "select": "id,title,source", "provider": "eq.netflix", "source->>artwork_query": "not.is.null",
+            "source->>artwork_status": "is.null", "order": "occurred_at.desc,id.desc", "limit": str(limit),
+        }) or []
+
+    def update_netflix_artwork(self, updates: List[Dict[str, Any]]) -> None:
+        self._call("POST", "/rpc/stressless_update_netflix_artwork", json={"p_updates": updates})

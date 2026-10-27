@@ -9,7 +9,7 @@ import json
 import logging
 import os
 import sys
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
 from fastapi import Body, Depends, FastAPI, File, Request, UploadFile
@@ -22,7 +22,10 @@ from .. import __version__
 from ..engine.pipeline import EngineError
 from ..engine.reasoning import reasoning_mode
 from ..models import to_jsonable
-from ..connectors.media import parse_media, parse_spotify_file
+from ..connectors.media import parse_media, parse_spotify_file, parse_steam_file
+from ..connectors.steam import SteamSyncError, fetch_steam_library, steam_sync_status
+from ..connectors.lastfm import LastfmError, fetch_lastfm, lastfm_status, lastfm_artwork
+from ..connectors.media_artwork import artwork_status, netflix_artwork_batch
 from ..engine.media_insights import analyze_media
 from ..sim.personas import PERSONA_ORDER, PERSONAS
 from ..store import SupabaseError
@@ -213,61 +216,157 @@ def get_validation(p: Principal = Depends(current_principal)):
 
 
 def _media_payload(rows):
-    totals = {provider: {"items": 0, "minutes": 0.0} for provider in ("spotify", "netflix")}
+    totals = {provider: {"items": 0, "minutes": 0.0} for provider in ("spotify", "netflix", "lastfm", "youtube")}
     for row in rows:
         bucket = totals.setdefault(row["provider"], {"items": 0, "minutes": 0.0})
         bucket["items"] += 1
         bucket["minutes"] += float(row.get("minutes") or 0)
-    return {"events": rows[:100], "total": len(rows), "totals": totals}
+    recent = {provider: [row for row in rows if row["provider"] == provider][:50] for provider in totals}
+    return {"events": rows[:100], "recent_by_provider": recent, "total": len(rows), "totals": totals}
 
 
 @app.get("/api/media")
-def get_media(p: Principal = Depends(current_principal)):
+def get_media(provider: str | None = None, offset: int = 0, limit: int = 50, p: Principal = Depends(current_principal)):
+    if provider not in (None, "spotify", "netflix", "lastfm", "youtube") or offset < 0 or not 1 <= limit <= 100:
+        raise EngineError("Invalid media history filter or page")
     rows = p.store.media_events()
-    rows.sort(key=lambda row: row.get("occurred_at", ""), reverse=True)
+    rows.sort(key=lambda row: (row.get("occurred_at", ""), row.get("id", "")), reverse=True)
+    if provider:
+        filtered = [row for row in rows if row["provider"] == provider]
+        return J({"events": filtered[offset:offset + limit], "total": len(filtered)})
     return J({**_media_payload(rows), "documents": p.store.media_documents()})
+
+
+@app.get("/api/media/netflix/artwork")
+def get_netflix_artwork_status(p: Principal = Depends(current_principal)):
+    return J(artwork_status())
+
+
+@app.post("/api/media/netflix/artwork")
+def post_netflix_artwork(p: Principal = Depends(current_principal)):
+    if not artwork_status()["configured"]:
+        return _error(503, artwork_status()["message"])
+    updates, error = netflix_artwork_batch(p.store.pending_netflix_artwork())
+    if updates:
+        p.store.update_netflix_artwork(updates)
+    return J({"updates": updates, "has_more": bool(p.store.pending_netflix_artwork(1)), "error": error})
+
+
+@app.get("/api/media/steam")
+def get_steam_status(p: Principal = Depends(current_principal)):
+    return J(steam_sync_status(p.user_id))
+
+
+@app.post("/api/media/steam/sync")
+def post_steam_sync(p: Principal = Depends(current_principal)):
+    try:
+        document = fetch_steam_library(p.user_id)
+    except SteamSyncError as exc:
+        return _error(exc.status, str(exc))
+    # Same identity as a file import, so refreshing replaces just the Steam snapshot.
+    p.store.replace_media("steam", [], [{
+        "id": hashlib.sha256(b"steam-library").hexdigest()[:32],
+        "filename": "Steam API", "kind": "steam_library", "payload": document,
+    }])
+    return get_media(p=p)
+
+
+@app.get("/api/media/lastfm")
+def get_lastfm_status(p: Principal = Depends(current_principal)):
+    return J(lastfm_status(p.user_id))
+
+
+@app.get("/api/media/lastfm/artwork")
+def get_lastfm_artwork(artist: str, album: str, p: Principal = Depends(current_principal)):
+    try:
+        return J({"artwork_url": lastfm_artwork(p.user_id, artist, album)})
+    except LastfmError as exc:
+        return _error(exc.status, str(exc))
+
+
+@app.post("/api/media/lastfm/sync")
+def post_lastfm_sync(older: bool = False, p: Principal = Depends(current_principal)):
+    previous = next((doc["payload"] for doc in p.store.media_documents() if doc.get("kind") == "lastfm_sync"), None)
+    try:
+        rows, state = fetch_lastfm(p.user_id, previous, older=older)
+    except LastfmError as exc:
+        return _error(exc.status, str(exc))
+    p.store.replace_media("lastfm", rows, [{
+        "id": hashlib.sha256(b"lastfm-sync").hexdigest()[:32], "filename": "Last.fm API",
+        "kind": "lastfm_sync", "payload": state,
+    }])
+    return get_media(p=p)
 
 
 @app.get("/api/media/insights")
 def get_media_insights(p: Principal = Depends(current_principal)):
-    rows = p.store.media_events()
+    # Last.fm remains display-only; unknown playback duration is not an engine input.
+    rows = [row for row in p.store.media_events() if row.get("provider") != "lastfm"]
     with session.engine_session(p.user_id, p.store) as e:
         return J(analyze_media(e.ds, rows))
 
 
 @app.post("/api/media/import")
-async def post_media_import(provider: str, files: list[UploadFile] = File(...), p: Principal = Depends(current_principal)):
-    if provider not in ("spotify", "netflix"):
+async def post_media_import(provider: str, files: list[UploadFile] = File(...), p: Principal = Depends(current_principal), youtube_range: str = "90"):
+    if provider == "youtube" and youtube_range not in ("30", "90", "all"):
+        raise EngineError("Choose 30 days, 90 days or all history for YouTube")
+    if provider not in ("spotify", "netflix", "steam", "youtube"):
         raise EngineError("unsupported media provider %r" % provider)
     if len(files) > MAX_MEDIA_UPLOAD_FILES:
         raise EngineError("Choose no more than 20 media export files at a time")
     rows = []
     documents = []
+    seen = set()
     total_bytes = 0
+    upload_limit = 32 * 1024 * 1024 if provider == "youtube" else MAX_MEDIA_UPLOAD_BYTES
     for upload in files:
-        content = await upload.read(MAX_MEDIA_UPLOAD_BYTES - total_bytes + 1)
+        content = await upload.read(upload_limit - total_bytes + 1)
         total_bytes += len(content)
-        if total_bytes > MAX_MEDIA_UPLOAD_BYTES:
-            raise EngineError("Combined media exports must be 4 MB or smaller")
+        if total_bytes > upload_limit:
+            raise EngineError("Combined media exports must be %s MB or smaller" % (upload_limit // (1024 * 1024)))
         if provider == "spotify":
             parsed, document = parse_spotify_file(upload.filename or "spotify.json", content)
+        elif provider == "steam":
+            if len(files) != 1:
+                raise EngineError("Choose one Steam library snapshot at a time")
+            parsed, document = [], parse_steam_file(content)
         else:
             parsed, document = parse_media(provider, upload.filename or "media-export", content), None
         for row in parsed:
             key = "%s|%s|%s|%s" % (row["provider"], row["occurred_at"], row["title"], row["creator"] or "")
+            if provider == "youtube":
+                key += "|%s" % (row["source"].get("video_id") or "unavailable")
+            if provider == "netflix":
+                key += "|%s|%s" % (row["source"]["profile"], row["source"]["occurrence"])
             row["id"] = hashlib.sha256(key.encode("utf-8")).hexdigest()[:32]
+            if row["id"] in seen:
+                continue
+            seen.add(row["id"])
             rows.append(row)
         if document:
-            document["id"] = hashlib.sha256((upload.filename or "spotify.json").encode("utf-8")).hexdigest()[:32]
+            identity = "steam-library" if provider == "steam" else (upload.filename or "spotify.json")
+            document["id"] = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:32]
             document["filename"] = upload.filename or "spotify.json"
             payload = {key: value for key, value in document.items() if key not in ("id", "filename", "payload")}
             documents.append({"id": document["id"], "filename": document["filename"], "kind": document["kind"], "payload": payload})
     if not rows and not documents:
         raise EngineError("No supported media records or summaries were found in these files")
+    youtube_selection = {}
+    if provider == "youtube":
+        available = len(rows)
+        rows.sort(key=lambda row: (row["occurred_at"], row["id"]), reverse=True)
+        if youtube_range != "all":
+            cutoff = datetime.now(timezone.utc) - timedelta(days=int(youtube_range))
+            rows = [row for row in rows if datetime.fromisoformat(row["occurred_at"]) >= cutoff]
+        rows = rows[:5000]
+        if not rows:
+            raise EngineError("No YouTube viewing entries in the selected period. Choose a wider range; your saved history is unchanged.")
+        youtube_selection = {"available": available, "skipped": available - len(rows), "youtube_range": youtube_range, "entry_limit": 5000}
     p.store.replace_media(provider, rows, documents)
     saved = p.store.media_events()
-    saved.sort(key=lambda row: row.get("occurred_at", ""), reverse=True)
-    return J({"imported": len(rows), **_media_payload(saved), "documents": p.store.media_documents()})
+    saved.sort(key=lambda row: (row.get("occurred_at", ""), row.get("id", "")), reverse=True)
+    imported = len(documents[0]["payload"]["games"]) if provider == "steam" else len(rows)
+    return J({"imported": imported, **youtube_selection, **_media_payload(saved), "documents": p.store.media_documents()})
 
 
 @app.post("/api/persona")

@@ -4,8 +4,9 @@ from datetime import timedelta
 
 from datetime import datetime
 
-from stressless.engine.lifestyle import active_on, daytime_hr, lifestyle_patterns
-from stressless.models import MediaPlay, WatchWorkout
+from stressless.connectors.base import classify_event
+from stressless.engine.lifestyle import active_on, daytime_hr, focus_hr, lifestyle_patterns
+from stressless.models import CalendarEvent, MediaPlay, WatchWorkout
 from stressless.timeutil import tz
 from stressless.engine.pipeline import Engine
 from stressless.engine.report_input import daily_input, weekly_input
@@ -236,6 +237,75 @@ class CrossSourceTests(unittest.TestCase):
     def test_no_media_no_music_links(self):
         keys = {p.key for p in lifestyle_patterns(fresh_dataset(), ANCHOR)}
         self.assertFalse({k for k in keys if k.startswith("artist_") or k in ("big_listening", "late_listening")})
+
+
+
+def with_classes_and_study_music():
+    """Demo data with a recurring class and study music:
+    * 'Statistics lecture' every 4th day (a recurring series): daytime heart rate 6 bpm higher, sleep score 12 lower;
+    * a study block every other day; on every second one Ludovico Einaudi plays through it, with 40 fewer phone
+      pickups and a heart rate 12 bpm lower while studying (clear of the simulator's day-to-day swing)."""
+    ds = fresh_dataset()
+    z = tz(ds.persona.tz)
+    for d in ds.night_dates():
+        o = d.toordinal()
+        at = lambda h: datetime(d.year, d.month, d.day, h, tzinfo=z)  # noqa: E731
+        h, n = ds.hr(d), ds.night(d)
+        ds.day_metrics.setdefault(d, {}).update({"screen.minutes": 200.0, "screen.pickups": 70.0})
+        if o % 4 == 0:
+            ds.events.append(CalendarEvent(id="stats-%d" % o, title="Statistics lecture", start=at(9), end=at(11),
+                                           type="meeting", recurring_key="stats"))
+            if h is not None:
+                h.bpm = [b if b is None or not (9 * 60 <= m < 22 * 60) else b + 6 for m, b in enumerate(h.bpm)]
+            if n.worn and n.score is not None:
+                n.score -= 12
+        if o % 2 == 1:
+            ds.events.append(CalendarEvent(id="study-%d" % o, title="Study session", start=at(14), end=at(16), type="focus"))
+            if o % 4 == 1:
+                for k in range(24):
+                    ds.media.append(MediaPlay(start=at(14) + timedelta(minutes=5 * k), minutes=5, title="Track",
+                                              creator="Ludovico Einaudi", kind="music"))
+                ds.day_metrics[d]["screen.pickups"] = 30.0
+                if h is not None:
+                    h.bpm = [b if b is None or not (14 * 60 <= m < 16 * 60) else b - 12 for m, b in enumerate(h.bpm)]
+    ds.reindex()
+    return ds
+
+
+class SeriesAndFocusTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.ds = with_classes_and_study_music()
+        cls.patterns = {p.key: p for p in lifestyle_patterns(cls.ds, ANCHOR)}
+
+    def test_a_recurring_class_becomes_a_link_named_after_it(self):
+        p = self.patterns["series_statistics_lecture"]
+        self.assertEqual(p.direction, "hurt")
+        self.assertEqual(p.sources[0], "calendar")
+        effects = {o.key: o for o in p.reportable}
+        self.assertGreater(effects["day_hr"].effect, 3)
+        self.assertLess(effects["score"].effect, -5)
+        self.assertIn("days with Statistics lecture", p.detail())
+
+    def test_study_music_is_compared_on_study_days_only(self):
+        p = self.patterns["focus_music_ludovico_einaudi"]
+        self.assertEqual(p.direction, "helped")
+        self.assertEqual(p.sources[0], "music")
+        effects = {o.key: o for o in p.reportable}
+        self.assertLess(effects["pickups"].effect, -20)
+        self.assertLess(effects["focus_hr"].effect, -3)
+        focus_days = {e.start.date() for e in self.ds.events if e.type == "focus" and e.start.date() < ANCHOR}
+        self.assertLessEqual(p.n_with + p.n_without, len(focus_days))
+        self.assertIn("heart rate during focus time", p.detail())
+
+    def test_focus_heart_rate_needs_focus_time(self):
+        d = next(d for d in self.ds.night_dates() if self.ds.hr(d) and not any(
+            e.type == "focus" for e in self.ds.events_on(d)))
+        self.assertIsNone(focus_hr(self.ds, d))
+
+    def test_study_blocks_count_as_focus_time(self):
+        for title in ("Study session", "Studying for the exam", "Plugga statistik", "Exam prep"):
+            self.assertEqual(classify_event(title), "focus", title)
 
 
 if __name__ == "__main__":

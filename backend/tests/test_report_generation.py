@@ -45,6 +45,7 @@ class InputTests(unittest.TestCase):
         cls.engine = Engine(cls.ds)
 
     def test_daily_input_has_metrics_patterns_and_no_event_names(self):
+        """No event titles, except those of recurring series that became a link (an agreed exception)."""
         inp = daily_input(self.engine, ANCHOR)
         self.assertEqual((inp.kind, inp.period_start, inp.period_end), ("daily", ANCHOR, ANCHOR))
         self.assertIn("sleep.score", inp.keys())
@@ -52,8 +53,10 @@ class InputTests(unittest.TestCase):
         self.assertEqual(len(inp.keys()), len(inp.metrics) + len(inp.patterns))     # keys are unique
         text = inp.model_dump_json()
         night = ANCHOR - timedelta(days=1)
+        series = {p.title[len("Days with "):] for p in inp.patterns if p.key.startswith("pattern.series_")}
         for ev in self.ds.events_on(night, include_unattended=True) + self.ds.events_on(ANCHOR, include_unattended=True):
-            self.assertNotIn(ev.title, text)
+            if not (ev.recurring_key and ev.title in series):
+                self.assertNotIn(ev.title, text)
 
     def test_weekly_input_covers_monday_to_sunday(self):
         inp = weekly_input(self.engine, MONDAY)

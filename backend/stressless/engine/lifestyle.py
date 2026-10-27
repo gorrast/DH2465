@@ -49,6 +49,9 @@ WORKOUT_HR_AFTER = 30                          # minutes after a workout left ou
 LATE_HOUR = 22                                 # listening or streaming from this hour counts as late
 MIN_ARTIST_MIN = 5.0                           # minutes of an artist before a day counts as a day with them
 MAX_ARTISTS = 6                                # most-played artists and podcasts tested as their own cause
+MAX_FOCUS_ARTISTS = 2                          # artists most often played during focus time, tested on focus days
+MAX_SERIES = 4                                 # most frequent recurring calendar series tested as their own cause
+FOCUS_HR_MIN_MINUTES = 30                      # worn minutes of focus time needed for a heart rate during it
 GYM_WORDS = ("gym", "strength", "weight", "functional", "crossfit", "sats", "styrka")
 CARDIO_WORDS = ("run", "jog", "cycl", "bik", "ride", "swim", "walk", "hik", "row", "ski", "elliptical", "löp")
 
@@ -107,6 +110,20 @@ def daytime_hr(ds: Dataset, d: date) -> Optional[float]:
     return statistics.fmean(vals) if len(vals) >= DAY_HR_MIN_MINUTES else None
 
 
+def _focus_windows(ds: Dataset, d: date) -> List[Tuple[datetime, datetime]]:
+    return [(e.start, e.end) for e in ds.events_on(d) if e.type == "focus" and e.start.date() == d]
+
+
+def focus_hr(ds: Dataset, d: date) -> Optional[float]:
+    """Mean heart rate during the day's focus time (study blocks, deep work)."""
+    hr = ds.hr(d)
+    if hr is None:
+        return None
+    vals = [b for s, e in _focus_windows(ds, d)
+            for b in hr.bpm[s.hour * 60 + s.minute:(e.hour * 60 + e.minute) if e.date() == d else 1440] if b is not None]
+    return statistics.fmean(vals) if len(vals) >= FOCUS_HR_MIN_MINUTES else None
+
+
 OUTCOMES: Dict[str, OutcomeDef] = {o.key: o for o in (
     OutcomeDef("score", "Sleep score", "points", "up", 1.5, "sleep score %s points higher", "sleep score %s points lower",
                _night("score"), True),
@@ -124,6 +141,8 @@ OUTCOMES: Dict[str, OutcomeDef] = {o.key: o for o in (
                _metric("screen.pickups"), False, "phone"),
     OutcomeDef("day_hr", "Daytime heart rate", "bpm", "down", 2, "daytime heart rate %s higher",
                "daytime heart rate %s lower", daytime_hr, False, "heart", True),
+    OutcomeDef("focus_hr", "Heart rate during focus time", "bpm", "down", 2, "heart rate during focus time %s higher",
+               "heart rate during focus time %s lower", focus_hr, False, "heart", True),
 )}
 NIGHT = ("score", "duration_min", "onset_min", "hrv_ms", "resting_hr")
 NIGHT_AND_DAY = NIGHT + ("day_hr",)
@@ -325,6 +344,67 @@ def artist_causes(ds: Dataset, days: Sequence[date]) -> List[CauseDef]:
     return [CauseDef("artist_" + _slug(c), "Days with " + c, _media(listened(c)), "high", _fixed(1.0), "count",
                      "days you listened to " + c, "On the nights after your %d %s", NIGHT_AND_DAY, source="music")
             for c in top]
+
+
+def focus_music_causes(ds: Dataset, days: Sequence[date]) -> List[CauseDef]:
+    """Artists played during focus time, compared with focus days without them: 'focus time with Ludovico Einaudi'.
+    Days without focus time are left out, so the comparison is between study or deep-work days only."""
+    if _media_days(ds) is None or not _has_calendar(ds):
+        return []
+
+    def during(d: date, creator: Optional[str] = None) -> Dict[str, float]:
+        played: Dict[str, float] = {}
+        windows = _focus_windows(ds, d)
+        for m in ds.media_on(d):
+            if m.creator and m.kind == "music" and (creator is None or m.creator == creator):
+                end = m.start + timedelta(minutes=m.minutes)
+                mins = sum(max(0.0, (min(end, e) - max(m.start, s)).total_seconds() / 60.0) for s, e in windows)
+                played[m.creator] = played.get(m.creator, 0.0) + mins
+        return played
+
+    n_days: Dict[str, int] = {}
+    for d in days:
+        for creator, minutes in during(d).items():
+            if minutes >= MIN_ARTIST_MIN:
+                n_days[creator] = n_days.get(creator, 0) + 1
+    top = sorted((c for c, n in n_days.items() if n >= MIN_GROUP), key=lambda c: -n_days[c])[:MAX_FOCUS_ARTISTS]
+
+    def value(creator: str) -> Callable[[Dataset, date], Optional[float]]:
+        def f(ds: Dataset, d: date) -> Optional[float]:
+            span = _media_days(ds)
+            if span is None or not (span[0] <= d <= span[1]) or not _focus_windows(ds, d):
+                return None
+            return float(during(d, creator).get(creator, 0.0) >= MIN_ARTIST_MIN)
+        return f
+    return [CauseDef("focus_music_" + _slug(c), "Focus time with " + c, value(c), "high", _fixed(1.0), "count",
+                     "focus days with " + c, "On your %d %s", ("pickups", "screen_minutes", "focus_hr"),
+                     MIN_GROUP * 2, source="music")
+            for c in top]
+
+
+def series_causes(ds: Dataset, days: Sequence[date]) -> List[CauseDef]:
+    """The most frequent recurring calendar series as causes of their own: 'days with Statistics lecture'. Their
+    titles reach the report model (a decision for series only: one-off titles, places and guests never do)."""
+    if not _has_calendar(ds):
+        return []
+    n_days: Dict[str, set] = {}
+    titles: Dict[str, Dict[str, int]] = {}
+    for d in days:
+        for e in ds.events_on(d):
+            if e.recurring_key and e.type != "workout":   # workouts have causes of their own
+                n_days.setdefault(e.recurring_key, set()).add(d)
+                t = titles.setdefault(e.recurring_key, {})
+                t[e.title] = t.get(e.title, 0) + 1
+    top = sorted((k for k, on in n_days.items() if len(on) >= MIN_GROUP), key=lambda k: -len(n_days[k]))[:MAX_SERIES]
+
+    def value(key: str) -> Callable[[Dataset, date], Optional[float]]:
+        return lambda ds, d: float(any(e.recurring_key == key for e in ds.events_on(d))) if _has_calendar(ds) else None
+    out = []
+    for k in top:
+        title = max(titles[k], key=titles[k].get)
+        out.append(CauseDef("series_" + _slug(title), "Days with " + title, value(k), "high", _fixed(1.0), "count",
+                            "days with " + title, "On the nights after your %d %s", NIGHT_AND_DAY, source="calendar"))
+    return out
 
 
 # --------------------------------------------------------------------------- #
@@ -555,7 +635,7 @@ def lifestyle_patterns(ds: Dataset, upto: date, history_days: Optional[int] = No
     days = [start + timedelta(days=k) for k in range((upto - start).days)]
     rng = random.Random(seed)
     out: List[LifestylePattern] = []
-    for c in CAUSES + tuple(artist_causes(ds, days)):
+    for c in CAUSES + tuple(artist_causes(ds, days) + focus_music_causes(ds, days) + series_causes(ds, days)):
         values = {d: c.value(ds, d) for d in days}
         known = [v for v in values.values() if v is not None]
         if len(known) < c.min_days:

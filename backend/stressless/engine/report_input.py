@@ -1,8 +1,9 @@
 """Build the ``ReportInput`` a generated report is written from (see ``stressless.reports``).
 
 Everything here is computed by the engine; the model only puts it into words and picks which links are worth telling.
-Only numbers, code-written labels, dates and music names (artists, podcasts, shows) go in: no event titles, places,
-people, ids or clock times, because the input is sent to the model as is.
+Only numbers, code-written labels, dates, music names (artists, podcasts, shows) and the titles of recurring calendar
+series that became a link ("Statistics lecture") go in: no other event titles, places, people, ids or clock times,
+because the input is sent to the model as is.
 
 The heart of a report is its links (``Pattern``s from ``lifestyle``): how one data source goes with another in the
 person's own history. Links whose cause happened in the period come first, links between two sources before links

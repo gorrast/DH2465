@@ -50,10 +50,12 @@ LATE_HOUR = 22                                 # listening or streaming from thi
 MIN_ARTIST_MIN = 5.0                           # minutes of an artist before a day counts as a day with them
 MAX_ARTISTS = 6                                # most-played artists and podcasts tested as their own cause
 MAX_PAIRS = 4                                  # activity x media pairs ("Einaudi during Study session") tested
-PAIR_ACTIVITIES = 5                            # most frequent calendar activities looked at for pairs
 AFTER_HOURS = 4                                # media starting this long after an activity ended counts as "after" it
+AFTER_FROM_HOUR = 18                           # ... if it starts in the evening: "after" pairs are told against the night
 MAX_SERIES = 4                                 # most frequent recurring calendar series tested as their own cause
 ACTIVITY_HR_MIN_MINUTES = 30                   # worn minutes of an activity needed for a heart rate during it
+MEETING_HR_MIN_MINUTES = 15                    # worn minutes of a meeting needed to compare its heart rate
+MAX_MEETING_HR = 8                             # recurring meetings compared with the day's other meetings
 ACTIVITY_PHONE_MIN_MINUTES = 30                # minutes of an activity needed for a pickup rate during it
 GYM_WORDS = ("gym", "strength", "weight", "functional", "crossfit", "sats", "styrka")
 CARDIO_WORDS = ("run", "jog", "cycl", "bik", "ride", "swim", "walk", "hik", "row", "ski", "elliptical", "löp")
@@ -226,6 +228,7 @@ class CauseDef:
     expected: Optional[str] = None             # the direction sleep research expects ("hurt"/"helped"); None: no clear view
     others: Optional[str] = None               # what the days without it are ("days with Study session"); None: days/nights
     hints: bool = True                         # False: only strong links count (causes picked from many candidates)
+    paired: bool = False                       # the outcome is already a comparison ("than in your other meetings")
 
 
 def _q(p: float, floor: float = 0.0) -> Callable[[List[float]], float]:
@@ -364,7 +367,7 @@ def _paired_minutes(ds: Dataset, d: date, key: str) -> Dict[Tuple[str, str], flo
         during = sum(max(0.0, (min(end, e) - max(m.start, s)).total_seconds() / 60.0) for s, e in windows)
         if during >= MIN_ARTIST_MIN:
             out[(name, "during")] = out.get((name, "during"), 0.0) + during
-        elif last_end <= m.start < last_end + timedelta(hours=AFTER_HOURS):
+        elif last_end <= m.start < last_end + timedelta(hours=AFTER_HOURS) and m.start.hour >= AFTER_FROM_HOUR:
             out[(name, "after")] = out.get((name, "after"), 0.0) + m.minutes
     return out
 
@@ -422,9 +425,9 @@ def pair_causes(ds: Dataset, days: Sequence[date]) -> List[CauseDef]:
             act_days.setdefault(k, set()).add(d)
             t = titles.setdefault(k, {})
             t[e.title] = t.get(e.title, 0) + 1
-    acts = sorted((k for k, on in act_days.items() if len(on) >= 2 * MIN_GROUP), key=lambda k: -len(act_days[k]))
+    acts = [k for k, on in act_days.items() if len(on) >= 2 * MIN_GROUP]
     pairs: Dict[Tuple[str, str, str], int] = {}
-    for k in acts[:PAIR_ACTIVITIES]:
+    for k in acts:
         for d in act_days[k]:
             for (name, rel), minutes in _paired_minutes(ds, d, k).items():
                 if minutes >= MIN_ARTIST_MIN:
@@ -459,6 +462,13 @@ def pair_causes(ds: Dataset, days: Sequence[date]) -> List[CauseDef]:
     return out
 
 
+def _comparable(on: set, days: Sequence[date]) -> int:
+    """Days without the activity that it can be compared with: in the same part of the week (workdays or weekend)
+    as days with it. A daily standup has none, so it cannot be a cause of its own."""
+    parts = {d.weekday() >= 5 for d in on}
+    return sum(1 for d in days if d not in on and (d.weekday() >= 5) in parts)
+
+
 def series_causes(ds: Dataset, days: Sequence[date]) -> List[CauseDef]:
     """The most frequent recurring calendar series as causes of their own: 'days with Statistics lecture'. Their
     titles reach the report model (a decision for series only: one-off titles, places and guests never do)."""
@@ -472,7 +482,12 @@ def series_causes(ds: Dataset, days: Sequence[date]) -> List[CauseDef]:
                 n_days.setdefault(e.recurring_key, set()).add(d)
                 t = titles.setdefault(e.recurring_key, {})
                 t[e.title] = t.get(e.title, 0) + 1
-    top = sorted((k for k, on in n_days.items() if len(on) >= MIN_GROUP), key=lambda k: -len(n_days[k]))[:MAX_SERIES]
+    usable = [k for k, on in n_days.items() if len(on) >= MIN_GROUP and _comparable(on, days) >= MIN_GROUP]
+    # Two series on (nearly) the same days cannot be told apart by day or night, so neither is a cause of its own
+    # (three customer calls every Wednesday; meeting_hr_patterns still compares them within the day).
+    twins = {k for k in usable for j in usable if j != k
+             and len(n_days[k] & n_days[j]) >= 0.9 * len(n_days[k] | n_days[j])}
+    top = sorted((k for k in usable if k not in twins), key=lambda k: -len(n_days[k]))[:MAX_SERIES]
 
     def value(key: str) -> Callable[[Dataset, date], Optional[float]]:
         return lambda ds, d: float(any(e.recurring_key == key for e in ds.events_on(d))) if _has_calendar(ds) else None
@@ -481,6 +496,98 @@ def series_causes(ds: Dataset, days: Sequence[date]) -> List[CauseDef]:
         title = max(titles[k], key=titles[k].get)
         out.append(CauseDef("series_" + _slug(title), "Days with " + title, value(k), "high", _fixed(1.0), "count",
                             "days with " + title, "On the nights after your %d %s", NIGHT_AND_DAY, source="calendar"))
+    return out
+
+
+def _hr_curve(ds: Dataset, days: Sequence[date]) -> List[Optional[float]]:
+    """The person's usual heart rate per quarter-hour of the day outside meetings and workouts (median over ``days``),
+    so a meeting held at the same time every week does not set its own baseline. Callers pass days of one kind
+    (workdays or weekend days): at 08:30 one is in a meeting, the other often still asleep."""
+    buckets: List[List[int]] = [[] for _ in range(96)]
+    for d in days:
+        hr = ds.hr(d)
+        if hr is None:
+            continue
+        busy = set()
+        for e in ds.events_on(d):
+            if e.type in ("meeting", "workout") and e.start.date() == d:
+                busy.update(range(e.start.hour * 60 + e.start.minute,
+                                  (e.end.hour * 60 + e.end.minute) if e.end.date() == d else 1440))
+        for m, b in enumerate(hr.bpm):
+            if b is not None and m not in busy:
+                buckets[m // 15].append(b)
+    return [statistics.median(v) if v else None for v in buckets]
+
+
+def _mean_hr(hr, windows: List[Tuple[datetime, datetime]], d: date, curve: List[Optional[float]],
+             skip: List[Tuple[int, int]]) -> Optional[float]:
+    """Mean heart rate in ``windows`` above the usual for those times of day (a morning meeting is not calmer just
+    because mornings are), leaving out workouts and the half hour after them."""
+    vals = [b - curve[m // 15] for s, e in windows
+            for m in range(s.hour * 60 + s.minute, (e.hour * 60 + e.minute) if e.date() == d else 1440)
+            if hr.bpm[m] is not None and curve[m // 15] is not None
+            and not any(a <= m < z + WORKOUT_HR_AFTER for a, z in skip) for b in (hr.bpm[m],)]
+    return statistics.fmean(vals) if len(vals) >= MEETING_HR_MIN_MINUTES else None
+
+
+def meeting_hr_patterns(ds: Dataset, days: Sequence[date], rng: random.Random, bootstrap: int) -> List["LifestylePattern"]:
+    """Heart rate during a recurring meeting against the person's other meetings the same days: which meetings ask
+    the most of them ("Northwind Bank weekly: heart rate 11 bpm higher than in your other meetings those days").
+    Within the day, so a stressful or calm day as a whole does not count, and against the usual heart rate for the time
+    of day; only strong links, as many are compared."""
+    if not _has_calendar(ds):
+        return []
+    curves = {w: _hr_curve(ds, [d for d in days if (d.weekday() >= 5) == w]) for w in (False, True)}
+    diffs: Dict[str, List[Tuple[date, float]]] = {}
+    titles: Dict[str, Dict[str, int]] = {}
+    for d in days:
+        hr = ds.hr(d)
+        meetings = [e for e in ds.events_on(d) if e.type == "meeting" and e.start.date() == d]
+        if hr is None or len(meetings) < 2:
+            continue
+        skip, curve = _workout_windows(ds, d), curves[d.weekday() >= 5]
+        for k in {e.recurring_key for e in meetings if e.recurring_key}:
+            mine = _mean_hr(hr, [(e.start, e.end) for e in meetings if e.recurring_key == k], d, curve, skip)
+            rest = _mean_hr(hr, [(e.start, e.end) for e in meetings if e.recurring_key != k], d, curve, skip)
+            if mine is not None and rest is not None:
+                diffs.setdefault(k, []).append((d, mine - rest))
+                t = titles.setdefault(k, {})
+                for e in meetings:
+                    if e.recurring_key == k:
+                        t[e.title] = t.get(e.title, 0) + 1
+    out = []
+    for k in sorted((k for k, v in diffs.items() if len(v) >= MIN_GROUP), key=lambda k: -len(diffs[k]))[:MAX_MEETING_HR]:
+        title = max(titles[k], key=titles[k].get)
+        vals = [v for _, v in diffs[k]]
+        n = len(vals)
+        effect = statistics.fmean(vals)
+        draws = sorted(statistics.fmean(rng.choice(vals) for _ in range(n)) for _ in range(bootstrap))
+        lo, hi = _interval(draws, 0.95)
+        hlo, hhi = _interval(draws, HINT_LEVEL)
+        excludes = lo is not None and (lo > 0 or hi < 0)
+        sd = statistics.pstdev(vals) or 1.0
+        okey = "hr_in_" + _slug(title)
+        if okey not in OUTCOMES:
+            OUTCOMES[okey] = OutcomeDef(okey, "Heart rate in " + title, "bpm", "down", 2,
+                                        "heart rate %%s higher in %s than in your other meetings those days" % title,
+                                        "heart rate %%s lower in %s than in your other meetings those days" % title,
+                                        lambda ds, d: None, False, "heart", True)
+        od = OUTCOMES[okey]
+        conf = confidence_for(lo, hi, n, n)
+        tier = "strong" if abs(effect) >= od.min_effect and excludes and conf != "low" else None
+        strength = min(abs(lo), abs(hi)) / sd if excludes else 0.0
+        o = OutcomeEffect(key=okey, label=od.label, unit="bpm", good="down", n_with=n, n_without=n,
+                          mean_with=None, mean_without=None, effect=round(effect, 1), ci_low=round(lo, 1),
+                          ci_high=round(hi, 1), confidence=conf, tier=tier, strength=round(strength, 3))
+        on = {d for d, _ in diffs[k]}
+        c = CauseDef("meeting_hr_" + _slug(title), "Heart rate in " + title,
+                     (lambda on: lambda ds, d: float(d in on))(on), "high", _fixed(1.0), "count",
+                     "days with " + title, "On your %d %s", (okey,), MIN_GROUP, source="calendar", hints=False,
+                     paired=True)
+        p = LifestylePattern(key=c.key, title=c.title, description=c.describe, threshold=1.0, n_with=n, n_without=0,
+                             outcomes=[o], cause=c)
+        p.rank_score = round(o.strength * CONF_WEIGHT[conf], 3) if o.reportable else 0.0
+        out.append(p)
     return out
 
 
@@ -594,7 +701,7 @@ class LifestylePattern:
         else:
             text = "On your %d %s: a %s" % (self.n_with, self.description, joined(same))
             other = "days"
-        text += ", compared with your other %d %s." % (self.n_without, cause.others or other)
+        text += "." if cause.paired else ", compared with your other %d %s." % (self.n_without, cause.others or other)
         if self.hint:
             text += " An early hint: the difference is small or rests on few days, so it may not hold."
         return text
@@ -736,6 +843,7 @@ def lifestyle_patterns(ds: Dataset, upto: date, history_days: Optional[int] = No
         prim = p.primary
         p.rank_score = round(prim.strength * CONF_WEIGHT[prim.confidence], 3) if prim else 0.0
         out.append(p)
+    out += meeting_hr_patterns(ds, days, rng, bootstrap)
     out.sort(key=lambda p: -p.rank_score)
     if cache is not None:
         cache[key] = out

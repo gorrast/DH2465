@@ -1,6 +1,6 @@
 'use client';
 /* Home: today's AI-written daily report and last week's weekly report (backend: server/reports.py). */
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { fmt } from '@/lib/format';
 import { Icon } from '../ui/Icon';
@@ -14,7 +14,7 @@ interface SourceStatus {
   required: boolean; ready: boolean;
 }
 interface PeriodStatus { period: string; status: 'none' | 'pending' | 'ready' }
-interface Overview {
+export interface Overview {
   today: string; daily: PeriodStatus; weekly: PeriodStatus; sources: SourceStatus[]; ready: boolean;
   consented: boolean; ai: boolean; dev: boolean;   // dev: a test server, where reports can be generated again
 }
@@ -26,7 +26,7 @@ interface Content {
   headline: string; summary: string; findings: Finding[]; fun_fact: string | null; suggestion?: string | null;
   caveats: string[]; best_day?: DayHighlight | null; hardest_day?: DayHighlight | null; next_week?: string;
 }
-interface Report {
+export interface Report {
   kind: 'daily' | 'weekly'; period_start: string; period_end: string; generated_at: string; mode: 'claude' | 'rules';
   model: string | null; input: { metrics: Metric[]; patterns: Pattern[] }; content: Content;
 }
@@ -56,7 +56,7 @@ function when(iso: string | null): string {
   return fmt.day(d.toISOString().slice(0, 10)) + ' ' + time;
 }
 
-function sourceLine(s: SourceStatus): string {
+export function sourceLine(s: SourceStatus): string {
   if (!s.connected && !s.data_until) return 'Not connected';
   if (s.data_until) return 'Data available up to ' + when(s.data_until);
   if (s.synced_at) return 'Updated ' + when(s.synced_at);
@@ -204,11 +204,9 @@ function GenerateDialog({ o, onClose, onDone }: { o: Overview; onClose: () => vo
 }
 
 // ----------------------------------------------------------------- report --
-function ReportCard({ report, onRegenerate }: { report: Report; onRegenerate?: (r: Report) => void }) {
+export function ReportCard({ report, onRegenerate, insights, summaryAside }: { report: Report; onRegenerate?: (r: Report) => void; insights?: ReactNode; summaryAside?: ReactNode }) {
   const [regenerating, setRegenerating] = useState(false);
   const c = report.content;
-  const metrics = new Map(report.input.metrics.map((m) => [m.key, m]));
-  const patterns = new Map(report.input.patterns.map((p) => [p.key, p]));
   const weekly = report.kind === 'weekly';
 
   // Dev servers only: throw the stored report away and write it again.
@@ -221,30 +219,16 @@ function ReportCard({ report, onRegenerate }: { report: Report; onRegenerate?: (
 
   return (
     <article className="card v-home-report">
-      <div className="eyebrow">{weekly ? 'Week of ' + fmt.day(report.period_start) + ' – ' + fmt.day(report.period_end) : 'Daily report · ' + fmt.day(report.period_start)}</div>
-      <h2>{c.headline}</h2>
-      <p className="v-home-summary">{c.summary}</p>
+      <header className={summaryAside ? 'daily-report-intro' : undefined}>
+        <div className="daily-report-copy">
+          <div className="eyebrow">{weekly ? 'Week of ' + fmt.day(report.period_start) + ' – ' + fmt.day(report.period_end) : 'Daily report · ' + fmt.day(report.period_start)}</div>
+          <h2>{c.headline}</h2>
+          <p className="v-home-summary">{c.summary}</p>
+        </div>
+        {summaryAside ? <div className="daily-report-sleep" aria-label="Your sleep summary">{summaryAside}</div> : null}
+      </header>
 
-      <ul className="v-home-findings">
-        {c.findings.map((f, i) => {
-          const link = f.evidence.map((k) => patterns.get(k)).find((p) => p?.sources?.length);
-          return (
-          <li key={i} className={'tone-' + f.tone}>
-            {link ? <div className="eyebrow">{link.sources!.map((s) => SOURCE_NAMES[s] || s).join(' × ')}</div> : null}
-            <div className="row between"><span className="title">{f.title}</span><span className={'badge badge-' + f.confidence}>{f.confidence}</span></div>
-            <p className="small">{f.body}</p>
-            <div className="row">
-              {f.evidence.map((k) => {
-                const m = metrics.get(k);
-                if (m) return <span key={k} className="chip" title={m.baseline !== null ? 'Your usual: ' + value(m.baseline, m.unit) : ''}>{m.label}: {value(m.value, m.unit)}</span>;
-                const p = patterns.get(k);
-                return p ? <span key={k} className="chip" title={p.detail}>{p.title}</span> : null;
-              })}
-            </div>
-          </li>
-          );
-        })}
-      </ul>
+      {insights ?? <ul className="v-home-findings">{c.findings.map((_, index) => <ReportFinding key={index} report={report} index={index} />)}</ul>}
 
       {weekly && (c.best_day || c.hardest_day) ? (
         <div className="grid grid-2 v-home-days">
@@ -272,5 +256,27 @@ function ReportCard({ report, onRegenerate }: { report: Report; onRegenerate?: (
         ) : null}
       </div>
     </article>
+  );
+}
+
+export function ReportFinding({ report, index }: { report: Report; index: number }) {
+  const f = report.content.findings[index];
+  const metrics = new Map(report.input.metrics.map(m => [m.key, m]));
+  const patterns = new Map(report.input.patterns.map(p => [p.key, p]));
+  const link = f.evidence.map(k => patterns.get(k)).find(p => p?.sources?.length);
+  return (
+          <li className={'tone-' + f.tone}>
+            {link ? <div className="eyebrow">{link.sources!.map((s) => SOURCE_NAMES[s] || s).join(' × ')}</div> : null}
+            <div className="row between"><span className="title">{f.title}</span><span className={'badge badge-' + f.confidence}>{f.confidence}</span></div>
+            <p className="small">{f.body}</p>
+            <div className="row">
+              {f.evidence.map((k) => {
+                const m = metrics.get(k);
+                if (m) return <span key={k} className="chip" title={m.baseline !== null ? 'Your usual: ' + value(m.baseline, m.unit) : ''}>{m.label}: {value(m.value, m.unit)}</span>;
+                const p = patterns.get(k);
+                return p ? <span key={k} className="chip" title={p.detail}>{p.title}</span> : null;
+              })}
+            </div>
+          </li>
   );
 }

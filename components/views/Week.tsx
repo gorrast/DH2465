@@ -9,6 +9,7 @@ import { EXAMPLE_APP_BRANDS, featuredAppBrands } from '@/lib/app-brands';
 import { useAppStatistics } from './useAppStatistics';
 import { WeeklyAppLogos } from './WeeklyAppLogos';
 import { FunStatisticsView } from './FunStatistics';
+import { WeeklyWrittenReport } from './WeeklyWrittenReport';
 import { HabitsView } from './Habits';
 import { WeeklyMotionContext, WeeklyNumber, WeeklyReveal, useWeeklyMotion } from './WeeklyMotion';
 import { ScoreText } from '../ui/ScoreChange';
@@ -125,12 +126,15 @@ export function WeekView({ end: endParam }: { end?: string }) {
   const load = useLoad(() => api.get('/api/week?end=' + end + (hd ? '&history_days=' + hd : '')), [end, hd, meta.persona.key]);
   const appStatistics = useAppStatistics();
   const floatingApps = featuredAppBrands(appStatistics.apps.data || [], (appStatistics.appHR.data || []).map(app => ({ packageName: app.package_name, appName: app.app_name })));
+  const appKeys = new Set(floatingApps.map(app => app.key));
+  const headerApps = [...floatingApps, ...EXAMPLE_APP_BRANDS.filter(app => !appKeys.has(app.key))].slice(0, 7);
   const w = load.data;
   const topPatterns = w ? [...w.top_habits].sort((a, b) => (a.effect ?? Infinity) - (b.effect ?? Infinity)) : [];
   return <WeeklyMotionContext.Provider value={paused}>
     <div className={'v-week weekly-dashboard' + (paused ? ' is-motion-paused' : '')}>
-      <header className="weekly-page-heading view-head"><WeeklyAppLogos apps={floatingApps.length ? floatingApps : EXAMPLE_APP_BRANDS} paused={paused} /><div><span className="eyebrow">Weekly Tab · A little perspective</span><RevealHeading as="h1" paused={paused} duration={1.7}>Your week, at a glance.</RevealHeading><p>See what lifts you up. Make space for more of it.</p></div><div className="weekly-page-tools"><span className="small muted">Through {fmt.day(dates.addDays(end, -1))}</span><button className="btn btn-sm btn-ghost" aria-pressed={paused} disabled={!!reduced} onClick={() => setMotionPaused(value => !value)}><Icon name={paused ? 'play' : 'pause'} size={14} />{reduced ? 'Reduced motion' : motionPaused ? 'Resume motion' : 'Pause motion'}</button></div>{!floatingApps.length ? <span className="weekly-logo-example-note">Example app logos · add app data to personalize</span> : null}</header>
+      <header className="weekly-page-heading view-head"><WeeklyAppLogos apps={headerApps} paused={paused} /><div><span className="eyebrow">Weekly Tab · A little perspective</span><RevealHeading as="h1" paused={paused} duration={1.7}>Your week, at a glance.</RevealHeading><p>See what lifts you up. Make space for more of it.</p></div><div className="weekly-page-tools"><span className="small muted">Through {fmt.day(dates.addDays(end, -1))}</span><button className="btn btn-sm btn-ghost" aria-pressed={paused} disabled={!!reduced} onClick={() => setMotionPaused(value => !value)}><Icon name={paused ? 'play' : 'pause'} size={14} />{reduced ? 'Reduced motion' : motionPaused ? 'Resume motion' : 'Pause motion'}</button></div>{floatingApps.length < 7 ? <span className="weekly-logo-example-note">{floatingApps.length ? 'Includes example app logos' : 'Example app logos · add app data to personalize'}</span> : null}</header>
       <FunStatisticsView embedded appStatistics={appStatistics} />
+      <WeeklyWrittenReport key={`${end}-${meta.persona.key}`} end={end} paused={paused} />
       <header className="weekly-section-heading"><div><span className="eyebrow">Find your rhythm</span><h2>Sleep and weekly patterns</h2></div><p>Small moments in your day.<br />A bigger picture of your nights.</p></header>
       {load.loading ? <Skeleton height={460} /> : load.error || !w ? <ErrorCard error={load.error!} onRetry={load.reload} view="week" /> : <>
         <div className="weekly-overview-grid">

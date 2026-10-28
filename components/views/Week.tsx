@@ -14,10 +14,11 @@ import { HabitsView } from './Habits';
 import { WeeklyMotionContext, WeeklyNumber, WeeklyReveal, useWeeklyMotion } from './WeeklyMotion';
 import { ScoreText } from '../ui/ScoreChange';
 import { Icon } from '../ui/Icon';
+import { SectionNavigation } from '../ui/SectionNavigation';
 import { api } from '@/lib/api';
 import { dates, fmt } from '@/lib/format';
 import { Bars } from '../charts/basic';
-import { EffectBars, type HeatDay } from '../charts/analysis';
+import type { HeatDay } from '../charts/analysis';
 import { useApp } from '../shell/AppContext';
 import { ErrorCard, Skeleton, useLoad } from './common';
 
@@ -114,28 +115,23 @@ function SleepCalendar({ days, end, weeks }: { days: HeatDay[]; end: string; wee
 export function WeekView({ end: endParam }: { end?: string }) {
   const { today, historyDays: hd, meta } = useApp();
   const end = endParam || today;
+  const pageRef = useRef<HTMLDivElement>(null);
   const reduced = useReducedMotion();
   const [motionPaused, setMotionPaused] = useState(false);
   const paused = !!reduced || motionPaused;
   const [weeks, setWeeks] = useState(4);
-  const [patternsOpen, setPatternsOpen] = useState(false);
-  const openPatterns = () => {
-    setPatternsOpen(true);
-    document.getElementById('weekly-patterns')?.scrollIntoView({ behavior: paused ? 'instant' : 'smooth' });
-  };
   const load = useLoad(() => api.get('/api/week?end=' + end + (hd ? '&history_days=' + hd : '')), [end, hd, meta.persona.key]);
   const appStatistics = useAppStatistics();
   const floatingApps = featuredAppBrands(appStatistics.apps.data || [], (appStatistics.appHR.data || []).map(app => ({ packageName: app.package_name, appName: app.app_name })));
   const appKeys = new Set(floatingApps.map(app => app.key));
   const headerApps = [...floatingApps, ...EXAMPLE_APP_BRANDS.filter(app => !appKeys.has(app.key))].slice(0, 7);
   const w = load.data;
-  const topPatterns = w ? [...w.top_habits].sort((a, b) => (a.effect ?? Infinity) - (b.effect ?? Infinity)) : [];
   return <WeeklyMotionContext.Provider value={paused}>
-    <div className={'v-week weekly-dashboard' + (paused ? ' is-motion-paused' : '')}>
-      <header className="weekly-page-heading view-head"><WeeklyAppLogos apps={headerApps} paused={paused} /><div><span className="eyebrow">Weekly Tab · A little perspective</span><RevealHeading as="h1" paused={paused} duration={1.7}>Your week, at a glance.</RevealHeading><p>See what lifts you up. Make space for more of it.</p></div><div className="weekly-page-tools"><span className="small muted">Through {fmt.day(dates.addDays(end, -1))}</span><button className="btn btn-sm btn-ghost" aria-pressed={paused} disabled={!!reduced} onClick={() => setMotionPaused(value => !value)}><Icon name={paused ? 'play' : 'pause'} size={14} />{reduced ? 'Reduced motion' : motionPaused ? 'Resume motion' : 'Pause motion'}</button></div>{floatingApps.length < 7 ? <span className="weekly-logo-example-note">{floatingApps.length ? 'Includes example app logos' : 'Example app logos · add app data to personalize'}</span> : null}</header>
+    <div ref={pageRef} className={'v-week weekly-dashboard' + (paused ? ' is-motion-paused' : '')}>
+      <header data-page-section="Your week" className="weekly-page-heading view-head"><WeeklyAppLogos apps={headerApps} paused={paused} /><div><span className="eyebrow">Weekly Tab · A little perspective</span><RevealHeading as="h1" paused={paused} duration={1.7}>Your week, at a glance.</RevealHeading><p>See what lifts you up. Make space for more of it.</p></div><div className="weekly-page-tools"><span className="small muted">Through {fmt.day(dates.addDays(end, -1))}</span><button className="btn btn-sm btn-ghost" aria-pressed={paused} disabled={!!reduced} onClick={() => setMotionPaused(value => !value)}><Icon name={paused ? 'play' : 'pause'} size={14} />{reduced ? 'Reduced motion' : motionPaused ? 'Resume motion' : 'Pause motion'}</button></div>{floatingApps.length < 7 ? <span className="weekly-logo-example-note">{floatingApps.length ? 'Includes example app logos' : 'Example app logos · add app data to personalize'}</span> : null}</header>
       <FunStatisticsView embedded appStatistics={appStatistics} />
       <WeeklyWrittenReport key={`${end}-${meta.persona.key}`} end={end} paused={paused} />
-      <header className="weekly-section-heading"><div><span className="eyebrow">Find your rhythm</span><h2>Sleep and weekly patterns</h2></div><p>Small moments in your day.<br />A bigger picture of your nights.</p></header>
+      <header data-page-section="Sleep and weekly patterns" className="weekly-section-heading"><div><span className="eyebrow">Find your rhythm</span><h2>Sleep and weekly patterns</h2></div><p>Small moments in your day.<br />A bigger picture of your nights.</p></header>
       {load.loading ? <Skeleton height={460} /> : load.error || !w ? <ErrorCard error={load.error!} onRetry={load.reload} view="week" /> : <>
         <div className="weekly-overview-grid">
           <WeeklyReveal className="weekly-calendar-panel card" >
@@ -149,18 +145,19 @@ export function WeekView({ end: endParam }: { end?: string }) {
               <Bars className="v-week-buckets" items={w.buckets.map((b: any) => ({ label: b.label.replace(' to ', '–'), value: b.mean_score, n: b.n, lo: b.lo, hi: b.hi }))} unit="sleep score" height={235} ariaLabel={`Average sleep score by meeting load over ${w.weeks} weeks`} />
               <p className="secondary v-week-headline"><ScoreText text={w.headline} /></p>
             </section></WeeklyReveal>
-            <WeeklyReveal className="card weekly-strongest" delay={0.14}><section data-tour="strongest"><div className="weekly-panel-heading"><span className="eyebrow">Strongest pattern</span><Icon name="sparkles" size={20} /></div><p className="v-week-strongest"><ScoreText text={w.strongest_pattern || 'Your patterns are still taking shape. More recorded nights will help.'} /></p><Link href="#weekly-patterns" onClick={() => setPatternsOpen(true)}>Explore your patterns <span aria-hidden="true">↗</span></Link></section></WeeklyReveal>
+            <WeeklyReveal className="card weekly-strongest" delay={0.14}><section data-tour="strongest"><div className="weekly-panel-heading"><span className="eyebrow">Strongest pattern</span><Icon name="sparkles" size={20} /></div><p className="v-week-strongest"><ScoreText text={w.strongest_pattern || 'Your patterns are still taking shape. More recorded nights will help.'} /></p><Link href="#weekly-patterns">Explore your patterns <span aria-hidden="true">↗</span></Link></section></WeeklyReveal>
           </div>
         </div>
-        <WeeklyReveal className="weekly-seven-section"><header className="weekly-section-heading"><div><span className="eyebrow">The day behind each score</span><h2>The last seven nights</h2></div><p>Your activities deserve a closer look.</p></header>
+        <WeeklyReveal className="weekly-seven-section"><header data-page-section="The last seven nights" className="weekly-section-heading"><div><span className="eyebrow">The day behind each score</span><h2>The last seven nights</h2></div><p>Your activities deserve a closer look.</p></header>
           <div className="v-week-last7">{w.last7.map((day: any) => <motion.div key={day.date} whileHover={paused ? undefined : { y: -6 }} transition={{ type: 'spring', stiffness: 300, damping: 22 }}><Link className={'v-week-day' + (day.worn ? '' : ' unworn')} href={'/daily/' + dates.addDays(day.date, 1)}><div className="v-week-day-name"><span>{dates.parse(day.date).toLocaleDateString(undefined, { weekday: 'short' })}</span><span>{dates.parse(day.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span></div><div className="v-week-day-score" style={{ color: day.worn && day.score != null ? sleepColor(day.score) : 'var(--ink-muted)' }}>{day.worn && day.score != null ? <WeeklyNumber value={day.score} /> : '—'}<small>/ 100</small></div><div className="v-week-day-chips">{day.chips.length ? day.chips.map((chip: string, j: number) => <span key={j} className="weekly-factor"><Icon name={/meeting/i.test(chip) ? 'calendar' : /workout|run/i.test(chip) ? 'run' : /social/i.test(chip) ? 'users' : /travel/i.test(chip) ? 'plane' : 'sun'} size={15} />{chip}</span>) : <span className="weekly-factor muted">No recorded factors</span>}</div><span className="weekly-day-open">Explore day <Icon name="chevron-right" size={14} /></span></Link></motion.div>)}</div>
         </WeeklyReveal>
-        <WeeklyReveal className="card weekly-top-patterns"><div className="weekly-panel-heading"><div><span className="eyebrow">From what drains to what restores</span><h2>Top patterns</h2></div><Link href="#weekly-patterns" onClick={() => setPatternsOpen(true)}>See all patterns ↗</Link></div><p className="secondary small">Ordered by sleep-score impact: most negative to most positive.</p>
-          <EffectBars items={topPatterns.map((h: any) => ({ label: h.title, effect: h.effect, lo: h.ci_low, hi: h.ci_high, confidence: h.confidence, direction: h.direction, adjusted: h.adjusted_effect, n: h.n_with, key: h.key }))} rowH={46} onSelect={openPatterns} />
-          <p className="weekly-chart-caption">Nights with each pattern vs nights without, comparing weekdays and weekends separately. Diamonds show the model-adjusted effect. Associations, never certainties.</p>
-        </WeeklyReveal>
+
       </>}
-      <details id="weekly-patterns" className="card weekly-patterns" open={patternsOpen} onToggle={event => setPatternsOpen(event.currentTarget.open)}><summary>Your recurring patterns</summary><div className="stack"><p className="secondary">Explore patterns by activity and compare their effect on your sleep.</p>{patternsOpen ? <HabitsView /> : null}</div></details>
+      <section data-page-section="Your recurring patterns" id="weekly-patterns" className="weekly-patterns" aria-labelledby="weekly-patterns-title">
+        <header className="weekly-section-heading"><div><span className="eyebrow">Find what works for you</span><h2 id="weekly-patterns-title">Your recurring patterns</h2></div><p>Explore patterns by activity and compare<br />their effect on your sleep.</p></header>
+        <HabitsView />
+      </section>
+      <SectionNavigation root={pageRef} paused={paused} />
     </div>
   </WeeklyMotionContext.Provider>;
 }

@@ -60,6 +60,10 @@ habit in one finding and suggest cutting it in the suggestion.
 - Artist, podcast and show names, and the titles of calendar activities in the links (a course, a shift, a study \
 session), may be used freely; they make the report personal. Keep the activity in what you write: "you study with \
 fewer phone pickups when Ludovico Einaudi is playing", not "Einaudi days".
+- A "Heart rate in <meeting>" link compares that meeting with the person's other meetings on the same days. A \
+higher heart rate means the meeting asks more of them: often because it matters more (an important customer, a \
+presentation), not because it is bad. Several such links together show which meetings, or customers, weigh the \
+most; say it that way, without calling it stress or a health concern.
 - Each event once: when two links are the same days seen twice (a recurring evening shift and late meetings; a \
 podcast and podcast days), tell the more specific one and leave the other out.
 - Never argue with a link from a handful of days. Two good days with Metallica say nothing against a link measured \

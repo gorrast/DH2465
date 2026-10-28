@@ -55,7 +55,7 @@ class InputTests(unittest.TestCase):
         self.assertEqual(len(inp.keys()), len(inp.metrics) + len(inp.patterns))     # keys are unique
         text = inp.model_dump_json()
         night = ANCHOR - timedelta(days=1)
-        linked = [p.title for p in inp.patterns if p.key.startswith(("pattern.series_", "pattern.pair_"))]
+        linked = [p.title for p in inp.patterns if p.key.startswith(("pattern.series_", "pattern.pair_", "pattern.meeting_hr_"))]
         for ev in self.ds.events_on(night, include_unattended=True) + self.ds.events_on(ANCHOR, include_unattended=True):
             if not any(ev.title in t for t in linked):
                 self.assertNotIn(ev.title, text)

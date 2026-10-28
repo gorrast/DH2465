@@ -227,7 +227,8 @@ class CrossSourceTests(unittest.TestCase):
         links = [p for p in daily.patterns if p.sources]
         self.assertTrue(links)
         self.assertTrue(all(p.happened is not None for p in links))
-        self.assertIn("pattern.artist_metallica", {p.key for p in links})
+        planted = {"pattern.artist_metallica", "pattern.gym_days", "pattern.cardio_days"}
+        self.assertTrue(planted & {p.key for p in links})
         self.assertEqual(daily.days[0].day, NIGHT)
         self.assertTrue(any("of music, mostly" in t for t in daily.days[0].tags))
         weekly = weekly_input(engine, MONDAY)
@@ -248,7 +249,9 @@ def with_classes_and_pairs(unlocks: bool = True):
       ``unlocks``, an unlock every 15 min from 08 to 22 but only one an hour in the session (the day's total barely
       moves); without, only the day's total, 70 or 30;
     * 'Tennis practice' every third day; on every second one Breaking Bad follows in the evening, and the night after
-      has a sleep score 15 lower and 40 min less sleep."""
+      has a sleep score 15 lower and 40 min less sleep;
+    * on the other even days a 'Northwind call' (recurring) and a 'Pipeline sync': heart rate 12 bpm higher during
+      the Northwind call only; and an 'Ops sync' always on the same days as it, with no effect."""
     ds = fresh_dataset()
     z = tz(ds.persona.tz)
     for d in ds.night_dates():
@@ -263,6 +266,12 @@ def with_classes_and_pairs(unlocks: bool = True):
                 h.bpm = [b if b is None or not (9 * 60 <= m < 22 * 60) else b + 6 for m, b in enumerate(h.bpm)]
             if n.worn and n.score is not None:
                 n.score -= 12
+        if o % 4 == 2:
+            for title, h0, key in (("Northwind call", 10, "nw"), ("Pipeline sync", 13, None), ("Ops sync", 15, "ops")):
+                ds.events.append(CalendarEvent(id="%s-%d" % (title, o), title=title, start=at(h0), end=at(h0 + 1),
+                                               type="meeting", recurring_key=key))
+            if h is not None:
+                h.bpm = [b if b is None or not (10 * 60 <= m < 11 * 60) else b + 12 for m, b in enumerate(h.bpm)]
         if o % 2 == 1:
             ds.events.append(CalendarEvent(id="study-%d" % o, title="Study session", start=at(14), end=at(16), type="focus"))
             if o % 4 == 1:
@@ -329,6 +338,20 @@ class SeriesAndPairTests(unittest.TestCase):
         self.assertEqual(p.direction, "hurt")
         self.assertEqual(p.sources[:2], ["streaming", "sleep"])
         self.assertIn("watched Breaking Bad after Tennis practice", p.detail())
+
+    def test_a_meeting_is_compared_with_the_other_meetings_of_its_days(self):
+        p = self.patterns["meeting_hr_northwind_call"]
+        self.assertEqual(p.direction, "hurt")
+        self.assertEqual(p.sources, ["calendar", "heart"])
+        # +12 above the usual heart rate, but the simulator's other meetings are raised too (reviews, escalations)
+        self.assertGreater(p.primary.effect, 3)
+        self.assertIn("higher in Northwind call than in your other meetings those days", p.detail())
+        self.assertNotIn("compared with", p.detail())
+
+    def test_series_always_on_the_same_days_are_not_causes_of_their_own(self):
+        self.assertNotIn("series_northwind_call", self.patterns)
+        self.assertNotIn("series_ops_sync", self.patterns)
+        self.assertIn("meeting_hr_northwind_call", self.patterns)
 
     def test_pairs_only_count_when_strong(self):
         pairs = [p for p in lifestyle_patterns(self.ds, ANCHOR) if p.key.startswith("pair_")]

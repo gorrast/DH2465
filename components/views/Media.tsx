@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
 import { api } from '@/lib/api';
+import { prepareYoutubeImport } from '@/lib/youtube-import';
 import { Icon } from '../ui/Icon';
 import { ActionButton, RevealHeading, RevealSection } from '../ui/Motion';
 import { toast } from '../ui/overlays';
@@ -69,16 +70,17 @@ function ImportMedia({ provider, onImported, disabled = false, onBusyChange, aft
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [youtubeRange, setYoutubeRange] = useState('90');
+  const [youtubeRange, setYoutubeRange] = useState<'30' | '90' | 'all'>('90');
   const [summary, setSummary] = useState('');
   const input = useRef<HTMLInputElement>(null);
   const upload = async () => {
     if (!files.length || busy || disabled) return;
     setBusy(true); onBusyChange?.(true); setError(''); setSummary('');
     try {
-      const result = await api.upload<MediaPayload & { imported: number; skipped?: number }>('/api/media/import?provider=' + provider + (provider === 'youtube' ? '&youtube_range=' + youtubeRange : ''), files);
+      const prepared = provider === 'youtube' ? await prepareYoutubeImport(files, youtubeRange) : null;
+      const result = await api.upload<MediaPayload & { imported: number; skipped?: number }>('/api/media/import?provider=' + provider + (provider === 'youtube' ? '&youtube_range=' + youtubeRange : ''), prepared ? [prepared.file] : files);
       onImported(result); setFiles([]);
-      if (provider === 'youtube') setSummary(`Imported ${result.imported.toLocaleString()} viewing entries. ${(result.skipped || 0).toLocaleString()} skipped outside the selected period or beyond the 5,000-entry limit.`);
+      if (provider === 'youtube') setSummary(`Imported ${result.imported.toLocaleString()} viewing entries. ${((prepared?.skipped || 0) + (result.skipped || 0)).toLocaleString()} skipped outside the selected period or beyond the entry/upload limits. Only a compact copy was uploaded.${prepared?.sizeLimited ? ' Fewer entries were included to keep the upload small; the newest were kept.' : ''}`);
       if (input.current) input.current.value = '';
       toast(`Imported ${result.imported.toLocaleString()} ${provider === 'steam' ? 'games' : 'records'} from ${names[provider]}.`, { kind: 'success' });
       await afterImport?.();
@@ -92,11 +94,11 @@ function ImportMedia({ provider, onImported, disabled = false, onBusyChange, aft
       {provider === 'netflix' && <ol className="media-setup-steps"><li>Open Netflix in a browser, then go to Account → Profiles → your profile → Viewing activity.</li><li>Select Download all at the bottom to get your CSV. Repeat for any other profiles you want to include.</li><li>Choose the files below and click Import Netflix. No API key is needed. <a href="https://help.netflix.com/en/node/101917" target="_blank" rel="noreferrer">Netflix’s download guide ↗</a></li></ol>}
       {provider === 'spotify' && <ol className="media-setup-steps"><li>Request your listening data from <a href="https://www.spotify.com/account/privacy/" target="_blank" rel="noreferrer">Spotify’s account privacy page ↗</a>.</li><li>When it arrives, unzip the download and choose your history JSON files below.</li><li>Click Import Spotify. You can also use the optional Last.fm connection further down.</li></ol>}
       <p>{provider === 'spotify' ? 'Choose your music and podcast histories together. Taste Profile, Your Library and Wrapped summaries are also supported.' : provider === 'netflix' ? 'Download Viewing activity from your Netflix profile. Select both CSVs together to include both profiles. Dates use M/D/YY or YYYY-MM-DD; each filename labels its profile.' : provider === 'youtube' ? 'Import watch-history.json from Google Takeout. Video titles, channel names and timestamps are kept; actual watch duration is unavailable. Entries marked as Google ads are excluded. Search-history files are not viewing history.' : 'Upload one JSON response from Steam GetOwnedGames (include_appinfo=true) or GetRecentlyPlayedGames. The response must contain a games array.'}</p>
-      {provider === 'youtube' && <label className="media-file-label">History to import<select className="input" value={youtubeRange} disabled={busy || disabled} onChange={(event) => { setYoutubeRange(event.target.value); setSummary(''); }}><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="all">All history (latest 5,000 entries)</option></select><span className="tiny muted">Up to 5,000 of the newest entries across all selected files. The period is relative to today. Your original export is unchanged.</span></label>}
+      {provider === 'youtube' && <label className="media-file-label">History to import<select className="input" value={youtubeRange} disabled={busy || disabled} onChange={(event) => { setYoutubeRange(event.target.value as '30' | '90' | 'all'); setSummary(''); }}><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="all">All history (latest 5,000 entries)</option></select><span className="tiny muted">Up to 5,000 of the newest entries across all selected files. Filtered and compacted in your browser before upload. The period is relative to today. Your original export is unchanged.</span></label>}
       <label className="media-file-label">{names[provider]} export {provider === 'steam' ? 'file' : 'files'}
         <input ref={input} className="input" type="file" multiple={provider !== 'steam'} disabled={busy || disabled} accept={provider === 'netflix' ? '.csv,text/csv' : '.json,application/json'} onChange={(event) => { setFiles(Array.from(event.target.files || [])); setError(''); }} />
       </label>
-      <p className="tiny muted">{provider === 'steam' ? 'Each import replaces the previous Steam snapshot.' : 'History imports replace this source’s history. Select all files you want to keep together.'} Up to {provider === 'youtube' ? '32' : '4'} MB total. Original files are discarded after parsing.</p>
+      <p className="tiny muted">{provider === 'steam' ? 'Each import replaces the previous Steam snapshot.' : 'History imports replace this source’s history. Select all files you want to keep together.'} {provider === 'youtube' ? 'Only the newest entries in your selected period are uploaded, up to 5,000 and a compact 4 MB limit. The full export stays on your device.' : 'Up to 4 MB total. Original files are discarded after parsing.'}</p>
       {files.length > 0 && <p className="small secondary">{files.length} {files.length === 1 ? 'file' : 'files'} selected</p>}
       <ActionButton className="btn btn-primary" disabled={!files.length || busy || disabled} aria-busy={busy} onClick={upload}><Icon name="upload" size={16} />{busy ? 'Importing…' : 'Import ' + names[provider]}</ActionButton>
       {summary && <p className="media-data-note" role="status">{summary}</p>}

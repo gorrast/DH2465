@@ -240,11 +240,13 @@ class CrossSourceTests(unittest.TestCase):
 
 
 
-def with_classes_and_pairs():
+def with_classes_and_pairs(unlocks: bool = True):
     """Demo data with a recurring class and two activity x media pairs:
     * 'Statistics lecture' every 4th day (a recurring series): daytime heart rate 6 bpm higher, sleep score 12 lower;
-    * a 'Study session' every other day; on every second one Ludovico Einaudi plays through it, with 40 fewer phone
-      pickups and a heart rate 12 bpm lower during it (clear of the simulator's day-to-day swing);
+    * a 'Study session' 14-16 every other day; on every second one Ludovico Einaudi plays through it, with a heart
+      rate 12 bpm lower during it (clear of the simulator's day-to-day swing) and fewer phone pickups: with
+      ``unlocks``, an unlock every 15 min from 08 to 22 but only one an hour in the session (the day's total barely
+      moves); without, only the day's total, 70 or 30;
     * 'Tennis practice' every third day; on every second one Breaking Bad follows in the evening, and the night after
       has a sleep score 15 lower and 40 min less sleep."""
     ds = fresh_dataset()
@@ -267,7 +269,8 @@ def with_classes_and_pairs():
                 for k in range(24):
                     ds.media.append(MediaPlay(start=at(14) + timedelta(minutes=5 * k), minutes=5, title="Track",
                                               creator="Ludovico Einaudi", kind="music"))
-                ds.day_metrics[d]["screen.pickups"] = 30.0
+                if not unlocks:
+                    ds.day_metrics[d]["screen.pickups"] = 30.0
                 if h is not None:
                     h.bpm = [b if b is None or not (14 * 60 <= m < 16 * 60) else b - 12 for m, b in enumerate(h.bpm)]
         if o % 3 == 0:
@@ -280,6 +283,12 @@ def with_classes_and_pairs():
                 if n.worn and n.score is not None:
                     n.score -= 15
                     n.duration_min -= 40
+        if unlocks:
+            calm = o % 4 == 1                                     # an Einaudi study session
+            day = [at(8) + timedelta(minutes=15 * k) for k in range(56)]
+            day = [t for t in day if not (calm and at(14) <= t < at(16) and t.minute != 0)]
+            ds.unlocks.extend(day)
+            ds.day_metrics[d]["screen.pickups"] = float(len(day))
     ds.reindex()
     return ds
 
@@ -304,13 +313,15 @@ class SeriesAndPairTests(unittest.TestCase):
         self.assertEqual(p.direction, "helped")
         self.assertEqual(p.title, "Ludovico Einaudi during Study session")
         effects = {o.key: o for o in p.reportable}
-        self.assertLess(effects["pickups"].effect, -20)
+        self.assertLess(effects["pickups_during_study_session"].effect, -2)          # 4 an hour against 1
+        self.assertNotIn("pickups", effects)                                         # not the day's total
         self.assertLess(effects["hr_during_study_session"].effect, -3)
         study_days = {e.start.date() for e in self.ds.events if e.title == "Study session" and e.start.date() < ANCHOR}
         self.assertLessEqual(p.n_with + p.n_without, len(study_days))
         detail = p.detail()
         self.assertIn("listened to Ludovico Einaudi during Study session", detail)
         self.assertIn("heart rate during Study session", detail)
+        self.assertIn("fewer phone pickups an hour during Study session", detail)
         self.assertIn("other %d days with Study session" % p.n_without, detail)
 
     def test_a_show_after_an_activity_is_linked_to_the_night_after(self):
@@ -323,6 +334,25 @@ class SeriesAndPairTests(unittest.TestCase):
         pairs = [p for p in lifestyle_patterns(self.ds, ANCHOR) if p.key.startswith("pair_")]
         self.assertTrue(pairs)
         self.assertTrue(all(o.tier != "hint" for p in pairs for o in p.outcomes))
+
+    def test_pickups_during_an_activity_count_only_its_window(self):
+        get = OUTCOMES["pickups_during_study_session"].get
+        calm = next(d for d in self.ds.night_dates() if d.toordinal() % 4 == 1)
+        busy = next(d for d in self.ds.night_dates() if d.toordinal() % 4 == 3)
+        self.assertEqual(get(self.ds, calm), 1.0)                                   # 14:00 and 15:00 in two hours
+        self.assertEqual(get(self.ds, busy), 4.0)
+        no_study = next(d for d in self.ds.night_dates() if d.toordinal() % 2 == 0)
+        self.assertIsNone(get(self.ds, no_study))
+        unreported = with_classes_and_pairs()                                       # no screen data that day
+        del unreported.day_metrics[busy]["screen.pickups"]
+        self.assertIsNone(get(unreported, busy))
+
+    def test_without_unlock_times_pairs_fall_back_to_the_days_pickups(self):
+        ds = with_classes_and_pairs(unlocks=False)
+        p = {p.key: p for p in lifestyle_patterns(ds, ANCHOR)}["pair_ludovico_einaudi_during_study_session"]
+        effects = {o.key: o for o in p.reportable}
+        self.assertLess(effects["pickups"].effect, -20)
+        self.assertNotIn("pickups_during_study_session", {o.key for o in p.outcomes})
 
     def test_heart_rate_during_an_activity_needs_the_activity(self):
         d = next(d for d in self.ds.night_dates() if self.ds.hr(d) and not any(

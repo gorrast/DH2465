@@ -2,7 +2,7 @@
 import json
 import os
 import unittest
-from datetime import timedelta
+from datetime import datetime, timedelta
 from unittest import mock
 
 from fastapi.testclient import TestClient
@@ -14,6 +14,7 @@ from stressless.models import to_jsonable
 from stressless.server.app import app
 from stressless.server.auth import Principal, current_principal
 from stressless.store import MemoryStore
+from stressless.timeutil import tz
 from tests.helpers import ANCHOR, dataset
 
 CONN = "11111111-1111-1111-1111-111111111111"
@@ -117,6 +118,22 @@ class LoaderTests(unittest.TestCase):
         inp = daily_input(Engine(ds), ANCHOR)
         self.assertEqual(next(m for m in inp.metrics if m.key == "music.minutes").value, 30)
         self.assertIn("30 min of music, mostly Bon Iver", inp.days[0].tags)
+
+    def test_only_unlocks_are_loaded_from_the_screen_events(self):
+        store = real_store()
+        y = ANCHOR - timedelta(days=1)
+        ev = lambda rid, ts, kind, data_type="screen_event": {  # noqa: E731
+            "id": rid, "source": "screen_time", "data_type": data_type, "source_record_id": rid, "start_at": ts,
+            "end_at": None, "payload": {"type": kind} if kind else {}}
+        store.tables["source_records"] = [
+            ev("u1", y.isoformat() + "T12:00:00+00:00", "unlock"),
+            ev("s1", y.isoformat() + "T11:59:00+00:00", "screen_on"),
+            ev("a1", y.isoformat() + "T12:01:00+00:00", None, "app_usage"),
+            ev("u2", ANCHOR.isoformat() + "T08:00:00+00:00", "unlock")]                      # today: not loaded
+        ds = load_dataset(store, ANCHOR)
+        local = datetime.fromisoformat(y.isoformat() + "T12:00:00+00:00").astimezone(tz(store.time_zone()))
+        self.assertEqual(ds.unlocks_on(y), [local])                                           # local time, unlocks only
+        self.assertEqual(ds.unlocks_on(ANCHOR), [])
 
     def test_uncategorized_events_are_classified_and_hrv_measure_is_not_mixed(self):
         store = real_store()

@@ -4,7 +4,8 @@
     uv run --env-file .env.local python tools/seed_demo.py --user <demo uuid> --calibrate <your uuid> --write   # replace
     uv run --env-file .env.local python tools/seed_demo.py --user <demo uuid> --remove                          # empty it
 
-Everything is generated: sleep, minute heart rate, steps, calendar, Spotify, Netflix, screen time and check-ins. The
+Everything is generated: sleep, minute heart rate, steps, calendar, Spotify, Netflix, screen time (daily totals and
+the time of every unlock) and check-ins. The
 simulator (stressless.sim) makes the body and the calendar; ``--calibrate`` only *reads* a real account to copy its
 shape (usual bedtime and wake, sleep need, resting heart rate, HRV, steps, screen time), never its rows.
 
@@ -67,10 +68,11 @@ CONFIG: Dict[str, Any] = {
                       "enjoy": {"day_hr": -3, "onset_min": -8, "hrv": 0.06, "resting_hr": -1}},
     "study": {"title": "Study session", "place": "KTH Library", "share": {"weekday": 0.55, "sat": 0.15, "sun": 0.6},
               "slots": {"weekday": [(14.0, 16.0), (16.0, 18.0), (18.5, 20.5)], "weekend": [(13.0, 16.0)]}},
-    # focus music: on this share of study blocks the artist plays through it; those days have fewer pickups, less
-    # screen time and a calmer heart rate during the block
+    # focus music: on this share of study blocks the artist plays through it; those blocks keep only this share of
+    # their pickups (unlocks) and have a calmer heart rate, and those days have less screen time
     "focus_artist": ("Ludovico Einaudi", "modern classical", 0.55),
-    "focus_effects": {"pickups": 0.6, "screen_minutes": -40, "hr": -4},
+    "focus_effects": {"pickups": 0.35, "screen_minutes": -40, "hr": -4},
+    "waking": {"weekday": (7.5, 23.5), "weekend": (9.5, 24.0)},   # hours the day's unlocks fall in
     # on days without a class effect, so the class links and the workout links stay apart
     "workouts": [("Morning run", "Djurgården", [(2, 7.0, 7.75, 0.95)]),
                  ("Gym", "SATS KTH", [(2, 18.0, 19.0, 0.6), (5, 15.0, 16.0, 0.6)])],
@@ -114,7 +116,8 @@ PLANTED: Dict[str, Dict[str, str]] = {
                            "how": "early Saturday and late Sunday shifts: later bedtime, earlier wake (simulator)"},
     "busy_days":          {"direction": "hurt", "strength": "weak", "how": "the long Statistics days"},
     "pair_ludovico_einaudi_during_study_session": {"direction": "helped", "strength": "strong",
-                                     "how": "study blocks with it: 40 % fewer pickups, less screen time, HR -4 while studying"},
+                                     "how": "study blocks with it: 65 % fewer pickups and HR -4 while studying, "
+                                            "40 min less screen time that day"},
     "artist_ludovico_einaudi": {"direction": "helped", "strength": "weak", "how": "follows from the calmer study blocks"},
     "social_evenings":    {"direction": "hurt", "strength": "strong", "how": "~90 min later bedtime, often drinks (simulator)"},
     "cardio_days":        {"direction": "helped", "strength": "strong", "how": "morning runs: faster onset, less waking, higher HRV (simulator)"},
@@ -164,8 +167,8 @@ class AdminStore(UserStore):
         rows = db("GET", "profiles", params={"user_id": "eq." + self.user_id, "select": "time_zone"}) or []
         return (rows[0].get("time_zone") if rows else None) or CONFIG["time_zone"]
 
-    def rows(self, table, column=None, lo=None, hi=None):
-        params = {"select": "*", "user_id": "eq." + self.user_id}
+    def rows(self, table, column=None, lo=None, hi=None, where=None):
+        params = dict({"select": "*", "user_id": "eq." + self.user_id}, **{k: "eq." + v for k, v in (where or {}).items()})
         conds = ["%s.gte.%s" % (column, lo)] * (lo is not None) + ["%s.lte.%s" % (column, hi)] * (hi is not None)
         if column:
             params["order"] = column
@@ -326,6 +329,8 @@ def generate(cal: Dict[str, Any], today: date) -> Dict[str, Any]:
     z = tz(CONFIG["time_zone"])
     media: List[Dict[str, Any]] = []
     metrics: List[Dict[str, Any]] = []
+    unlocks: List[Dict[str, Any]] = []
+    urng = random.Random("seed-demo-unlocks-%d" % CONFIG["seed"])
     alcohol = {tn.date: int(tn.hidden.get("alcohol_units") or 0) for tn in ds.truth.nights}
 
     def play(provider: str, end_at: datetime, title: str, creator: Optional[str], minutes: float, kind: str) -> None:
@@ -400,10 +405,17 @@ def generate(cal: Dict[str, Any], today: date) -> Dict[str, Any]:
         sc = lambda k, default: cal["screen"].get((k, weekend)) or default  # noqa: E731
         late = sc("late_minutes", 25.0) * (rng.uniform(2.5, 4.0) if p["late_phone"] else rng.uniform(0.3, 1.1))
         fe = CONFIG["focus_effects"]
-        for k, v in (("minutes", sc("minutes", 210.0) * rng.lognormvariate(0, 0.25) + late * 0.5
-                      + (fe["screen_minutes"] if focus_day else 0)),
-                     ("late_minutes", late),
-                     ("pickups", sc("pickups", 70.0) * rng.lognormvariate(0, 0.2) * (fe["pickups"] if focus_day else 1.0))):
+        minutes = sc("minutes", 210.0) * rng.lognormvariate(0, 0.25) + late * 0.5 + (fe["screen_minutes"] if focus_day else 0)
+        # unlocks spread over the waking day; a focus block keeps only fe["pickups"] of those inside it, and the
+        # day's total is what is left, as the phone sync counts it (their own rng, so the other draws stay as they were)
+        lo, hi = CONFIG["waking"]["weekend" if weekend else "weekday"]
+        times = sorted(datetime.combine(d, time(0, 0), z) + timedelta(hours=urng.uniform(lo, hi))
+                       for _ in range(int(round(sc("pickups", 70.0) * rng.lognormvariate(0, 0.2)))))
+        if focus_day:
+            times = [t for t in times if not (study[0].start <= t < study[0].end) or urng.random() < fe["pickups"]]
+        for t in times:
+            unlocks.append(screen_event(d, t, len(unlocks)))
+        for k, v in (("minutes", minutes), ("late_minutes", late), ("pickups", len(times))):
             metrics.append({"day": d.isoformat(), "metric_key": "screen." + k, "value": round(v, 1), "source": SCREEN})
         if p["logged"]:
             cups = rng.choice([4, 5]) if p["coffee_heavy"] else rng.choice([1, 2, 2, 3])
@@ -411,7 +423,14 @@ def generate(cal: Dict[str, Any], today: date) -> Dict[str, Any]:
             metrics.append({"day": d.isoformat(), "metric_key": "intake.alcohol_units", "value": alcohol.get(d, 0),
                             "source": "manual"})
     ds.reindex()
-    return {"ds": ds, "media": media, "metrics": metrics}
+    return {"ds": ds, "media": media, "metrics": metrics, "unlocks": unlocks}
+
+
+def screen_event(d: date, t: datetime, i: int) -> Dict[str, Any]:
+    """One unlock as the phone sync stores it (source_records, every row with the same keys)."""
+    return {"source": SCREEN, "data_type": "screen_event", "source_record_id": "%s-unlock-%s-%d" % (SEED, d.isoformat(), i),
+            "data_origin": None, "start_at": _iso(t), "end_at": None, "start_offset_min": _offset(d), "end_offset_min": None,
+            "value": None, "unit": None, "payload": {"type": "unlock"}, "source_modified_at": None}
 
 
 # --------------------------------------------------------------------------- #
@@ -454,7 +473,7 @@ def to_rows(gen: Dict[str, Any], hrv_key: str) -> Dict[str, List[Dict[str, Any]]
                "guests": [{"response_status": "accepted"}] * max(0, e.attendees - 1), "recurring_key": e.recurring_key}
               for e in ds.events]
     return {"sleep_nights": nights, "heart_rate_days": hr, "daily_activity": activity, "daily_metrics": gen["metrics"],
-            "calendar_events": events, "media_events": gen["media"]}
+            "calendar_events": events, "media_events": gen["media"], "source_records": gen["unlocks"]}
 
 
 # --------------------------------------------------------------------------- #
@@ -464,7 +483,8 @@ def check(rows: Dict[str, List[Dict[str, Any]]], today: date) -> Dict[str, Any]:
     """Load the rows the way the app does and run the links engine on them."""
     store = MemoryStore()
     store.tz = CONFIG["time_zone"]
-    store.tables = {k: [dict(r, id=r.get("provider_event_id") or r.get("id") or str(i)) for i, r in enumerate(v)]
+    store.tables = {k: [dict(r, id=r.get("provider_event_id") or r.get("source_record_id") or r.get("id") or str(i))
+                        for i, r in enumerate(v)]
                     for k, v in rows.items()}
     ds = load_dataset(store, today)
     found = {p.key: p for p in lifestyle_patterns(ds, today) if p.reportable}
@@ -519,10 +539,11 @@ def sweep(cal: Dict[str, Any], today: date, n: int) -> None:
 # --------------------------------------------------------------------------- #
 # Write / remove
 # --------------------------------------------------------------------------- #
-TABLES = ("sleep_nights", "heart_rate_days", "daily_activity", "daily_metrics", "calendar_events", "media_events")
+TABLES = ("sleep_nights", "heart_rate_days", "daily_activity", "daily_metrics", "calendar_events", "media_events",
+          "source_records")
 CONFLICT = {"sleep_nights": "user_id,night_date", "heart_rate_days": "user_id,day", "daily_activity": "user_id,day",
             "daily_metrics": "user_id,day,metric_key", "calendar_events": "user_id,provider,provider_event_id",
-            "media_events": "user_id,id"}
+            "media_events": "user_id,id", "source_records": "user_id,source,source_record_id"}
 
 
 def guard(user_id: str) -> None:
@@ -532,7 +553,8 @@ def guard(user_id: str) -> None:
     checks = [("provider_connections", "provider_account_id", "not.like.%s*" % SEED),
               ("sleep_nights", "data_origin", "not.eq." + SEED),
               ("calendar_events", "provider_event_id", "not.like.%s*" % SEED),
-              ("media_events", "id", "not.like.%s*" % SEED)]
+              ("media_events", "id", "not.like.%s*" % SEED),
+              ("source_records", "source_record_id", "not.like.%s*" % SEED)]
     for table, col, cond in checks:
         rows = db("GET", table, params=dict(uid, select=col, limit="1", **{col: cond})) or []
         if rows:

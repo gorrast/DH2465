@@ -139,10 +139,10 @@ class SupabaseStore(UserStore):
     def time_zone(self) -> str:
         return (self._state()["profile"] or {}).get("time_zone") or "Europe/Stockholm"
 
-    def rows(self, table: str, column: Optional[str] = None, lo: Optional[str] = None, hi: Optional[str] = None
-             ) -> List[Dict[str, Any]]:
+    def rows(self, table: str, column: Optional[str] = None, lo: Optional[str] = None, hi: Optional[str] = None,
+             where: Optional[Dict[str, str]] = None) -> List[Dict[str, Any]]:
         """Read through RLS (the user's own rows), 1000 rows per request, the PostgREST default maximum."""
-        params = {"select": "*"}
+        params = dict({"select": "*"}, **{k: "eq." + v for k, v in (where or {}).items()})
         conds = ["%s.gte.%s" % (column, lo)] * (lo is not None) + ["%s.lte.%s" % (column, hi)] * (hi is not None)
         if column:
             params["order"] = column

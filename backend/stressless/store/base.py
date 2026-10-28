@@ -65,10 +65,11 @@ class UserStore:
         """The user's IANA time zone (``profiles.time_zone``); it defines "today", "last night" and the week."""
         raise NotImplementedError
 
-    def rows(self, table: str, column: Optional[str] = None, lo: Optional[str] = None, hi: Optional[str] = None
-             ) -> List[Dict[str, Any]]:
+    def rows(self, table: str, column: Optional[str] = None, lo: Optional[str] = None, hi: Optional[str] = None,
+             where: Optional[Dict[str, str]] = None) -> List[Dict[str, Any]]:
         """The user's rows of a real-data table, optionally with ``lo <= column <= hi`` (ISO strings), ordered by
-        ``column``. Rows look like PostgREST JSON: timestamps and dates as ISO strings."""
+        ``column``, and only those whose ``where`` keys equal their values (a key is a column or a JSON field as
+        ``payload->>type``). Rows look like PostgREST JSON: timestamps and dates as ISO strings."""
         raise NotImplementedError
 
     def consented(self) -> bool:

@@ -54,6 +54,7 @@ PAIR_ACTIVITIES = 5                            # most frequent calendar activiti
 AFTER_HOURS = 4                                # media starting this long after an activity ended counts as "after" it
 MAX_SERIES = 4                                 # most frequent recurring calendar series tested as their own cause
 ACTIVITY_HR_MIN_MINUTES = 30                   # worn minutes of an activity needed for a heart rate during it
+ACTIVITY_PHONE_MIN_MINUTES = 30                # minutes of an activity needed for a pickup rate during it
 GYM_WORDS = ("gym", "strength", "weight", "functional", "crossfit", "sats", "styrka")
 CARDIO_WORDS = ("run", "jog", "cycl", "bik", "ride", "swim", "walk", "hik", "row", "ski", "elliptical", "löp")
 
@@ -386,10 +387,30 @@ def activity_hr_outcome(key: str, title: str) -> str:
     return okey
 
 
+def activity_pickups_outcome(key: str, title: str) -> str:
+    """Registers (once) and returns the outcome "phone pickups an hour during <activity>": the unlocks inside the
+    activity's calendar windows, per hour of them, so a longer session does not count as more pickups."""
+    okey = "pickups_during_" + _slug(title)
+    if okey not in OUTCOMES:
+        def get(ds: Dataset, d: date) -> Optional[float]:
+            # only days the phone reported in full: no daily total means no screen data that day, not zero pickups
+            if ds.metric_on(d, "screen.pickups") is None:
+                return None
+            windows = _activity_windows(ds, d, key)
+            hours = sum((e - s).total_seconds() for s, e in windows) / 3600.0
+            if hours * 60 < ACTIVITY_PHONE_MIN_MINUTES:
+                return None
+            return sum(1 for t in ds.unlocks_on(d) if any(s <= t < e for s, e in windows)) / hours
+        OUTCOMES[okey] = OutcomeDef(okey, "Phone pickups during " + title, "per hour", "down", 1,
+                                    "%%s more phone pickups an hour during %s" % title,
+                                    "%%s fewer phone pickups an hour during %s" % title, get, False, "phone")
+    return okey
+
+
 def pair_causes(ds: Dataset, days: Sequence[date]) -> List[CauseDef]:
     """Media played during or after a calendar activity, compared with the same activity without it: "Ludovico Einaudi
-    during Study session" (against phone use and heart rate during it), "Breaking Bad after Tennis practice" (against
-    the night after). Only days with the activity are compared, so the activity itself is not what differs. Picked
+    during Study session" (against pickups and heart rate during it, and the day's screen time), "Breaking Bad after
+    Tennis practice" (against the night after). Only days with the activity are compared, so the activity itself is not what differs. Picked
     from many possible pairs, so only strong links count."""
     if _media_days(ds) is None or not _has_calendar(ds):
         return []
@@ -424,7 +445,9 @@ def pair_causes(ds: Dataset, days: Sequence[date]) -> List[CauseDef]:
         video = any(_media_name(m) == name and m.kind == "video" for m in ds.media)
         verb = "watched" if video else "listened to"
         if rel == "during":
-            outcomes = ("pickups", "screen_minutes", activity_hr_outcome(k, title))
+            # pickups inside the activity when the phone sent when each unlock happened; else only the day's total
+            pickups = activity_pickups_outcome(k, title) if ds.unlocks else "pickups"
+            outcomes = (pickups, "screen_minutes", activity_hr_outcome(k, title))
             lead = "On the %d days you %s"
         else:
             outcomes = NIGHT
@@ -589,6 +612,8 @@ def fmt(v: float, unit: str) -> str:
         return "%d%%" % round(v)
     if unit == "bpm":
         return ("%.1f" % v).rstrip("0").rstrip(".") + " bpm"
+    if unit == "per hour":
+        return ("%.1f" % v).rstrip("0").rstrip(".")
     return "%d" % round(v)
 
 

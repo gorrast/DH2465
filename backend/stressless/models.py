@@ -455,6 +455,7 @@ class Dataset:
     showcase: bool = True
     day_metrics: Dict[date, Dict[str, float]] = field(default_factory=dict)   # day -> {"screen.minutes": ...} (daily_metrics)
     media: List[MediaPlay] = field(default_factory=list)                      # Spotify / Netflix plays (media_events)
+    unlocks: List[datetime] = field(default_factory=list)                     # phone unlocks, local time (source_records)
 
     def __post_init__(self) -> None:
         self.reindex()
@@ -480,6 +481,9 @@ class Dataset:
         self._media_by_day: Dict[date, List[MediaPlay]] = {}
         for m in self.media:
             self._media_by_day.setdefault(m.start.date(), []).append(m)
+        self._unlocks_by_day: Dict[date, List[datetime]] = {}
+        for t in self.unlocks:
+            self._unlocks_by_day.setdefault(t.date(), []).append(t)
 
     def events_on(self, d: date, include_unattended: bool = False) -> List[CalendarEvent]:
         evs = self._events_by_day.get(d, [])
@@ -507,6 +511,9 @@ class Dataset:
 
     def media_on(self, d: date) -> List[MediaPlay]:
         return self._media_by_day.get(d, [])
+
+    def unlocks_on(self, d: date) -> List[datetime]:
+        return self._unlocks_by_day.get(d, [])
 
     def metric_on(self, d: date, key: str) -> Optional[float]:
         return self.day_metrics.get(d, {}).get(key)

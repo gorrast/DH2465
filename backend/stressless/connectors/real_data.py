@@ -170,9 +170,14 @@ def load_dataset(store, today: date, days: int = DAYS, name: str = "You") -> Dat
     ds.media = [m for m in (media_from_row(r, tzname) for r in store.rows("media_events", "occurred_at", start.isoformat(),
                                                                           (today + timedelta(days=1)).isoformat()))
                 if ds.start <= m.start.date() <= ds.end]
+    # When each unlock happened, so phone pickups can be counted inside a calendar activity (daily_metrics only has
+    # the day's total). Only the unlocks are read: the other screen events are several times as many rows.
+    unlocks = store.rows("source_records", "start_at", start.isoformat(), (today + timedelta(days=1)).isoformat(),
+                         where={"data_type": "screen_event", "payload->>type": "unlock"})
+    ds.unlocks = sorted(t for t in (parse_dt(r["start_at"], tzname) for r in unlocks) if ds.start <= t.date() <= ds.end)
     ds.reindex()
-    log.info("loaded real data for %s: %d nights, %d heart-rate days, %d activity days, %d events, %d media plays",
-             today, len(nights), len(hr_days), len(activity), len(events), len(ds.media))
+    log.info("loaded real data for %s: %d nights, %d heart-rate days, %d activity days, %d events, %d media plays, "
+             "%d unlocks", today, len(nights), len(hr_days), len(activity), len(events), len(ds.media), len(ds.unlocks))
     return ds
 
 

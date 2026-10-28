@@ -1,7 +1,14 @@
-'use client';
-import { createContext, useContext, type MutableRefObject } from 'react';
+"use client";
+import { createContext, useContext, type MutableRefObject } from "react";
 
-export interface Persona { key: string; name: string; tagline?: string; description?: string; tz?: string; ready?: boolean }
+export interface Persona {
+  key: string;
+  name: string;
+  tagline?: string;
+  description?: string;
+  tz?: string;
+  ready?: boolean;
+}
 export interface Meta {
   persona: Persona;
   personas: Persona[];
@@ -26,7 +33,12 @@ export interface ReplayControls {
   playRange: (from: number, to: number, speed?: number) => void;
 }
 
-export interface TourControls { start: () => void; stop: () => void; toggle: () => void; active: () => boolean }
+export interface TourControls {
+  start: () => void;
+  stop: () => void;
+  toggle: () => void;
+  active: () => boolean;
+}
 
 export interface AppState {
   meta: Meta;
@@ -34,7 +46,7 @@ export interface AppState {
   refreshMeta: () => Promise<Meta>;
   historyDays: number | null;
   setHistoryDays: (n: number | null) => void;
-  theme: 'dark' | 'light';
+  theme: "dark" | "light";
   toggleTheme: () => void;
   switchPersona: (key: string, seed?: number) => Promise<void>;
   replay: MutableRefObject<ReplayControls | null>;
@@ -48,6 +60,6 @@ export const AppCtx = createContext<AppState | null>(null);
 
 export function useApp(): AppState {
   const ctx = useContext(AppCtx);
-  if (!ctx) throw new Error('useApp outside <Shell>');
+  if (!ctx) throw new Error("useApp outside <Shell>");
   return ctx;
 }

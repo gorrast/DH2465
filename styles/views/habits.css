@@ -1,3 +1,9 @@
-.v-habits-filters { gap: 6px; }
-.v-habits-card h3 { font-size: 16px; }
-.v-habits-effect { margin: 8px 0; }
+.v-habits-filters {
+  gap: 6px;
+}
+.v-habits-card h3 {
+  font-size: 16px;
+}
+.v-habits-effect {
+  margin: 8px 0;
+}

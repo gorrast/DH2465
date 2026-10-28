@@ -1,16 +1,43 @@
-'use client';
+"use client";
 /* App-wide overlays: chart tooltip, toasts, confirm modal and the busy stepper.
  * Each is driven by a tiny external store so callers (charts, views) can trigger them without re-rendering the tree. */
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { createStore, useStore } from '@/lib/store';
-import { Icon } from './Icon';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { createStore, useStore } from "@/lib/store";
+import { Icon } from "./Icon";
 
 // ------------------------------------------------------------------ tooltip --
-export interface TipRow { label: string; value: ReactNode; color?: string | null }
-interface TipState { x: number; y: number; title: string | null; rows: TipRow[]; visible: boolean }
-const tipStore = createStore<TipState>({ x: 0, y: 0, title: null, rows: [], visible: false });
+export interface TipRow {
+  label: string;
+  value: ReactNode;
+  color?: string | null;
+}
+interface TipState {
+  x: number;
+  y: number;
+  title: string | null;
+  rows: TipRow[];
+  visible: boolean;
+}
+const tipStore = createStore<TipState>({
+  x: 0,
+  y: 0,
+  title: null,
+  rows: [],
+  visible: false,
+});
 
-export function showTip(x: number, y: number, title: string | null | undefined, rows: TipRow[]) {
+export function showTip(
+  x: number,
+  y: number,
+  title: string | null | undefined,
+  rows: TipRow[],
+) {
   tipStore.set({ x, y, title: title || null, rows: rows || [], visible: true });
 }
 export function hideTip() {
@@ -25,19 +52,28 @@ export function TooltipHost() {
     const node = ref.current;
     if (!node || !tip.visible) return;
     const pad = 12;
-    const w = node.offsetWidth, h = node.offsetHeight;
-    let left = tip.x + pad, top = tip.y + pad;
+    const w = node.offsetWidth,
+      h = node.offsetHeight;
+    let left = tip.x + pad,
+      top = tip.y + pad;
     if (left + w > window.innerWidth - 8) left = tip.x - w - pad;
     if (top + h > window.innerHeight - 8) top = tip.y - h - pad;
     setPos({ left, top });
   }, [tip]);
   return (
-    <div ref={ref} className="viz-tooltip" hidden={!tip.visible} style={{ position: 'fixed', left: pos.left, top: pos.top }}>
+    <div
+      ref={ref}
+      className="viz-tooltip"
+      hidden={!tip.visible}
+      style={{ position: "fixed", left: pos.left, top: pos.top }}
+    >
       {tip.title ? <div className="tt-title">{tip.title}</div> : null}
       {tip.rows.map((r, i) => (
         <div className="tt-row" key={i}>
-          <span className="row" style={{ gap: '6px' }}>
-            {r.color ? <span className="tt-key" style={{ background: r.color }} /> : null}
+          <span className="row" style={{ gap: "6px" }}>
+            {r.color ? (
+              <span className="tt-key" style={{ background: r.color }} />
+            ) : null}
             <span className="tt-label">{r.label}</span>
           </span>
           <span className="tt-value">{r.value}</span>
@@ -48,20 +84,34 @@ export function TooltipHost() {
 }
 
 // ------------------------------------------------------------------- toasts --
-export type ToastKind = 'info' | 'success' | 'error';
-interface Toast { id: number; message: string; kind: ToastKind; show: boolean }
+export type ToastKind = "info" | "success" | "error";
+interface Toast {
+  id: number;
+  message: string;
+  kind: ToastKind;
+  show: boolean;
+}
 const toastStore = createStore<Toast[]>([]);
 let toastSeq = 0;
 
-export function toast(message: string, opts?: { kind?: ToastKind; duration?: number }) {
+export function toast(
+  message: string,
+  opts?: { kind?: ToastKind; duration?: number },
+) {
   const id = ++toastSeq;
-  const kind = opts?.kind || 'info';
+  const kind = opts?.kind || "info";
   toastStore.set((list) => [...list, { id, message, kind, show: false }]);
-  const patch = (show: boolean) => toastStore.set((list) => list.map((t) => (t.id === id ? { ...t, show } : t)));
+  const patch = (show: boolean) =>
+    toastStore.set((list) =>
+      list.map((t) => (t.id === id ? { ...t, show } : t)),
+    );
   setTimeout(() => patch(true), 10);
   setTimeout(() => {
     patch(false);
-    setTimeout(() => toastStore.set((list) => list.filter((t) => t.id !== id)), 300);
+    setTimeout(
+      () => toastStore.set((list) => list.filter((t) => t.id !== id)),
+      300,
+    );
   }, opts?.duration || 3200);
 }
 
@@ -70,8 +120,21 @@ export function ToastHost() {
   return (
     <div id="toasts" aria-live="polite">
       {list.map((t) => (
-        <div key={t.id} className={'toast toast-' + t.kind + (t.show ? ' show' : '')} role="status">
-          <Icon name={t.kind === 'error' ? 'alert' : t.kind === 'success' ? 'check' : 'info'} size={16} />
+        <div
+          key={t.id}
+          className={"toast toast-" + t.kind + (t.show ? " show" : "")}
+          role="status"
+        >
+          <Icon
+            name={
+              t.kind === "error"
+                ? "alert"
+                : t.kind === "success"
+                  ? "check"
+                  : "info"
+            }
+            size={16}
+          />
           <span>{t.message}</span>
         </div>
       ))}
@@ -80,8 +143,17 @@ export function ToastHost() {
 }
 
 // -------------------------------------------------------------------- modal --
-export interface ConfirmOptions { title?: string; body?: string; confirmLabel?: string; cancelLabel?: string; danger?: boolean }
-interface ModalState { opts: ConfirmOptions; resolve: (v: boolean) => void }
+export interface ConfirmOptions {
+  title?: string;
+  body?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  danger?: boolean;
+}
+interface ModalState {
+  opts: ConfirmOptions;
+  resolve: (v: boolean) => void;
+}
 const modalStore = createStore<ModalState | null>(null);
 
 export function confirmModal(opts: ConfirmOptions): Promise<boolean> {
@@ -99,25 +171,54 @@ export function ModalHost() {
   }, [m]);
   if (!m) return null;
   const o = m.opts;
-  const close = (answer: boolean) => { dialog.current?.close(); m.resolve(answer); modalStore.set(null); };
+  const close = (answer: boolean) => {
+    dialog.current?.close();
+    m.resolve(answer);
+    modalStore.set(null);
+  };
   return (
-    <dialog ref={dialog} className="modal card raised" aria-labelledby="confirm-title" aria-describedby="confirm-body" onCancel={() => close(false)}>
-      <h3 id="confirm-title">{o.title || 'Are you sure?'}</h3>
-      <p id="confirm-body">{o.body || ''}</p>
+    <dialog
+      ref={dialog}
+      className="modal card raised"
+      aria-labelledby="confirm-title"
+      aria-describedby="confirm-body"
+      onCancel={() => close(false)}
+    >
+      <h3 id="confirm-title">{o.title || "Are you sure?"}</h3>
+      <p id="confirm-body">{o.body || ""}</p>
       <div className="row modal-actions">
-        <button autoFocus className="btn" type="button" onClick={() => close(false)}>{o.cancelLabel || 'Cancel'}</button>
-        <button className={'btn ' + (o.danger ? 'btn-danger' : 'btn-primary')} type="button" onClick={() => close(true)}>{o.confirmLabel || 'Confirm'}</button>
+        <button
+          autoFocus
+          className="btn"
+          type="button"
+          onClick={() => close(false)}
+        >
+          {o.cancelLabel || "Cancel"}
+        </button>
+        <button
+          className={"btn " + (o.danger ? "btn-danger" : "btn-primary")}
+          type="button"
+          onClick={() => close(true)}
+        >
+          {o.confirmLabel || "Confirm"}
+        </button>
       </div>
     </dialog>
   );
 }
 
 // --------------------------------------------------------------------- busy --
-export interface BusyOptions { title?: string; steps?: string[]; stepMs?: number }
+export interface BusyOptions {
+  title?: string;
+  steps?: string[];
+  stepMs?: number;
+}
 const busyStore = createStore<BusyOptions | null>(null);
 
 export function busy(opts: BusyOptions | string | null) {
-  busyStore.set(opts === null ? null : typeof opts === 'string' ? { title: opts } : opts);
+  busyStore.set(
+    opts === null ? null : typeof opts === "string" ? { title: opts } : opts,
+  );
 }
 
 export function BusyHost() {
@@ -127,7 +228,10 @@ export function BusyHost() {
     setIdx(0);
     const steps = b?.steps || [];
     if (steps.length <= 1) return;
-    const timer = setInterval(() => setIdx((i) => Math.min(i + 1, steps.length - 1)), b?.stepMs || 700);
+    const timer = setInterval(
+      () => setIdx((i) => Math.min(i + 1, steps.length - 1)),
+      b?.stepMs || 700,
+    );
     return () => clearInterval(timer);
   }, [b]);
   if (!b) return null;
@@ -135,11 +239,20 @@ export function BusyHost() {
   return (
     <div className="busy-backdrop" role="status" aria-live="polite">
       <div className="busy card raised">
-        <div className="row"><span className="spinner" /><h3 style={{ margin: 0 }}>{b.title || 'Working…'}</h3></div>
+        <div className="row">
+          <span className="spinner" />
+          <h3 style={{ margin: 0 }}>{b.title || "Working…"}</h3>
+        </div>
         {steps.length ? (
           <ol className="stepper">
             {steps.map((t, i) => (
-              <li key={i} className={i === idx ? 'active' : i < idx ? 'done' : ''}><span className="step-dot" />{t}</li>
+              <li
+                key={i}
+                className={i === idx ? "active" : i < idx ? "done" : ""}
+              >
+                <span className="step-dot" />
+                {t}
+              </li>
             ))}
           </ol>
         ) : null}

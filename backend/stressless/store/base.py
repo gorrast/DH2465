@@ -65,10 +65,11 @@ class UserStore:
         """The user's IANA time zone (``profiles.time_zone``); it defines "today", "last night" and the week."""
         raise NotImplementedError
 
-    def rows(self, table: str, column: Optional[str] = None, lo: Optional[str] = None, hi: Optional[str] = None
-             ) -> List[Dict[str, Any]]:
+    def rows(self, table: str, column: Optional[str] = None, lo: Optional[str] = None, hi: Optional[str] = None,
+             where: Optional[Dict[str, str]] = None) -> List[Dict[str, Any]]:
         """The user's rows of a real-data table, optionally with ``lo <= column <= hi`` (ISO strings), ordered by
-        ``column``. Rows look like PostgREST JSON: timestamps and dates as ISO strings."""
+        ``column``, and only those whose ``where`` keys equal their values (a key is a column or a JSON field as
+        ``payload->>type``). Rows look like PostgREST JSON: timestamps and dates as ISO strings."""
         raise NotImplementedError
 
     def consented(self) -> bool:
@@ -77,7 +78,7 @@ class UserStore:
 
     # ------------------------------------------------------------- reports --
     # One report per kind and period. It is claimed before the model is called, so a period can never cost
-    # more than one call; nothing here deletes a report.
+    # more than one call; only ``discard_report`` deletes one, and only on a dev server.
     def report_row(self, kind: str, period_start: date) -> Optional[Dict[str, Any]]:
         """{"status": "pending" | "ready", "report": Report | None, "created_at": ISO string}, or None."""
         raise NotImplementedError
@@ -92,6 +93,10 @@ class UserStore:
 
     def reports_last_day(self) -> int:
         """Reports claimed by all users in the last 24 hours (the global cap on model calls)."""
+        raise NotImplementedError
+
+    def discard_report(self, kind: str, period_start: date) -> None:
+        """Delete a stored report so it can be generated again. Dev servers only (see ``server.reports.is_dev``)."""
         raise NotImplementedError
 
     def media_events(self) -> List[Dict[str, Any]]:

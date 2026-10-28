@@ -51,7 +51,7 @@ def classify_event(title: str, location_hint: Optional[str] = None) -> str:
         return "social"
     if re.search(r"\b(flight|train to|airport|trip|travel|arn->|->arn)\b", t):
         return "travel"
-    if re.search(r"\b(focus|deep work|writing|no meetings|heads.?down)\b", t):
+    if re.search(r"\b(focus|deep work|writing|no meetings|heads.?down|study|studying|plugg\w*|exam prep)\b", t):
         return "focus"
     if re.search(r"\b(wind.?down|recovery|protected|screen.?free|bedtime)\b", t):
         return "protected"

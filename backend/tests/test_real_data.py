@@ -2,7 +2,7 @@
 import json
 import os
 import unittest
-from datetime import timedelta
+from datetime import datetime, timedelta
 from unittest import mock
 
 from fastapi.testclient import TestClient
@@ -14,6 +14,7 @@ from stressless.models import to_jsonable
 from stressless.server.app import app
 from stressless.server.auth import Principal, current_principal
 from stressless.store import MemoryStore
+from stressless.timeutil import tz
 from tests.helpers import ANCHOR, dataset
 
 CONN = "11111111-1111-1111-1111-111111111111"
@@ -99,6 +100,41 @@ class LoaderTests(unittest.TestCase):
         inp = daily_input(Engine(ds), ANCHOR)
         self.assertEqual(next(m for m in inp.metrics if m.key == "screen.late_minutes").value, 42.5)
 
+    def test_media_plays_are_loaded_in_local_time_from_their_end(self):
+        store = real_store()
+        y = ANCHOR - timedelta(days=1)
+        store.tables["media_events"] = [
+            {"id": "m1", "provider": "spotify", "occurred_at": y.isoformat() + "T21:30:00+00:00", "title": "Holocene",
+             "creator": "Bon Iver", "minutes": 30, "source": {"media_kind": "music"}},
+            {"id": "m2", "provider": "netflix", "occurred_at": y.isoformat() + "T20:00:00+00:00", "title": "Dark",
+             "creator": None, "minutes": 50, "source": {}},
+            {"id": "m3", "provider": "spotify", "occurred_at": ANCHOR.isoformat() + "T08:00:00+00:00", "title": "Today",
+             "creator": "X", "minutes": 3, "source": {}}]                                            # today: not loaded
+        ds = load_dataset(store, ANCHOR)
+        plays = ds.media_on(y)
+        self.assertEqual([(m.creator, m.kind) for m in plays], [(None, "video"), ("Bon Iver", "music")])
+        self.assertEqual((plays[1].start.hour, plays[1].start.minute), (23, 0))                 # 21:30 UTC ends 23:30 CEST
+        self.assertEqual(ds.media_on(ANCHOR), [])
+        inp = daily_input(Engine(ds), ANCHOR)
+        self.assertEqual(next(m for m in inp.metrics if m.key == "music.minutes").value, 30)
+        self.assertIn("30 min of music, mostly Bon Iver", inp.days[0].tags)
+
+    def test_only_unlocks_are_loaded_from_the_screen_events(self):
+        store = real_store()
+        y = ANCHOR - timedelta(days=1)
+        ev = lambda rid, ts, kind, data_type="screen_event": {  # noqa: E731
+            "id": rid, "source": "screen_time", "data_type": data_type, "source_record_id": rid, "start_at": ts,
+            "end_at": None, "payload": {"type": kind} if kind else {}}
+        store.tables["source_records"] = [
+            ev("u1", y.isoformat() + "T12:00:00+00:00", "unlock"),
+            ev("s1", y.isoformat() + "T11:59:00+00:00", "screen_on"),
+            ev("a1", y.isoformat() + "T12:01:00+00:00", None, "app_usage"),
+            ev("u2", ANCHOR.isoformat() + "T08:00:00+00:00", "unlock")]                      # today: not loaded
+        ds = load_dataset(store, ANCHOR)
+        local = datetime.fromisoformat(y.isoformat() + "T12:00:00+00:00").astimezone(tz(store.time_zone()))
+        self.assertEqual(ds.unlocks_on(y), [local])                                           # local time, unlocks only
+        self.assertEqual(ds.unlocks_on(ANCHOR), [])
+
     def test_uncategorized_events_are_classified_and_hrv_measure_is_not_mixed(self):
         store = real_store()
         store.tables["calendar_events"][0]["category"] = "uncategorized"
@@ -136,6 +172,17 @@ class RealApiTests(unittest.TestCase):
         self.assertEqual(r.status_code, 200, r.text[:300])
         self.assertEqual(r.json()["report"]["mode"], "rules")              # no model configured in tests
         self.assertEqual(self.client.get("/api/meta").json()["source"], "real")
+
+    def test_regenerate_only_off_prod(self):
+        url = "/api/reports/daily/%s" % ANCHOR.isoformat()
+        first = self.client.post(url).json()["report"]
+        self.assertEqual(self.client.post(url).json()["report"]["generated_at"], first["generated_at"])     # stored
+        with mock.patch.dict(os.environ, {"ENVIRONMENT": "PROD"}):
+            self.assertEqual(self.client.post(url + "?regenerate=true").status_code, 403)
+            self.assertFalse(self.client.get("/api/reports").json()["dev"])
+        again = self.client.post(url + "?regenerate=true")                       # unset counts as dev
+        self.assertEqual(again.status_code, 200, again.text[:300])
+        self.assertNotEqual(again.json()["report"]["generated_at"], first["generated_at"])
 
 
 if __name__ == "__main__":

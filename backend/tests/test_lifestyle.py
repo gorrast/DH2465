@@ -2,7 +2,12 @@
 import unittest
 from datetime import timedelta
 
-from stressless.engine.lifestyle import active_on, lifestyle_patterns
+from datetime import datetime
+
+from stressless.connectors.base import classify_event
+from stressless.engine.lifestyle import OUTCOMES, active_on, daytime_hr, lifestyle_patterns
+from stressless.models import CalendarEvent, MediaPlay, WatchWorkout
+from stressless.timeutil import tz
 from stressless.engine.pipeline import Engine
 from stressless.engine.report_input import daily_input, weekly_input
 from stressless.engine.report_writer import write_rules
@@ -113,6 +118,32 @@ class LifestyleTests(unittest.TestCase):
         # Coffee never varied, so there is nothing to compare.
         self.assertNotIn("more_coffee", {q.key for q in lifestyle_patterns(ds, ANCHOR)})
 
+    def test_links_against_sleep_research_are_flagged_and_their_hints_dropped(self):
+        ds = planted()
+        for d in ds.night_dates():                                # flip it: late phone evenings go with better nights
+            n = ds.night(d)
+            if n.worn and n.score is not None and d.toordinal() % 3 == 0:
+                n.score += 24
+                n.duration_min += 90
+        p = {p.key: p for p in lifestyle_patterns(ds, ANCHOR)}["late_screen"]
+        self.assertEqual(p.direction, "helped")
+        self.assertTrue(p.against_research)
+        self.assertFalse(self.patterns["late_screen"].against_research)
+        links = {q.key: q for q in daily_input(Engine(ds), ANCHOR).patterns}
+        if p.hint:
+            self.assertNotIn("pattern.late_screen", links)
+        else:
+            self.assertTrue(links["pattern.late_screen"].against_research)
+
+    def test_no_calendar_no_meeting_counts(self):
+        ds = fresh_dataset()
+        ds.events = ds.events[:1]                                 # one stray event is not a connected calendar
+        ds.reindex()
+        inp = daily_input(Engine(ds), ANCHOR)
+        self.assertNotIn("calendar.meetings", inp.keys())
+        self.assertNotIn("calm day", inp.days[0].tags)
+        self.assertNotIn("calendar.meetings", weekly_input(Engine(ds), MONDAY).keys())
+
     def test_weak_signal_is_a_hint_with_low_confidence(self):
         from stressless.engine.lifestyle import LifestylePattern, OutcomeEffect
         o = OutcomeEffect(key="score", label="Sleep score", unit="points", good="up", n_with=5, n_without=20, mean_with=78,
@@ -122,6 +153,215 @@ class LifestyleTests(unittest.TestCase):
         self.assertTrue(p.hint)
         self.assertEqual((p.confidence, p.direction), ("low", "hurt"))
         self.assertIn("early hint", p.detail())
+
+
+
+def with_music_and_workouts():
+    """Demo data with planted cross-source links:
+    * days with Metallica (every 4th): 30 min less sleep and a daytime heart rate 6 bpm higher;
+    * gym days (every 5th): a sleep score 15 points lower; run days (every 5th, offset): 15 points higher."""
+    ds = fresh_dataset()
+    z = tz(ds.persona.tz)
+    for a in ds.activity:                     # only the planted workouts below
+        a.workouts = []
+    ds.events = [e for e in ds.events if e.type != "workout"]
+    for d in ds.night_dates():
+        o = d.toordinal()
+        artist = "Metallica" if o % 4 == 0 else "Bon Iver"
+        ds.media.append(MediaPlay(start=datetime(d.year, d.month, d.day, 17, tzinfo=z), minutes=40, title="Track",
+                                  creator=artist, kind="music"))
+        kind = "strength" if o % 5 == 0 else ("run" if o % 5 == 2 else None)
+        a = ds.activity_on(d)
+        if kind and a is not None:
+            a.workouts.append(WatchWorkout(id="w%d" % o, kind=kind, start=datetime(d.year, d.month, d.day, 7, tzinfo=z),
+                                           end=datetime(d.year, d.month, d.day, 8, tzinfo=z), avg_hr=140, max_hr=170))
+        n = ds.night(d)
+        if n.worn and n.score is not None:
+            if artist == "Metallica":
+                n.duration_min -= 30
+            n.score += -15 if kind == "strength" else (15 if kind == "run" else 0)
+        h = ds.hr(d)
+        if h is not None and artist == "Metallica":
+            h.bpm = [None if b is None else b + 6 for b in h.bpm]
+    ds.reindex()
+    return ds
+
+
+class CrossSourceTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.ds = with_music_and_workouts()
+        cls.patterns = {p.key: p for p in lifestyle_patterns(cls.ds, ANCHOR)}
+
+    def test_an_artist_becomes_a_link_with_sleep_and_daytime_heart_rate(self):
+        p = self.patterns["artist_metallica"]
+        self.assertEqual(p.description, "days you listened to Metallica")
+        self.assertEqual(p.sources[0], "music")
+        self.assertTrue(p.cross_source)
+        effects = {o.key: o for o in p.reportable}
+        self.assertLess(effects["duration_min"].effect, -15)
+        self.assertGreater(effects["day_hr"].effect, 3)
+        self.assertIn("daytime heart rate", p.detail())
+        self.assertIn("during those days", p.detail())
+
+    def test_gym_and_runs_are_told_apart(self):
+        gym, cardio = self.patterns["gym_days"], self.patterns["cardio_days"]
+        self.assertEqual((gym.direction, cardio.direction), ("hurt", "helped"))
+        self.assertEqual(gym.sources[0], "exercise")
+
+    def test_daytime_heart_rate_leaves_out_workouts(self):
+        d = next(d for d in self.ds.night_dates() if self.ds.activity_on(d) and self.ds.activity_on(d).workouts
+                 and self.ds.hr(d) and d.toordinal() % 4 != 0)
+        h = self.ds.hr(d)
+        h.bpm = [None if b is None else 60 for b in h.bpm]
+        for m in range(7 * 60, 8 * 60):
+            h.bpm[m] = 180
+        try:
+            self.assertEqual(daytime_hr(self.ds, d), 60)
+        finally:
+            self.ds.reindex()
+
+    def test_links_reach_the_report_input_with_sources_and_days(self):
+        engine = Engine(self.ds)
+        daily = daily_input(engine, ANCHOR)
+        links = [p for p in daily.patterns if p.sources]
+        self.assertTrue(links)
+        self.assertTrue(all(p.happened is not None for p in links))
+        self.assertIn("pattern.artist_metallica", {p.key for p in links})
+        self.assertEqual(daily.days[0].day, NIGHT)
+        self.assertTrue(any("of music, mostly" in t for t in daily.days[0].tags))
+        weekly = weekly_input(engine, MONDAY)
+        self.assertTrue(any(p.happened for p in weekly.patterns))
+        self.assertEqual(len(weekly.keys()), len(weekly.metrics) + len(weekly.patterns))
+
+    def test_no_media_no_music_links(self):
+        keys = {p.key for p in lifestyle_patterns(fresh_dataset(), ANCHOR)}
+        self.assertFalse({k for k in keys if k.startswith("artist_") or k in ("big_listening", "late_listening")})
+
+
+
+def with_classes_and_pairs(unlocks: bool = True):
+    """Demo data with a recurring class and two activity x media pairs:
+    * 'Statistics lecture' every 4th day (a recurring series): daytime heart rate 6 bpm higher, sleep score 12 lower;
+    * a 'Study session' 14-16 every other day; on every second one Ludovico Einaudi plays through it, with a heart
+      rate 12 bpm lower during it (clear of the simulator's day-to-day swing) and fewer phone pickups: with
+      ``unlocks``, an unlock every 15 min from 08 to 22 but only one an hour in the session (the day's total barely
+      moves); without, only the day's total, 70 or 30;
+    * 'Tennis practice' every third day; on every second one Breaking Bad follows in the evening, and the night after
+      has a sleep score 15 lower and 40 min less sleep."""
+    ds = fresh_dataset()
+    z = tz(ds.persona.tz)
+    for d in ds.night_dates():
+        o = d.toordinal()
+        at = lambda h: datetime(d.year, d.month, d.day, h, tzinfo=z)  # noqa: E731
+        h, n = ds.hr(d), ds.night(d)
+        ds.day_metrics.setdefault(d, {}).update({"screen.minutes": 200.0, "screen.pickups": 70.0})
+        if o % 4 == 0:
+            ds.events.append(CalendarEvent(id="stats-%d" % o, title="Statistics lecture", start=at(9), end=at(11),
+                                           type="meeting", recurring_key="stats"))
+            if h is not None:
+                h.bpm = [b if b is None or not (9 * 60 <= m < 22 * 60) else b + 6 for m, b in enumerate(h.bpm)]
+            if n.worn and n.score is not None:
+                n.score -= 12
+        if o % 2 == 1:
+            ds.events.append(CalendarEvent(id="study-%d" % o, title="Study session", start=at(14), end=at(16), type="focus"))
+            if o % 4 == 1:
+                for k in range(24):
+                    ds.media.append(MediaPlay(start=at(14) + timedelta(minutes=5 * k), minutes=5, title="Track",
+                                              creator="Ludovico Einaudi", kind="music"))
+                if not unlocks:
+                    ds.day_metrics[d]["screen.pickups"] = 30.0
+                if h is not None:
+                    h.bpm = [b if b is None or not (14 * 60 <= m < 16 * 60) else b - 12 for m, b in enumerate(h.bpm)]
+        if o % 3 == 0:
+            ds.events.append(CalendarEvent(id="tennis-%d" % o, title="Tennis practice", start=at(17), end=at(18),
+                                           type="workout"))
+            if o % 6 == 0:
+                for k in range(3):
+                    ds.media.append(MediaPlay(start=at(20) + timedelta(minutes=47 * k), minutes=47,
+                                              title="Breaking Bad: Episode %d" % k, creator=None, kind="video"))
+                if n.worn and n.score is not None:
+                    n.score -= 15
+                    n.duration_min -= 40
+        if unlocks:
+            calm = o % 4 == 1                                     # an Einaudi study session
+            day = [at(8) + timedelta(minutes=15 * k) for k in range(56)]
+            day = [t for t in day if not (calm and at(14) <= t < at(16) and t.minute != 0)]
+            ds.unlocks.extend(day)
+            ds.day_metrics[d]["screen.pickups"] = float(len(day))
+    ds.reindex()
+    return ds
+
+
+class SeriesAndPairTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.ds = with_classes_and_pairs()
+        cls.patterns = {p.key: p for p in lifestyle_patterns(cls.ds, ANCHOR)}
+
+    def test_a_recurring_class_becomes_a_link_named_after_it(self):
+        p = self.patterns["series_statistics_lecture"]
+        self.assertEqual(p.direction, "hurt")
+        self.assertEqual(p.sources[0], "calendar")
+        effects = {o.key: o for o in p.reportable}
+        self.assertGreater(effects["day_hr"].effect, 3)
+        self.assertLess(effects["score"].effect, -5)
+        self.assertIn("days with Statistics lecture", p.detail())
+
+    def test_music_during_an_activity_is_compared_with_the_same_activity(self):
+        p = self.patterns["pair_ludovico_einaudi_during_study_session"]
+        self.assertEqual(p.direction, "helped")
+        self.assertEqual(p.title, "Ludovico Einaudi during Study session")
+        effects = {o.key: o for o in p.reportable}
+        self.assertLess(effects["pickups_during_study_session"].effect, -2)          # 4 an hour against 1
+        self.assertNotIn("pickups", effects)                                         # not the day's total
+        self.assertLess(effects["hr_during_study_session"].effect, -3)
+        study_days = {e.start.date() for e in self.ds.events if e.title == "Study session" and e.start.date() < ANCHOR}
+        self.assertLessEqual(p.n_with + p.n_without, len(study_days))
+        detail = p.detail()
+        self.assertIn("listened to Ludovico Einaudi during Study session", detail)
+        self.assertIn("heart rate during Study session", detail)
+        self.assertIn("fewer phone pickups an hour during Study session", detail)
+        self.assertIn("other %d days with Study session" % p.n_without, detail)
+
+    def test_a_show_after_an_activity_is_linked_to_the_night_after(self):
+        p = self.patterns["pair_breaking_bad_after_tennis_practice"]
+        self.assertEqual(p.direction, "hurt")
+        self.assertEqual(p.sources[:2], ["streaming", "sleep"])
+        self.assertIn("watched Breaking Bad after Tennis practice", p.detail())
+
+    def test_pairs_only_count_when_strong(self):
+        pairs = [p for p in lifestyle_patterns(self.ds, ANCHOR) if p.key.startswith("pair_")]
+        self.assertTrue(pairs)
+        self.assertTrue(all(o.tier != "hint" for p in pairs for o in p.outcomes))
+
+    def test_pickups_during_an_activity_count_only_its_window(self):
+        get = OUTCOMES["pickups_during_study_session"].get
+        calm = next(d for d in self.ds.night_dates() if d.toordinal() % 4 == 1)
+        busy = next(d for d in self.ds.night_dates() if d.toordinal() % 4 == 3)
+        self.assertEqual(get(self.ds, calm), 1.0)                                   # 14:00 and 15:00 in two hours
+        self.assertEqual(get(self.ds, busy), 4.0)
+        no_study = next(d for d in self.ds.night_dates() if d.toordinal() % 2 == 0)
+        self.assertIsNone(get(self.ds, no_study))
+        unreported = with_classes_and_pairs()                                       # no screen data that day
+        del unreported.day_metrics[busy]["screen.pickups"]
+        self.assertIsNone(get(unreported, busy))
+
+    def test_without_unlock_times_pairs_fall_back_to_the_days_pickups(self):
+        ds = with_classes_and_pairs(unlocks=False)
+        p = {p.key: p for p in lifestyle_patterns(ds, ANCHOR)}["pair_ludovico_einaudi_during_study_session"]
+        effects = {o.key: o for o in p.reportable}
+        self.assertLess(effects["pickups"].effect, -20)
+        self.assertNotIn("pickups_during_study_session", {o.key for o in p.outcomes})
+
+    def test_heart_rate_during_an_activity_needs_the_activity(self):
+        d = next(d for d in self.ds.night_dates() if self.ds.hr(d) and not any(
+            e.title == "Study session" for e in self.ds.events_on(d)))
+        self.assertIsNone(OUTCOMES["hr_during_study_session"].get(self.ds, d))
+
+    def test_study_blocks_count_as_focus_time(self):
+        for title in ("Study session", "Studying for the exam", "Plugga statistik", "Exam prep"):
+            self.assertEqual(classify_event(title), "focus", title)
 
 
 if __name__ == "__main__":

@@ -639,10 +639,27 @@ StressLess`, CRLF, lines folded at 75 octets.
   is called. Falls back to the rule writer when AI is off, the global cap
   (`STRESSLESS_REPORT_DAILY_CAP`, default 50 per 24 h) is reached, the user has not consented, or the call fails.
 * Models: `STRESSLESS_DAILY_MODEL` (default `claude-sonnet-5-5`), `STRESSLESS_WEEKLY_MODEL` (default
-  `claude-haiku-5-5`), effort `STRESSLESS_REPORT_EFFORT` (default `medium`).
+  `claude-sonnet-5-5`), effort `STRESSLESS_REPORT_EFFORT` (default `medium`).
+* **Links are the core of a report.** `lifestyle.py` computes them: each cause (steps, workouts, gym vs runs,
+  calendar load, late meetings, music and podcast listening, the most-played artists, streaming, phone use,
+  check-ins, sleep rhythm) is compared with/without against sleep, overnight HRV and resting heart rate, and some
+  against the same day's daytime heart rate (08–22, workouts left out). A link carries `sources` (cause first)
+  and `happened` (days in the period the cause occurred). The input gets up to 6 links that happened, cross-source
+  first, plus 2 strong background ones; the model picks two to four, skipping obvious, repeated and same-source
+  ones, and never computes a number. Artist, podcast and show names are sent; people's names, event titles and
+  places are not.
 * **Nothing is generated on page load.** The daily report is generated only when the user clicks
   *Generate today's report*; right after that, the weekly report is generated if the last full week has
   none yet. Loading Home only shows reports that already exist.
+* Each cause has the direction sleep research `expected` (late screens hurt, runs help; gym, music and artists
+  have none). A link going the other way is sent with `against_research`; an early hint going the other way is
+  dropped. The prompt has the model question every link (free days and sleeping in explain a lot) and never
+  present such a link as good news or build the suggestion on it. Calendar values are sent only when a calendar
+  has events on 5+ days, so "0 meetings" never reads as a free day.
+* **Dev override.** `ENVIRONMENT` is `DEV` or `PROD`; anything but `PROD` is a dev server. There,
+  `POST /api/reports/{kind}/{period}?regenerate=true` deletes the stored report (with
+  `SUPABASE_SERVICE_ROLE_KEY`, since users cannot delete reports) and writes it again, and Home shows a
+  *Regenerate (dev)* button on each report. With `PROD` the flag answers 403. Vercel must set `ENVIRONMENT=PROD`.
 * `get_reasoner() -> Reasoner`; `reasoning_mode() -> str`.
 
 ### 7.10 `pipeline.py` (engine-app)

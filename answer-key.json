@@ -1,0 +1,625 @@
+{
+  "planted": {
+    "series_statistics_lecture": {
+      "direction": "hurt",
+      "strength": "strong",
+      "how": "stressful class: daytime HR +6, 30 min slower to sleep, HRV -20 %",
+      "found": {
+        "direction": "hurt",
+        "tier": "strong",
+        "outcomes": [
+          "score",
+          "duration_min",
+          "onset_min",
+          "hrv_ms",
+          "resting_hr",
+          "day_hr"
+        ]
+      },
+      "ok": true
+    },
+    "series_interaction_design_studio": {
+      "direction": "helped",
+      "strength": "strong",
+      "how": "enjoyed class: daytime HR -3, 8 min faster to sleep, HRV +6 %",
+      "found": {
+        "direction": "helped",
+        "tier": "strong",
+        "outcomes": [
+          "score",
+          "duration_min",
+          "onset_min",
+          "hrv_ms",
+          "resting_hr",
+          "day_hr"
+        ]
+      },
+      "ok": true
+    },
+    "series_caf\u00e9_shift": {
+      "direction": "hurt",
+      "strength": "strong",
+      "how": "early Saturday and late Sunday shifts: later bedtime, earlier wake (simulator)",
+      "found": {
+        "direction": "hurt",
+        "tier": "strong",
+        "outcomes": [
+          "score",
+          "duration_min",
+          "onset_min",
+          "resting_hr"
+        ]
+      },
+      "ok": true
+    },
+    "busy_days": {
+      "direction": "hurt",
+      "strength": "weak",
+      "how": "the long Statistics days",
+      "found": {
+        "direction": "hurt",
+        "tier": "strong",
+        "outcomes": [
+          "duration_min",
+          "day_hr"
+        ]
+      },
+      "ok": true
+    },
+    "pair_ludovico_einaudi_during_study_session": {
+      "direction": "helped",
+      "strength": "strong",
+      "how": "study blocks with it: 40 % fewer pickups, less screen time, HR -4 while studying",
+      "found": {
+        "direction": "helped",
+        "tier": "strong",
+        "outcomes": [
+          "pickups"
+        ]
+      },
+      "ok": true
+    },
+    "artist_ludovico_einaudi": {
+      "direction": "helped",
+      "strength": "weak",
+      "how": "follows from the calmer study blocks",
+      "found": {
+        "direction": "helped",
+        "tier": "hint",
+        "outcomes": [
+          "resting_hr"
+        ]
+      },
+      "ok": true
+    },
+    "social_evenings": {
+      "direction": "hurt",
+      "strength": "strong",
+      "how": "~90 min later bedtime, often drinks (simulator)",
+      "found": {
+        "direction": "hurt",
+        "tier": "strong",
+        "outcomes": [
+          "score",
+          "duration_min",
+          "onset_min",
+          "resting_hr"
+        ]
+      },
+      "ok": true
+    },
+    "cardio_days": {
+      "direction": "helped",
+      "strength": "strong",
+      "how": "morning runs: faster onset, less waking, higher HRV (simulator)",
+      "found": {
+        "direction": "helped",
+        "tier": "strong",
+        "outcomes": [
+          "score",
+          "duration_min",
+          "onset_min",
+          "resting_hr"
+        ]
+      },
+      "ok": true
+    },
+    "early_starts": {
+      "direction": "hurt",
+      "strength": "weak",
+      "how": "Saturday opening shifts: wake earlier (simulator)",
+      "found": {
+        "direction": "hurt",
+        "tier": "hint",
+        "outcomes": [
+          "score",
+          "duration_min"
+        ]
+      },
+      "ok": true
+    },
+    "late_workouts": {
+      "direction": "hurt",
+      "strength": "weak",
+      "how": "late gym: later bedtime, less deep sleep (simulator)",
+      "found": null,
+      "ok": true
+    },
+    "active_days": {
+      "direction": "helped",
+      "strength": "weak",
+      "how": "follows from the runs (5 000 extra steps)",
+      "found": {
+        "direction": "helped",
+        "tier": "strong",
+        "outcomes": [
+          "score",
+          "duration_min",
+          "onset_min"
+        ]
+      },
+      "ok": true
+    },
+    "workout_days": {
+      "direction": "helped",
+      "strength": "weak",
+      "how": "follows from the runs",
+      "found": {
+        "direction": "helped",
+        "tier": "strong",
+        "outcomes": [
+          "score",
+          "duration_min",
+          "onset_min",
+          "resting_hr"
+        ]
+      },
+      "ok": true
+    },
+    "late_streaming": {
+      "direction": "hurt",
+      "strength": "strong",
+      "how": "Netflix past 22:00 pushes bedtime ~20 min",
+      "found": {
+        "direction": "hurt",
+        "tier": "strong",
+        "outcomes": [
+          "score",
+          "duration_min",
+          "onset_min"
+        ]
+      },
+      "ok": true
+    },
+    "late_screen": {
+      "direction": "hurt",
+      "strength": "strong",
+      "how": "late phone use pushes bedtime ~20 min",
+      "found": {
+        "direction": "hurt",
+        "tier": "strong",
+        "outcomes": [
+          "score",
+          "duration_min",
+          "onset_min"
+        ]
+      },
+      "ok": true
+    },
+    "alcohol": {
+      "direction": "hurt",
+      "strength": "strong",
+      "how": "lower HRV, higher resting HR (simulator)",
+      "found": {
+        "direction": "hurt",
+        "tier": "strong",
+        "outcomes": [
+          "score",
+          "duration_min",
+          "onset_min",
+          "hrv_ms",
+          "resting_hr"
+        ]
+      },
+      "ok": true
+    },
+    "artist_metallica": {
+      "direction": "hurt",
+      "strength": "strong",
+      "how": "daytime heart rate +5 bpm",
+      "found": {
+        "direction": "hurt",
+        "tier": "strong",
+        "outcomes": [
+          "day_hr"
+        ]
+      },
+      "ok": true
+    },
+    "more_coffee": {
+      "direction": "hurt",
+      "strength": "weak",
+      "how": "5 min slower to fall asleep",
+      "found": null,
+      "ok": true
+    },
+    "artist_bon_iver": {
+      "direction": "none",
+      "strength": "none",
+      "how": "control: played often, no effect",
+      "found": null,
+      "ok": true
+    },
+    "podcast_days": {
+      "direction": "none",
+      "strength": "none",
+      "how": "control: no effect",
+      "found": {
+        "direction": "hurt",
+        "tier": "hint",
+        "outcomes": [
+          "resting_hr"
+        ]
+      },
+      "ok": true
+    },
+    "artist_sommar_i_p1": {
+      "direction": "none",
+      "strength": "none",
+      "how": "control: the podcast as its own cause",
+      "found": {
+        "direction": "hurt",
+        "tier": "hint",
+        "outcomes": [
+          "resting_hr"
+        ]
+      },
+      "ok": true
+    }
+  },
+  "unplanted": {
+    "many_pickups": {
+      "direction": "hurt",
+      "tier": "strong",
+      "outcomes": [
+        "hrv_ms",
+        "day_hr"
+      ]
+    },
+    "gym_days": {
+      "direction": "helped",
+      "tier": "hint",
+      "outcomes": [
+        "onset_min"
+      ]
+    },
+    "low_steps": {
+      "direction": "hurt",
+      "tier": "strong",
+      "outcomes": [
+        "score",
+        "duration_min",
+        "onset_min"
+      ]
+    }
+  },
+  "derived": {
+    "short_night": {
+      "direction": "helped",
+      "tier": "strong",
+      "outcomes": [
+        "steps",
+        "day_hr"
+      ]
+    },
+    "off_rhythm": {
+      "direction": "hurt",
+      "tier": "strong",
+      "outcomes": [
+        "score",
+        "hrv_ms"
+      ]
+    },
+    "sleep_debt": {
+      "direction": "helped",
+      "tier": "hint",
+      "outcomes": [
+        "hrv_ms"
+      ]
+    }
+  },
+  "config": {
+    "days": 90,
+    "seed": 35,
+    "name": "Demo",
+    "time_zone": "Europe/Stockholm",
+    "behaviour": "alex",
+    "sensitivities": {
+      "meetings_over_3": -2.0,
+      "b2b_over_2": -1.5,
+      "late_meeting_hours": -4.0,
+      "evening_social": -16.0,
+      "workout_morning": 15.0,
+      "workout_late": -3.0,
+      "travel": -9.0,
+      "early_start": -3.0,
+      "protected_evening": 4.0
+    },
+    "week": [
+      [
+        "Statistics lecture",
+        [
+          [
+            1,
+            8.25,
+            12.0
+          ],
+          [
+            3,
+            8.25,
+            12.0
+          ]
+        ],
+        "meeting",
+        "Lecture hall F1",
+        30,
+        "stress"
+      ],
+      [
+        "Interaction Design studio",
+        [
+          [
+            0,
+            13.0,
+            15.0
+          ],
+          [
+            4,
+            9.0,
+            11.0
+          ]
+        ],
+        "meeting",
+        "Design studio",
+        12,
+        "enjoy"
+      ],
+      [
+        "Caf\u00e9 shift",
+        [
+          [
+            5,
+            7.0,
+            13.0
+          ],
+          [
+            6,
+            16.0,
+            21.0
+          ]
+        ],
+        "meeting",
+        "Caf\u00e9",
+        3,
+        null
+      ]
+    ],
+    "stored_as": {
+      "Caf\u00e9 shift": "personal"
+    },
+    "class_effects": {
+      "stress": {
+        "day_hr": 6,
+        "onset_min": 30,
+        "hrv": -0.2,
+        "resting_hr": 3
+      },
+      "enjoy": {
+        "day_hr": -3,
+        "onset_min": -8,
+        "hrv": 0.06,
+        "resting_hr": -1
+      }
+    },
+    "study": {
+      "title": "Study session",
+      "place": "KTH Library",
+      "share": {
+        "weekday": 0.55,
+        "sat": 0.15,
+        "sun": 0.6
+      },
+      "slots": {
+        "weekday": [
+          [
+            14.0,
+            16.0
+          ],
+          [
+            16.0,
+            18.0
+          ],
+          [
+            18.5,
+            20.5
+          ]
+        ],
+        "weekend": [
+          [
+            13.0,
+            16.0
+          ]
+        ]
+      }
+    },
+    "focus_artist": [
+      "Ludovico Einaudi",
+      "modern classical",
+      0.55
+    ],
+    "focus_effects": {
+      "pickups": 0.6,
+      "screen_minutes": -40,
+      "hr": -4
+    },
+    "workouts": [
+      [
+        "Morning run",
+        "Djurg\u00e5rden",
+        [
+          [
+            2,
+            7.0,
+            7.75,
+            0.95
+          ]
+        ]
+      ],
+      [
+        "Gym",
+        "SATS KTH",
+        [
+          [
+            2,
+            18.0,
+            19.0,
+            0.6
+          ],
+          [
+            5,
+            15.0,
+            16.0,
+            0.6
+          ]
+        ]
+      ]
+    ],
+    "late_gym": 0.3,
+    "socials": [
+      [
+        "Pub night",
+        3,
+        19.0,
+        23.0,
+        0.45
+      ],
+      [
+        "Dinner with friends",
+        4,
+        19.5,
+        23.5,
+        0.5
+      ],
+      [
+        "Party",
+        5,
+        20.0,
+        23.75,
+        0.45
+      ]
+    ],
+    "one_offs": [
+      [
+        "Group project meeting",
+        2,
+        10.0,
+        11.0,
+        0.6,
+        "meeting",
+        "Group room",
+        4
+      ]
+    ],
+    "artists": [
+      [
+        "Metallica",
+        0.3,
+        [
+          20,
+          60
+        ]
+      ],
+      [
+        "Bon Iver",
+        0.4,
+        [
+          15,
+          45
+        ]
+      ]
+    ],
+    "tail": [
+      "Robyn",
+      "Fleetwood Mac",
+      "Daft Punk",
+      "First Aid Kit",
+      "Kent",
+      "Lykke Li",
+      "The National",
+      "Phoebe Bridgers",
+      "Tame Impala",
+      "Radiohead",
+      "Little Dragon",
+      "Jos\u00e9 Gonz\u00e1lez",
+      "Beyonc\u00e9",
+      "Arctic Monkeys",
+      "Taylor Swift",
+      "Kendrick Lamar",
+      "The xx",
+      "Fever Ray",
+      "Avicii",
+      "Veronica Maggio",
+      "H\u00e5kan Hellstr\u00f6m",
+      "ABBA",
+      "Miriam Bryant",
+      "Zara Larsson",
+      "The Cure",
+      "Massive Attack",
+      "Portishead",
+      "Nick Drake",
+      "Bonobo",
+      "Khruangbin",
+      "Haim",
+      "Lorde",
+      "Frank Ocean",
+      "SZA",
+      "Joni Mitchell",
+      "Fleet Foxes",
+      "Sufjan Stevens",
+      "The Knife",
+      "Jungle",
+      "Caribou"
+    ],
+    "tail_minutes": [
+      10,
+      30
+    ],
+    "hr_artist": "Metallica",
+    "hr_artist_bpm": 5,
+    "podcast": [
+      "Sommar i P1",
+      0.25,
+      [
+        25,
+        55
+      ]
+    ],
+    "shows": [
+      "Stranger Things",
+      "Bron",
+      "The Crown",
+      "Dark"
+    ],
+    "netflix_days": 0.4,
+    "netflix_late": 0.45,
+    "late_screen": 0.18,
+    "late_screen_delay": [
+      30,
+      50
+    ],
+    "run_steps": 5000,
+    "coffee_heavy": 0.22,
+    "checkin_logged": 0.85
+  },
+  "date": "2026-10-26"
+}

@@ -70,9 +70,12 @@ class MemoryStore(UserStore):
     def time_zone(self) -> str:
         return self.tz
 
-    def rows(self, table: str, column: Optional[str] = None, lo: Optional[str] = None, hi: Optional[str] = None
-             ) -> List[Dict[str, Any]]:
+    def rows(self, table: str, column: Optional[str] = None, lo: Optional[str] = None, hi: Optional[str] = None,
+             where: Optional[Dict[str, str]] = None) -> List[Dict[str, Any]]:
         out = [dict(r) for r in self.tables.get(table, [])]
+        for key, want in (where or {}).items():
+            col, _, field = key.partition("->>")
+            out = [r for r in out if str((r.get(col) or {}).get(field) if field else r.get(col)) == want]
         if column:
             out = [r for r in out if (lo is None or str(r[column]) >= lo) and (hi is None or str(r[column]) <= hi)]
             out.sort(key=lambda r: str(r[column]))
@@ -98,6 +101,9 @@ class MemoryStore(UserStore):
 
     def reports_last_day(self) -> int:
         return len(self._reports)
+
+    def discard_report(self, kind: str, period_start: date) -> None:
+        self._reports.pop((kind, period_start), None)
     def media_events(self) -> List[Dict[str, Any]]:
         return [copy.deepcopy(row) for row in self._media.values()]
 

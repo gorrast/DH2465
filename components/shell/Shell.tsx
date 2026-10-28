@@ -53,7 +53,10 @@ export function Shell({ children }: { children: ReactNode }) {
   }, [refreshMeta]);
 
   useEffect(() => {
-    const onError = (e: ErrorEvent) => logClient('error', e.message, e.error);
+    const onError = (e: ErrorEvent) => {
+      if (/ResizeObserver loop/.test(e.message)) return;   // a harmless browser notice, not an error
+      logClient('error', e.message, e.error);
+    };
     const onRejection = (e: PromiseRejectionEvent) => logClient('error', 'Unhandled rejection: ' + (e.reason && e.reason.message ? e.reason.message : String(e.reason)), e.reason);
     window.addEventListener('error', onError);
     window.addEventListener('unhandledrejection', onRejection);

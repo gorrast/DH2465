@@ -34,14 +34,13 @@ SCREEN_DEFS = (("screen.minutes", "Screen time", "min"), ("screen.late_minutes",
 CHECKIN_DEFS = (("intake.coffee_cups", "Coffee", "cups", "none"), ("intake.alcohol_units", "Alcohol", "units", "down"))
 
 # Engine recovery metric -> report metric key
-RECOVERY_KEYS = {"hrv_ms": "hrv.overnight", "resting_hr": "hr.resting", "wrist_temp_dev": "temp.wrist",
-                 "resp_rate": "resp.rate", "spo2": "spo2.overnight"}
+RECOVERY_KEYS = {"resting_hr": "hr.resting", "resp_rate": "resp.rate", "spo2": "spo2.overnight"}
 # Per-night sleep values: engine key, report key, label, unit, good direction
 SLEEP_DEFS = (("duration_min", "sleep.duration", "Time asleep", "min", "up"),
               ("awake_min", "sleep.awake", "Time awake in the night", "min", "down"),
               ("interruptions", "sleep.interruptions", "Times woken", "count", "down"))
 WEEK_NIGHT_DEFS = (("score", "sleep.score", "Sleep score", "points", "up"),) + SLEEP_DEFS + (
-    ("hrv_ms", "hrv.overnight", "Overnight HRV", "ms", "up"), ("resting_hr", "hr.resting", "Resting heart rate", "bpm", "down"))
+    ("resting_hr", "hr.resting", "Resting heart rate", "bpm", "down"), ("resp_rate", "resp.rate", "Breathing rate", "br/min", "down"))
 
 
 def _r(x: Optional[float], nd: int = 1) -> Optional[float]:

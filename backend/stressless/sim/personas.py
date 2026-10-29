@@ -42,7 +42,7 @@ PERSONAS: Dict[str, Persona] = {
         description=("Alex runs product at a Stockholm scale-up. Office Monday to Thursday, home on "
                      "Fridays, a run before work twice a week, after-work on Thursdays and the odd "
                      "customer call that runs late into the evening."),
-        resting_hr=56, hrv_ms=48.0, resp_rate=14.6, sleep_need_min=480,
+        resting_hr=56, resp_rate=14.6, sleep_need_min=480,
         usual_bedtime=23.083, usual_wake=6.75, weekend_shift_min=60,
         behaviour={
             "office_days": [0, 1, 2, 3],
@@ -75,7 +75,7 @@ PERSONAS: Dict[str, Persona] = {
         description=("Sam is a management consultant on a client engagement in Copenhagen. Flies out "
                      "Monday morning and back Thursday evening every other week, eight meetings a day, "
                      "client dinners, and an early gym habit."),
-        resting_hr=60, hrv_ms=38.0, resp_rate=15.2, sleep_need_min=450,
+        resting_hr=60, resp_rate=15.2, sleep_need_min=450,
         usual_bedtime=23.25, usual_wake=6.25, weekend_shift_min=75,
         behaviour={
             "office_days": [0, 1, 2, 3],
@@ -110,7 +110,7 @@ PERSONAS: Dict[str, Persona] = {
         description=("Robin founded a small climate-tech company. Few meetings but many investor "
                      "calls in the evening, gym sessions at quarter to nine at night, and a social "
                      "calendar that fills every weekend."),
-        resting_hr=52, hrv_ms=62.0, resp_rate=14.0, sleep_need_min=480,
+        resting_hr=52, resp_rate=14.0, sleep_need_min=480,
         usual_bedtime=0.25, usual_wake=7.75, weekend_shift_min=60,
         behaviour={
             "office_days": [0, 1, 2, 3, 4],

@@ -11,12 +11,14 @@ import random
 from datetime import date, timedelta
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from ..models import (CalendarEvent, DailyActivity, DayFeatures, HeartRateDay, LocationVisit,
+from ..models import (CalendarEvent, DailyActivity, DayFeatures, HeartRateDay,
                       Persona, SimTruthNight, SleepNight, SleepStage, WatchWorkout, new_id)
 from ..timeutil import at, day_hour
+from .location_gen import LocationVisit
 from .sleep_score import compute_score
 
-NOISE_SITES = ("bed", "onset", "wake", "awake", "hrv_ln", "rhr", "resp", "temp", "spo2", "life", "jitter")
+# "-" sites are retired (they drove HRV and wrist temperature); still drawn so every seed gives the same demo as before
+NOISE_SITES = ("bed", "onset", "wake", "awake", "-", "rhr", "resp", "-", "spo2", "life", "jitter")
 INTENSE_WORDS = ("board", "review", "interview", "pitch", "customer", "investor", "escalation", "planning")
 CALENDAR_KEYS = ("meetings_over_3", "b2b_over_2", "late_meeting_hours", "evening_social", "workout_morning",
                  "workout_late", "travel", "early_start", "protected_evening")
@@ -24,6 +26,7 @@ CALENDAR_KEYS = ("meetings_over_3", "b2b_over_2", "late_meeting_hours", "evening
 
 def draw_noise(rng: random.Random) -> Dict[str, float]:
     noise = {k: rng.gauss(0.0, 1.0) for k in NOISE_SITES}
+    noise.pop("-", None)
     noise["interrupt_u"] = rng.random()
     noise["gap_u"] = rng.random()
     noise["gap_pos"] = rng.random()
@@ -96,11 +99,8 @@ def compute_sleep(persona: Persona, ratios: Dict[str, float], reg: Dict[str, flo
     wake = max(wake, bedtime + onset + awake + 180.0)
     duration = wake - (bedtime + onset) - awake
 
-    hrv = persona.hrv_ms * (1 - 0.03 * m3 - 0.05 * late_h - min(0.30, 0.06 * alc) - 0.07 * wl + 0.05 * wm - 0.10 * trv - 0.20 * ill)
-    hrv = max(8.0, hrv) * math.exp(0.18 * noise["hrv_ln"])
     rhr = persona.resting_hr + 1.2 * m3 + 1.8 * late_h + min(1.2 * alc, 5.0) + 2.5 * wl - 1.5 * wm + 3 * trv + 7 * ill + 1.5 * noise["rhr"]
     resp = persona.resp_rate + 0.7 * (1 if alc > 0 else 0) + 1.5 * ill + 0.3 * noise["resp"]
-    temp = 0.25 * (1 if alc > 0 else 0) + 0.5 * ill + 0.15 * trv + 0.12 * noise["temp"]
     spo2 = max(92.0, min(100.0, 97.5 - 0.4 * (1 if alc > 0 else 0) - 0.3 * ill + 0.4 * noise["spo2"]))
     deep_share = 0.20 * (1 - 0.05 * (1 if alc > 0 else 0) - 0.15 * wl_flag)
     rem_share = 0.22 * (1 - min(0.35, 0.10 * alc))
@@ -108,7 +108,7 @@ def compute_sleep(persona: Persona, ratios: Dict[str, float], reg: Dict[str, flo
     score, parts = compute_score({"duration_min": duration, "bedtime_min": bedtime, "interruptions": interrupt,
                                   "awake_min": awake, "sleep_need_min": persona.sleep_need_min}, list(recent_bedtimes))
     return {"bedtime": bedtime, "onset": onset, "interrupt": interrupt, "awake": awake, "wake": wake,
-            "duration": duration, "hrv": hrv, "rhr": rhr, "resp": resp, "temp": temp, "spo2": spo2,
+            "duration": duration, "rhr": rhr, "resp": resp, "spo2": spo2,
             "deep_share": deep_share, "rem_share": rem_share, "score": score, "parts": parts, "bed_delay": bed_delay}
 
 
@@ -459,8 +459,7 @@ def simulate_day(persona: Persona, ratios: Dict[str, float], d: date, features: 
             out_of_bed=night_min_to_dt(d, sp["wake"] + 8, tz),
             stages=stages, interruptions=int(sp["interrupt"]), awake_min=int(round(sp["awake"])),
             duration_min=int(round(sp["duration"])), deep_min=deep, rem_min=rem, core_min=core,
-            hrv_ms=round(sp["hrv"], 1), resting_hr=int(round(sp["rhr"])), resp_rate=round(sp["resp"], 1),
-            wrist_temp_dev=round(sp["temp"], 2), spo2=round(sp["spo2"], 1), score=int(sp["score"]),
+            resting_hr=int(round(sp["rhr"])), resp_rate=round(sp["resp"], 1), spo2=round(sp["spo2"], 1), score=int(sp["score"]),
             score_parts=dict(sp["parts"]), score_source="stressless")
     # awake spans (interruptions) that fall after midnight, for tomorrow's morning HR
     spans = []

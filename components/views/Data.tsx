@@ -8,42 +8,63 @@ import { busy, confirmModal, toast } from "../ui/overlays";
 import { useApp } from "../shell/AppContext";
 import { ViewHead, useLoad } from "./common";
 
+const DEMO = "demo: regenerated, never stored";
+const SYNCED = "your account, until you delete it";
+
 const CLASSES = [
   [
     "Calendar events",
-    "title, start, end, attendees count, location hint",
+    "title, start, end, venue and description as written in the event; guests' names, emails and replies",
     "to know what your day looked like",
-    "demo: regenerated, never stored",
-  ],
-  [
-    "Location visits",
-    "place type and name, start, end",
-    "to check whether booked events happened",
-    "demo: regenerated, never stored",
-  ],
-  [
-    "Heart rate",
-    "one sample per minute",
-    "to see how your body responded during and after events",
-    "demo: regenerated, never stored",
+    DEMO + " · Google Calendar: " + SYNCED,
   ],
   [
     "Sleep",
     "bedtime, stages, interruptions, wake time",
     "to compute and explain the sleep score",
-    "demo: regenerated, never stored",
+    DEMO + " · Health Connect: " + SYNCED,
+  ],
+  [
+    "Heart rate",
+    "one value per minute, averaged from your watch's readings",
+    "to see how your body responded during and after events",
+    DEMO + " · Health Connect: " + SYNCED,
   ],
   [
     "Recovery markers",
-    "overnight HRV, resting heart rate, respiratory rate, wrist temperature, blood oxygen",
+    "resting heart rate, and breathing rate and blood oxygen while asleep",
     "to compare each night with your own baseline",
-    "demo: regenerated, never stored",
+    DEMO + " · Health Connect: " + SYNCED,
+  ],
+  [
+    "Steps",
+    "one total per day",
+    "to see how active each day was",
+    DEMO + " · Health Connect: " + SYNCED,
+  ],
+  [
+    "Screen time",
+    "which apps were open and when, screen unlocks (Android app)",
+    "to see how evening screen use relates to your sleep",
+    SYNCED,
+  ],
+  [
+    "Media history",
+    "titles, artists or channels and times from the Spotify, Netflix, YouTube, Steam and Last.fm imports you add",
+    "to see how evening listening, watching and gaming relate to your sleep",
+    SYNCED,
+  ],
+  [
+    "Check-ins",
+    "cups of coffee and units of alcohol you log",
+    "to account for what the calendar cannot see",
+    SYNCED,
   ],
   [
     "Your answers",
     "yes/no to reality checks, accepted suggestions",
     "to correct the calendar and improve your patterns",
-    "your account, until you delete it",
+    SYNCED,
   ],
 ];
 
@@ -90,7 +111,7 @@ export function DataView() {
   const deleteAll = async () => {
     const ok = await confirmModal({
       title: "Delete all data?",
-      body: "This removes your reality-check answers, accepted suggestions and added events from your account. The default demo is regenerated.",
+      body: "This permanently removes everything stored in your account: synced sleep, steps and screen time, your calendar, media imports, check-ins, reports, answers and connections. The default demo is regenerated.",
       confirmLabel: "Delete and regenerate",
       danger: true,
     });
@@ -124,49 +145,25 @@ export function DataView() {
         title="What StressLess reads, and why"
       />
       <div className="v-data stack" data-tour="privacy">
-        <div className="grid grid-4">
+        <div className="grid grid-2">
           <Conn
             icon="calendar"
             title="Calendar"
-            status={isDemo ? "Demo data" : "Imported"}
+            status={isDemo ? "Demo data" : "Connected"}
             note={
               isDemo
-                ? "Ten weeks of a simulated calendar. In the product: Google Calendar or EventKit, read-only, plus one write per accepted suggestion."
-                : "Imported from your .ics export."
+                ? "Ten weeks of a simulated calendar. In the product: Google Calendar, read-only, plus one write per accepted suggestion."
+                : "Read from your Google Calendar."
             }
           />
           <Conn
             icon="watch"
             title="Watch"
-            status={isDemo ? "Demo data" : "Imported"}
+            status={isDemo ? "Demo data" : "Synced"}
             note={
               isDemo
-                ? "Simulated Apple Watch: heart rate, sleep stages, HRV, resting heart rate, wrist temperature. In the product: HealthKit on the phone."
-                : "Imported from Apple Health."
-            }
-          />
-          <Conn
-            icon="map"
-            title="Maps"
-            status={isDemo ? "Demo data" : "Imported"}
-            note={
-              isDemo
-                ? "Simulated Google Maps timeline. In the product: Google Takeout or the Timeline API, used only to confirm booked events."
-                : "Imported from Google Takeout."
-            }
-          />
-          <Conn
-            icon="brain"
-            title="Reasoning"
-            status={
-              meta.reasoning_mode === "claude"
-                ? "Claude (opt-in)"
-                : "Rule-based"
-            }
-            note={
-              meta.reasoning_mode === "claude"
-                ? "Claude writes the daily and weekly reports from a de-identified summary: numbers and short labels only, never names, calendar titles or places."
-                : "The reports are written by rules on the StressLess server. Set STRESSLESS_REASONER=claude to let Claude write them (opt-in)."
+                ? "Simulated smartwatch: heart rate, sleep stages, resting heart rate, breathing rate, blood oxygen. In the product: Health Connect, synced by the StressLess Android app."
+                : "Sleep, heart rate, resting heart rate, breathing rate, blood oxygen and steps from Health Connect, synced by the StressLess Android app. Any watch that writes to Health Connect works."
             }
           />
         </div>
@@ -205,7 +202,7 @@ export function DataView() {
               available when configured.
             </p>
             <p className="small secondary">
-              Health, calendar and location exports cannot currently be uploaded
+              Health and calendar exports cannot currently be uploaded
               through the web app. Each supported source includes its own setup
               instructions and file requirements.
             </p>
@@ -249,8 +246,9 @@ export function DataView() {
                 <h3>Delete everything</h3>
               </div>
               <p className="small secondary">
-                Removes your answers and accepted suggestions from your account,
-                then regenerates the default demo.
+                Removes everything stored in your account, including synced
+                and imported data and your connections, then regenerates the
+                default demo.
               </p>
               <button
                 className="btn btn-danger"

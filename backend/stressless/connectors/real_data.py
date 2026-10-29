@@ -45,12 +45,11 @@ def _dt(value: Any, tzname: str) -> Optional[datetime]:
 # --------------------------------------------------------------------------- #
 # Row -> engine model
 # --------------------------------------------------------------------------- #
-def night_from_row(row: Dict[str, Any], tzname: str, hrv_key: str) -> SleepNight:
+def night_from_row(row: Dict[str, Any], tzname: str) -> SleepNight:
     stages = []
     for st in row.get("stages") or []:
         if st.get("kind") in STAGE_KINDS and st.get("start") and st.get("end"):
             stages.append(SleepStage(kind=st["kind"], start=parse_dt(st["start"], tzname), end=parse_dt(st["end"], tzname)))
-    hrv = row.get(hrv_key)
     return SleepNight(
         date=parse_date(row["night_date"]), worn=True,
         in_bed_start=_dt(row.get("in_bed_at"), tzname), sleep_onset=_dt(row.get("onset_at"), tzname),
@@ -58,10 +57,8 @@ def night_from_row(row: Dict[str, Any], tzname: str, hrv_key: str) -> SleepNight
         interruptions=int(row.get("interruptions") or 0), awake_min=int(row.get("awake_min") or 0),
         duration_min=int(row.get("asleep_min") or 0), deep_min=int(row.get("deep_min") or 0),
         rem_min=int(row.get("rem_min") or 0), core_min=int(row.get("core_min") or 0),
-        hrv_ms=None if hrv is None else float(hrv),
         resting_hr=None if row.get("resting_hr") is None else int(row["resting_hr"]),
         resp_rate=None if row.get("resp_rate") is None else float(row["resp_rate"]),
-        wrist_temp_dev=None if row.get("skin_temp_dev") is None else float(row["skin_temp_dev"]),
         spo2=None if row.get("spo2") is None else float(row["spo2"]),
         score=None if row.get("score") is None else int(row["score"]),
         score_parts={k: int(v) for k, v in (row.get("score_parts") or {}).items()},
@@ -130,7 +127,6 @@ def persona_from_history(name: str, tzname: str, nights: List[SleepNight]) -> Pe
     base = Persona(key="real", name=name, tagline="Your own data", description="Your watch and calendar data.", tz=tzname)
     weekday = [n for n in nights if n.date.weekday() < 4]  # Mon-Thu nights lead into workdays
     base.resting_hr = int(round(_median([n.resting_hr for n in nights], base.resting_hr)))
-    base.hrv_ms = _median([n.hrv_ms for n in nights], base.hrv_ms)
     base.resp_rate = _median([n.resp_rate for n in nights], base.resp_rate)
     base.usual_bedtime = _median([_clock_hours(n.in_bed_start, True) for n in weekday], base.usual_bedtime)
     base.usual_wake = _median([_clock_hours(n.wake_time, False) for n in weekday], base.usual_wake)
@@ -149,18 +145,14 @@ def load_dataset(store, today: date, days: int = DAYS, name: str = "You") -> Dat
     start = today - timedelta(days=days)
     lo, hi = start.isoformat(), today.isoformat()
     night_rows = store.rows("sleep_nights", "night_date", lo, hi)
-    # HRV: Health Connect (RMSSD) and HealthKit (SDNN) are different measures; use whichever this user has more of.
-    n_rmssd = sum(1 for r in night_rows if r.get("hrv_rmssd_ms") is not None)
-    n_sdnn = sum(1 for r in night_rows if r.get("hrv_sdnn_ms") is not None)
-    hrv_key = "hrv_sdnn_ms" if n_sdnn >= n_rmssd else "hrv_rmssd_ms"
-    nights = [night_from_row(r, tzname, hrv_key) for r in night_rows]
+    nights = [night_from_row(r, tzname) for r in night_rows]
     hr_days = [hr_day_from_row(r) for r in store.rows("heart_rate_days", "day", lo, hi)]
     activity = [activity_from_row(r, tzname) for r in store.rows("daily_activity", "day", lo, hi)]
     # starts_at is a timestamp: bound by dates with a day of margin, build_dataset trims to the window.
     events = [event_from_row(r, tzname) for r in store.rows("calendar_events", "starts_at", (start - timedelta(days=1)).isoformat(),
                                                            (today + timedelta(days=AHEAD + 2)).isoformat())]
     persona = persona_from_history(name, tzname, nights)
-    ds = build_dataset(persona, events, [], hr_days, nights, activity, today, days)
+    ds = build_dataset(persona, events, hr_days, nights, activity, today, days)
     ds.source = "real"
     # Other per-day values (screen time, ...), up to the last full day like activity.
     for r in store.rows("daily_metrics", "day", lo, hi):

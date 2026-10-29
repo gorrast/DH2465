@@ -1,15 +1,13 @@
-"""Connectors (ICS, Apple Health, Takeout) and the per-user store."""
+"""Connectors (ICS, Apple Health) and the per-user store."""
 import copy
-import json
 import os
 import tempfile
 import unittest
 from datetime import date
 
 from stressless.connectors.apple_health import parse_export
-from stressless.connectors.base import classify_event, classify_place, parse_ts
+from stressless.connectors.base import classify_event, parse_ts
 from stressless.connectors.build import build_dataset, imported_persona
-from stressless.connectors.google_takeout import parse_timeline
 from stressless.connectors.ics_calendar import parse_ics
 from stressless.models import CalendarEvent
 from stressless.store import MemoryStore
@@ -47,16 +45,6 @@ APPLE = """<?xml version="1.0" encoding="UTF-8"?>
 </HealthData>
 """
 
-TAKEOUT_SLH = {"timelineObjects": [
-    {"placeVisit": {"location": {"latitudeE7": 593421000, "longitudeE7": 180498000, "name": "Home", "semanticType": "TYPE_HOME"}, "duration": {"startTimestamp": "2026-09-20T00:00:00Z", "endTimestamp": "2026-09-20T06:30:00Z"}}},
-    {"activitySegment": {"activityType": "IN_PASSENGER_VEHICLE", "duration": {"startTimestampMs": str(int(__import__("datetime").datetime(2026, 9, 20, 7, 0, tzinfo=__import__("datetime").timezone.utc).timestamp() * 1000)), "endTimestampMs": str(int(__import__("datetime").datetime(2026, 9, 20, 7, 30, tzinfo=__import__("datetime").timezone.utc).timestamp() * 1000))}}},
-    {"placeVisit": {"location": {"latitudeE7": 593428000, "longitudeE7": 180498000, "name": "SATS Odenplan"}, "duration": {"startTimestamp": "2026-09-20T16:00:00.123Z", "endTimestamp": "2026-09-20T17:05:00Z"}}},
-]}
-TAKEOUT_NEW = {"semanticSegments": [
-    {"startTime": "2026-09-21T18:00:00.000+02:00", "endTime": "2026-09-21T20:30:00.000+02:00", "visit": {"topCandidate": {"placeLocation": {"latLng": "59.3355°, 18.0740°", "name": "Restaurang Prinsen"}, "semanticType": "UNKNOWN"}}},
-    {"startTime": "2026-09-21T20:30:00.000+02:00", "endTime": "2026-09-21T21:00:00.000+02:00", "activity": {"topCandidate": {"type": "WALKING"}}},
-]}
-
 
 class BaseTests(unittest.TestCase):
     def test_parse_ts_forms(self):
@@ -68,7 +56,6 @@ class BaseTests(unittest.TestCase):
     def test_classifiers(self):
         self.assertEqual(classify_event("Gym", None), "workout"); self.assertEqual(classify_event("Dinner with Sara", "Tranan"), "social")
         self.assertEqual(classify_event("Flight ARN->BER", None), "travel"); self.assertEqual(classify_event("Roadmap review", "Room 4"), "meeting")
-        self.assertEqual(classify_place("SATS Odenplan"), "gym"); self.assertEqual(classify_place("Home", "TYPE_HOME"), "home"); self.assertEqual(classify_place("Restaurang Prinsen"), "restaurant")
 
 
 class IcsTests(unittest.TestCase):
@@ -102,29 +89,15 @@ class AppleHealthTests(unittest.TestCase):
         self.assertEqual(hr[0].date, date(2026, 9, 20)); self.assertEqual(hr[0].bpm[8 * 60], 64)
         n = next(x for x in nights if x.date == date(2026, 9, 20))
         self.assertTrue(n.worn); self.assertEqual(n.in_bed_start.hour, 23); self.assertEqual(n.in_bed_start.minute, 5)  # watch source preferred
-        self.assertEqual(n.deep_min, 60); self.assertEqual(n.interruptions, 1); self.assertAlmostEqual(n.hrv_ms, 48.5); self.assertEqual(n.resting_hr, 55)
+        self.assertEqual(n.deep_min, 60); self.assertEqual(n.interruptions, 1); self.assertEqual(n.resting_hr, 55)
         self.assertAlmostEqual(n.spo2, 97.0); self.assertIsNotNone(n.score)
         act = next(a for a in activity if a.date == date(2026, 9, 20))
         self.assertEqual(act.steps, 850); self.assertEqual(act.workouts[0].kind, "run")
 
 
-class TakeoutTests(unittest.TestCase):
-    def test_both_formats(self):
-        tmp = tempfile.mkdtemp()
-        with open(os.path.join(tmp, "2026_SEPTEMBER.json"), "w") as fh:
-            json.dump(TAKEOUT_SLH, fh)
-        with open(os.path.join(tmp, "Timeline.json"), "w") as fh:
-            json.dump(TAKEOUT_NEW, fh)
-        visits = parse_timeline(tmp, "Europe/Stockholm", date(2026, 9, 19), date(2026, 9, 22))
-        types = [(v.start.date().isoformat(), v.place_type) for v in visits]
-        self.assertIn(("2026-09-20", "home"), types); self.assertIn(("2026-09-20", "gym"), types); self.assertIn(("2026-09-20", "transit"), types)
-        self.assertIn(("2026-09-21", "restaurant"), types); self.assertIn(("2026-09-21", "transit"), types)
-        gym = next(v for v in visits if v.place_type == "gym"); self.assertAlmostEqual(gym.lat, 59.3428, places=3)
-
-
 class BuildTests(unittest.TestCase):
     def test_build_dataset_fills_nights(self):
-        ds = build_dataset(imported_persona("Nima"), [], [], [], [], [], date(2026, 9, 27), days=10)
+        ds = build_dataset(imported_persona("Nima"), [], [], [], [], date(2026, 9, 27), days=10)
         self.assertEqual(len(ds.nights), 10); self.assertTrue(all(not n.worn for n in ds.nights)); self.assertEqual(ds.source, "imported")
 
 
@@ -136,7 +109,7 @@ class StoreTests(unittest.TestCase):
         st.set_profile("sam", 3, "2026-09-27"); self.assertEqual(st.profile()["persona"], "sam")
         ev = ds.events_on(ds.end)[0]
         v0 = st.state_version()
-        st.save_answer("rc-" + ev.id, "no", ev.id, None)
+        st.save_answer("rc-" + ev.id, "no", ev.id)
         st.add_user_event(CalendarEvent(id="ev-user-1", title="Wind down", start=tu.at(ds.today, 21), end=tu.at(ds.today, 22), type="protected", source="user"))
         st.save_accepted("sg-x", "ev-user-1")
         self.assertNotEqual(st.state_version(), v0)

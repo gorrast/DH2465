@@ -123,9 +123,7 @@ def rank_habits(ds: Dataset, upto: date, history_days: Optional[int] = None, fit
         adjusted = None
         if fit is not None and reg_key is not None and not getattr(fit, "insufficient", False):
             adjusted = fit.coef.get(reg_key, 0.0) * fit.mean_active_x.get(reg_key, 1.0)
-        hrv_groups = _groups(pairs, pred, "hrv_ms", stratify)
-        hrv_eff = stratified_effect(hrv_groups)
-        hrv_base = _mean([v for _, wo in hrv_groups.values() for v in wo])
+        resp_eff = stratified_effect(_groups(pairs, pred, "resp_rate", stratify))
         rhr_eff = stratified_effect(_groups(pairs, pred, "resting_hr", stratify))
         conf = confidence_for(lo, hi, n_with, n_without)
         if effect is None:
@@ -145,7 +143,7 @@ def rank_habits(ds: Dataset, upto: date, history_days: Optional[int] = None, fit
                          ci_low=_finite(round(lo, 1)) if lo is not None else None, ci_high=_finite(round(hi, 1)) if hi is not None else None,
                          adjusted_effect=_finite(round(adjusted, 1)) if adjusted is not None else None, direction=direction,
                          confidence=conf, example_dates=examples,
-                         metric_effects={"hrv_ms_pct": _finite(round(100.0 * hrv_eff / hrv_base, 0)) if (hrv_eff is not None and hrv_base) else None,
+                         metric_effects={"resp_rate": _finite(round(resp_eff, 1)) if resp_eff is not None else None,
                                          "resting_hr": _finite(round(rhr_eff, 1)) if rhr_eff is not None else None},
                          raw_effect=_finite(round(raw, 1)) if raw is not None else None, rank_score=_finite(round(rank_score, 2))))
     out.sort(key=lambda h: -(h.rank_score or 0.0))

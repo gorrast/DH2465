@@ -1,12 +1,33 @@
-"""Google-Maps-like location history for the digital twin (SPEC §5.3)."""
+"""Simulated whereabouts for the digital twin (SPEC §5.3).
+
+Internal to the simulator: the visits drive commute walking and unbooked gym sessions in the
+physiology, but they are never stored on the Dataset or shown to anyone.
+"""
 from __future__ import annotations
 
 import random
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
-from ..models import CalendarEvent, LocationVisit, Persona, SimTruthEvent, new_id
+from ..models import CalendarEvent, Persona, SimTruthEvent, new_id
 from ..timeutil import at, day_hour
+
+
+@dataclass
+class LocationVisit:
+    id: str
+    place_type: str                            # home | office | gym | restaurant | bar | transit | airport | hotel | away | outdoors | other
+    place_name: str
+    start: datetime
+    end: datetime
+    lat: float = 59.3293
+    lon: float = 18.0686
+    source: str = "demo"
+
+    @property
+    def duration_min(self) -> int:
+        return int((self.end - self.start).total_seconds() // 60)
 
 HOME = ("home", "Home", 59.3421, 18.0498)
 OFFICE = ("office", "Office, Vasagatan", 59.3315, 18.0592)

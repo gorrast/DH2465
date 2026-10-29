@@ -13,7 +13,7 @@ from stressless.engine.matching import hr_norm_curve, rolling_mean, workout_sign
 from stressless.engine.reality import reality_checks
 from stressless.engine.suggestions import to_ics
 from stressless.engine.whatif import apply_modifications, predict_day
-from stressless.models import (CalendarEvent, Dataset, HeartRateDay, LocationVisit, Persona, SleepNight)
+from stressless.models import (CalendarEvent, DailyActivity, Dataset, HeartRateDay, Persona, SleepNight, WatchWorkout)
 from stressless.connectors.ics_calendar import parse_ics
 from tests.helpers import ANCHOR
 
@@ -25,8 +25,8 @@ def ev(i, title, s, e, typ, d=D, **kw):
     return CalendarEvent(id="e%d" % i, title=title, start=tu.at(d, s), end=tu.at(d, e), type=typ, **kw)
 
 
-def visit(i, ptype, s, e, d=D, name=None):
-    return LocationVisit(id="v%d" % i, place_type=ptype, place_name=name or ptype, start=tu.at(d, s), end=tu.at(d, e))
+def watch_workout(i, s, e, d=D, kind="strength", avg_hr=138):
+    return WatchWorkout(id="wk%d" % i, kind=kind, start=tu.at(d, s), end=tu.at(d, e), avg_hr=avg_hr, max_hr=avg_hr + 20)
 
 
 def hr_day(d, base=62, spikes=()):
@@ -37,12 +37,12 @@ def hr_day(d, base=62, spikes=()):
     return HeartRateDay(date=d, bpm=bpm)
 
 
-def night(d, score, bed=23.0, dur=430, hrv=50.0, rhr=56, worn=True):
+def night(d, score, bed=23.0, dur=430, rhr=56, worn=True):
     if not worn:
         return SleepNight(date=d, worn=False)
     return SleepNight(date=d, worn=True, in_bed_start=tu.at(d, bed), sleep_onset=tu.at(d, bed) + timedelta(minutes=15),
                       wake_time=tu.at(d, bed) + timedelta(minutes=dur + 40), duration_min=dur, interruptions=1, awake_min=12,
-                      hrv_ms=hrv, resting_hr=rhr, resp_rate=14.5, wrist_temp_dev=0.0, spo2=97.0, score=score, score_parts={})
+                      resting_hr=rhr, resp_rate=14.5, spo2=97.0, score=score, score_parts={})
 
 
 class FeatureTests(unittest.TestCase):
@@ -102,32 +102,38 @@ class MatchingTests(unittest.TestCase):
 
 
 class RealityTests(unittest.TestCase):
-    def _ds(self, events, visits, hr):
-        return Dataset(persona=P, seed=0, source="demo", start=D - timedelta(days=1), end=D, today=D + timedelta(days=1), events=events, visits=visits, hr_days=[hr])
+    def _ds(self, events, hr, workouts=()):
+        return Dataset(persona=P, seed=0, source="demo", start=D - timedelta(days=1), end=D, today=D + timedelta(days=1), events=events, hr_days=[hr],
+                       activity=[DailyActivity(date=D, steps=0, active_minutes=0, workouts=list(workouts))])
 
     def test_skipped_gym_is_contradicted(self):
-        ds = self._ds([ev(1, "Gym", 18, 19, "workout", location_hint="SATS")], [visit(1, "home", 0, 24)], hr_day(D))
+        ds = self._ds([ev(1, "Gym", 18, 19, "workout", location_hint="SATS")], hr_day(D))
         checks = reality_checks(ds, D, D, {})
         self.assertEqual([c.kind for c in checks], ["booked_not_seen"])
         self.assertIn("gym", checks[0].question)
 
     def test_attended_gym_confirmed_by_hr(self):
-        ds = self._ds([ev(1, "Gym", 18, 19, "workout")], [visit(1, "home", 0, 24)], hr_day(D, spikes=[(18, 19, 140)]))
+        ds = self._ds([ev(1, "Gym", 18, 19, "workout")], hr_day(D, spikes=[(18, 19, 140)]))
         self.assertEqual(reality_checks(ds, D, D, {}), [])
 
     def test_wfh_meeting_never_asks(self):
-        ds = self._ds([ev(1, "Standup", 9, 10, "meeting", location_hint="Office")], [visit(1, "home", 0, 24)], hr_day(D))
+        ds = self._ds([ev(1, "Standup", 9, 10, "meeting", location_hint="Office")], hr_day(D))
         self.assertEqual(reality_checks(ds, D, D, {}), [])
 
-    def test_unbooked_gym_and_lunch(self):
-        ds = self._ds([], [visit(1, "home", 0, 12), visit(2, "restaurant", 12, 13), visit(3, "home", 13, 18), visit(4, "gym", 18, 19.1, name="SATS Odenplan"), visit(5, "home", 19.1, 24)], hr_day(D, spikes=[(18, 19, 138)]))
+    def test_dinners_and_trips_never_ask(self):
+        events = [ev(1, "Dinner with Sara", 19, 21, "social"), ev(2, "Flight ARN->CPH", 7, 9, "travel")]
+        self.assertEqual(reality_checks(self._ds(events, hr_day(D)), D, D, {}), [])
+
+    def test_unbooked_watch_workout(self):
+        ds = self._ds([], hr_day(D, spikes=[(18, 19, 138)]), workouts=[watch_workout(1, 18, 19), watch_workout(2, 12, 12.2)])
         checks = reality_checks(ds, D, D, {})
         self.assertEqual([c.kind for c in checks], ["seen_not_booked"])
+        self.assertEqual(checks[0].workout_id, "wk1")
         self.assertEqual(checks[0].suggested_event.type, "workout")
         self.assertTrue(checks[0].suggested_event.id.startswith("ev-detected-"))
 
     def test_answers_applied_and_persist(self):
-        ds = self._ds([ev(1, "Gym", 18, 19, "workout")], [visit(1, "home", 0, 24)], hr_day(D))
+        ds = self._ds([ev(1, "Gym", 18, 19, "workout")], hr_day(D))
         cid = reality_checks(ds, D, D, {})[0].id
         ds.set_attended("e1", False)
         checks = reality_checks(ds, D, D, {cid: {"answer": "no", "ts": "2026-09-26T08:00:00+02:00"}})

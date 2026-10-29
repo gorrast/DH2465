@@ -1,5 +1,5 @@
 'use client';
-/* The 24-hour day: calendar lane, Maps lane, minute heart rate against the personal norm, sleep shading (charts.js). */
+/* The 24-hour day: calendar lane, minute heart rate against the personal norm, sleep shading (charts.js). */
 import { memo, useId, useMemo, useRef, useState } from 'react';
 import { minuteLabel, minuteOf } from '@/lib/format';
 import { ICON_PATHS, eventIcon } from '@/lib/icons';
@@ -7,22 +7,18 @@ import { EVENT_LABELS, palette } from '@/lib/palette';
 import { showTip, hideTip, type TipRow } from '../ui/overlays';
 import { cssVar, niceTicks, useThemeKey, useWidth } from './common';
 
-const PLACE_LABEL: Record<string, string> = { home: 'Home', office: 'Office', gym: 'Gym', restaurant: 'Restaurant', bar: 'Bar', transit: 'Transit', airport: 'Airport', hotel: 'Hotel', away: 'Away', outdoors: 'Outdoors', other: 'Elsewhere' };
-const PLACE_SHADE: Record<string, number> = { home: 0.18, office: 0.42, gym: 0.6, restaurant: 0.6, bar: 0.6, transit: 0.3, airport: 0.5, hotel: 0.45, away: 0.5, outdoors: 0.5, other: 0.35 };
-
 export interface TimelineData {
-  date: string; events: any[]; visits: any[]; hr: (number | null)[] | null; norm: (number | null)[] | null;
+  date: string; events: any[]; hr: (number | null)[] | null; norm: (number | null)[] | null;
   night?: any; nightPrev?: any; workouts?: any[]; checks?: any[];
 }
-export interface MinuteInfo { hr: number | null; norm: number | null; event: any | null; place: any | null }
+export interface MinuteInfo { hr: number | null; norm: number | null; event: any | null }
 
-/** What is happening at minute ``m`` of the day (heart rate, norm, attended event, place). */
+/** What is happening at minute ``m`` of the day (heart rate, norm, attended event). */
 export function valueAt(o: TimelineData, m: number): MinuteInfo {
   const hr = (o.hr || [])[m];
   const norm = (o.norm || [])[m];
   const ev = (o.events || []).find((e) => e.attended !== false && (minuteOf(e.start, o.date) as number) <= m && (minuteOf(e.end, o.date) as number) > m) || null;
-  const place = (o.visits || []).find((v) => (minuteOf(v.start, o.date) as number) <= m && (minuteOf(v.end, o.date) as number) > m) || null;
-  return { hr: hr === undefined ? null : hr, norm: norm === undefined ? null : norm, event: ev, place };
+  return { hr: hr === undefined ? null : hr, norm: norm === undefined ? null : norm, event: ev };
 }
 
 interface Props extends TimelineData {
@@ -38,8 +34,8 @@ const Layers = memo(function Layers({ o, g, compact, theme, onSeek }: { o: Timel
   void theme;
   const { start, end, W, H, padL, padT, yHr, hrH, x } = g;
   const id = useId();
-  const laneEv = compact ? 22 : 34, laneLoc = compact ? 0 : 16, gap = 6;
-  const yEv = padT, yLoc = padT + laneEv + gap;
+  const laneEv = compact ? 22 : 34;
+  const yEv = padT;
   const hr = o.hr || [], norm = o.norm || [];
   const hrVals = hr.filter((v): v is number => v !== null && v !== undefined);
   const lo = Math.max(30, Math.min(...(hrVals.length ? hrVals : [50])) - 5), hi = Math.min(200, Math.max(...(hrVals.length ? hrVals : [120])) + 5);
@@ -89,20 +85,6 @@ const Layers = memo(function Layers({ o, g, compact, theme, onSeek }: { o: Timel
     if (a === null || b === null) return;
     out.push(<rect key={'w' + i} x={x(a)} y={yHr} width={Math.max(2, x(b) - x(a))} height={3} fill={cssVar('--evt-workout')} />);
   });
-  // location lane
-  if (laneLoc) {
-    (o.visits || []).forEach((v, i) => {
-      const a = Math.max(start, minuteOf(v.start, o.date) as number), b = Math.min(end, minuteOf(v.end, o.date) as number);
-      if (b <= a) return;
-      out.push(
-        <rect key={'v' + i} x={x(a)} y={yLoc} width={Math.max(1, x(b) - x(a) - 1)} height={laneLoc} rx={3} fill={cssVar('--ink-muted')} opacity={PLACE_SHADE[v.place_type] || 0.35}
-          onPointerMove={(e) => showTip(e.clientX, e.clientY, minuteLabel(a) + '–' + minuteLabel(b), [{ label: PLACE_LABEL[v.place_type] || v.place_type, value: v.place_name }])}
-          onPointerLeave={hideTip} />,
-      );
-      if (x(b) - x(a) > 60) out.push(<text key={'vl' + i} x={x(a) + 6} y={yLoc + laneLoc - 4} className="c-loc-label">{v.place_name}</text>);
-    });
-    out.push(<text key="maps" x={padL - 6} y={yLoc + laneLoc - 4} textAnchor="end" className="c-axis">Maps</text>);
-  }
   // events lane
   const checksByEvent: Record<string, any> = {};
   (o.checks || []).forEach((c) => { if (c.event_id) checksByEvent[c.event_id] = c; });
@@ -152,14 +134,14 @@ export function DayTimeline(props: Props) {
   const [hover, setHover] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const padL = 62, padR = 12, padT = 8;
-  const laneEv = compact ? 22 : 34, laneLoc = compact ? 0 : 16, hrH = compact ? 44 : 120, gap = 6, padB = 20;
-  const H = padT + laneEv + gap + (laneLoc ? laneLoc + gap : 0) + hrH + padB;
-  const yHr = padT + laneEv + gap + (laneLoc ? laneLoc + gap : 0);
+  const laneEv = compact ? 22 : 34, hrH = compact ? 44 : 120, gap = 6, padB = 20;
+  const H = padT + laneEv + gap + hrH + padB;
+  const yHr = padT + laneEv + gap;
   const start = props.startMinute ?? 0, end = props.endMinute ?? 1440;
   const x = (m: number) => padL + ((Math.max(start, Math.min(end, m)) - start) / (end - start)) * (W - padL - padR);
   const data = useMemo<TimelineData>(() => ({
-    date: props.date, events: props.events, visits: props.visits, hr: props.hr, norm: props.norm, night: props.night, nightPrev: props.nightPrev, workouts: props.workouts, checks: props.checks,
-  }), [props.date, props.events, props.visits, props.hr, props.norm, props.night, props.nightPrev, props.workouts, props.checks]);
+    date: props.date, events: props.events, hr: props.hr, norm: props.norm, night: props.night, nightPrev: props.nightPrev, workouts: props.workouts, checks: props.checks,
+  }), [props.date, props.events, props.hr, props.norm, props.night, props.nightPrev, props.workouts, props.checks]);
   const geom = useMemo<Geometry>(() => ({ start, end, W, H, padL, padR, padT, yHr, hrH, x }), [start, end, W, H, yHr, hrH]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const minuteAt = (e: React.PointerEvent | React.MouseEvent) => {
@@ -174,7 +156,6 @@ export function DayTimeline(props: Props) {
     const rows: TipRow[] = [{ label: 'heart rate', value: info.hr === null ? '–' : info.hr + ' bpm', color: cssVar('--series-1') }];
     if (info.norm !== null) rows.push({ label: 'your norm', value: Math.round(info.norm) + ' bpm', color: cssVar('--ink-muted') });
     if (info.event) rows.push({ label: EVENT_LABELS[info.event.type] || 'event', value: info.event.title, color: palette.event(info.event.type) });
-    if (info.place) rows.push({ label: 'place', value: info.place.place_name });
     showTip(e.clientX, e.clientY, minuteLabel(m), rows);
     props.onHover?.(m, info);
   };

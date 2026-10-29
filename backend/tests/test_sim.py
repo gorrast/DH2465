@@ -55,7 +55,7 @@ class DatasetTests(unittest.TestCase):
             self.assertTrue(74 <= statistics.median(scores) <= 88, "%s median %s" % (key, statistics.median(scores)))
             self.assertTrue(6 <= statistics.pstdev(scores) <= 14.5, "%s sd %.1f" % (key, statistics.pstdev(scores)))
             self.assertTrue(all(e.attended is None for e in ds.events), "attended must stay None")
-            ids = [e.id for e in ds.events] + [v.id for v in ds.visits]
+            ids = [e.id for e in ds.events]
             self.assertEqual(len(ids), len(set(ids)), "duplicate ids")
             self.assertTrue(all(n.duration_min >= 180 for n in ds.nights if n.worn))
 

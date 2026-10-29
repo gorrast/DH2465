@@ -72,7 +72,6 @@ class Engine:
     def sources_for(self, d: date) -> Dict[str, int]:
         hr = self.ds.hr(d)
         return {"calendar_events": len(self.ds.events_on(d)),
-                "maps_places": len({v.place_name for v in self.ds.visits_on(d) if v.place_type != "transit"}),
                 "watch_minutes": sum(1 for b in hr.bpm if b is not None) if hr else 0}
 
     def habits(self, upto: date, history_days: Optional[int] = None) -> List[Habit]:
@@ -172,7 +171,7 @@ class Engine:
         habit_key = self._related_habit(check)
         before = self._habit_snapshot(habit_key)
         event_id = check.event_id
-        if check.kind in ("booked_not_seen", "location_mismatch") and check.event_id:
+        if check.kind == "booked_not_seen" and check.event_id:
             self.ds.set_attended(check.event_id, answer == "yes")
         elif check.kind == "seen_not_booked" and answer == "yes" and check.suggested_event is not None:
             if self.ds.event(check.suggested_event.id) is None:
@@ -181,7 +180,7 @@ class Engine:
                     self.store.add_user_event(check.suggested_event)
             event_id = check.suggested_event.id
         if self.store is not None:
-            self.store.save_answer(check_id, answer, event_id, check.visit_id)
+            self.store.save_answer(check_id, answer, event_id)
         self.invalidate()
         after = self._habit_snapshot(habit_key)
         updated = next((c for c in self._all_checks() if c.id == check_id), check)
@@ -245,7 +244,7 @@ class Engine:
             for ev in events:
                 if ev.type in ("meeting", "social", "workout") and ev.attended is not False:
                     responses[ev.id] = event_response(ds, ev, norm)
-        return {"date": d, "events": events, "visits": ds.visits_on(d), "hr": hr.bpm if hr else None, "norm": norm,
+        return {"date": d, "events": events, "hr": hr.bpm if hr else None, "norm": norm,
                 "night": ds.night(d), "night_prev": ds.night(d - timedelta(days=1)), "activity": act,
                 "workouts": act.workouts if act else [], "features": f, "chips": describe_features(f), "checks": checks,
                 "responses": responses, "evening": evening_summary(ds, d, norm) if hr else None, "is_today": d == ds.today,

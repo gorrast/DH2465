@@ -1,5 +1,5 @@
 "use client";
-/* Replay view: the day as the watch saw it, against the calendar and Maps (SPEC §9.4). */
+/* Replay view: the day as the watch saw it, against the calendar (SPEC §9.4). */
 import Link from "next/link";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
@@ -135,7 +135,6 @@ function ReplayBody({ day, date, t }: { day: any; date: string; t?: string }) {
     {
       date,
       events: day.events,
-      visits: day.visits,
       hr: day.hr,
       norm: day.norm,
     },
@@ -201,9 +200,6 @@ function ReplayBody({ day, date, t }: { day: any; date: string; t?: string }) {
               </span>
             )}
           </div>
-          <div className="v-replay-face-place muted small">
-            {info.place ? info.place.place_name : ""}
-          </div>
         </div>
         <div className="card v-replay-main" data-tour="timeline">
           <div className="card-title">
@@ -246,7 +242,6 @@ function ReplayBody({ day, date, t }: { day: any; date: string; t?: string }) {
               className="v-replay-timeline"
               date={date}
               events={day.events}
-              visits={day.visits}
               hr={day.hr}
               norm={day.norm}
               night={day.night}
@@ -442,10 +437,14 @@ const DaySide = memo(function DaySide({
               <span className="chip">
                 {"Asleep " + fmt.minutes(n.duration_min)}
               </span>
-              <span className="chip">
-                {"HRV " + fmt.num(n.hrv_ms, 0) + " ms"}
-              </span>
-              <span className="chip">{"RHR " + n.resting_hr + " bpm"}</span>
+              {n.resting_hr != null ? (
+                <span className="chip">{"RHR " + n.resting_hr + " bpm"}</span>
+              ) : null}
+              {n.resp_rate != null ? (
+                <span className="chip">
+                  {"Breathing " + fmt.num(n.resp_rate, 1) + " /min"}
+                </span>
+              ) : null}
             </div>
           ) : (
             <p className="muted small">

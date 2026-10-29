@@ -114,7 +114,7 @@ Regenerate them against a running instance with `STRESSLESS_EMAIL=… STRESSLESS
 
 | View | What it shows |
 |---|---|
-| Morning | Sleep score, three likely causes with evidence, a calendar-ready suggestion, recovery markers (HRV, resting HR, wrist temperature), the night in numbers, and how confident the engine is |
+| Morning | Sleep score, three likely causes with evidence, a calendar-ready suggestion, recovery markers (resting HR, breathing rate, blood oxygen), the night in numbers, and how confident the engine is |
 | Replay | A 24-hour timeline: calendar events, where you were (Maps), minute heart rate against your personal norm, sleep; a live watch face while it plays |
 | Week | Ten-week score calendar, sleep score by meeting load, strongest pattern, top habits |
 | Habits | Every recurring pattern ranked by effect, with intervals, sample sizes and the adjusted (model) effect next to the simple comparison |
@@ -138,7 +138,7 @@ Regenerate them against a running instance with `STRESSLESS_EMAIL=… STRESSLESS
    effect for that factor, with a block-bootstrap interval and a confidence badge that depends on how
    many similar nights exist.
 5. **Evidence.** Each cause is backed by what the watch measured: heart rate above your evening norm
-   after a late meeting, HRV below baseline after a heavy day, bedtime later than usual after dinner.
+   after a late meeting, resting heart rate above baseline after a heavy day, bedtime later than usual after dinner.
 6. **Honesty.** When a night is worse than the calendar predicts, the report says so and names the
    things a calendar cannot see: alcohol, caffeine, screens, sleep debt, illness. The Lab shows how
    often those hidden factors occurred in the simulation and how often the engine flagged them.

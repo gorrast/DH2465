@@ -9,7 +9,7 @@ Same method as ``habits``: a with/without split stratified by weekend, a bootstr
 rule. What differs:
 
 * the split points are the person's own (their lowest or highest third of days), not population numbers;
-* each cause is tested against several outcomes (sleep score, time asleep, sleep onset, HRV, resting heart rate, or
+* each cause is tested against several outcomes (sleep score, time asleep, sleep onset, resting heart rate, breathing rate, or
   next-day steps and screen time), and the outcome is always measured *after* the cause;
 * an outcome reaches the report model in one of two tiers. ``strong``: the 95 % interval excludes zero, the effect
   is big enough to notice and the confidence is medium or high. ``hint``: only the 80 % interval excludes zero (a
@@ -119,10 +119,10 @@ OUTCOMES: Dict[str, OutcomeDef] = {o.key: o for o in (
     OutcomeDef("duration_min", "Time asleep", "min", "up", 10, "%s more sleep", "%s less sleep", _night("duration_min"), True),
     OutcomeDef("onset_min", "Sleep onset", "min", "down", 10, "falling asleep %s later", "falling asleep %s earlier",
                _night("onset_min"), True),
-    OutcomeDef("hrv_ms", "Overnight HRV", "%", "up", 3, "overnight HRV %s higher", "overnight HRV %s lower",
-               _night("hrv_ms"), True),
     OutcomeDef("resting_hr", "Resting heart rate", "bpm", "down", 1, "resting heart rate %s higher",
                "resting heart rate %s lower", _night("resting_hr"), True),
+    OutcomeDef("resp_rate", "Breathing rate", "br/min", "down", 0.5, "breathing rate %s higher",
+               "breathing rate %s lower", _night("resp_rate"), True),
     OutcomeDef("steps", "Steps", "steps", "up", 800, "%s more steps", "%s fewer steps", _steps, False, "activity"),
     OutcomeDef("screen_minutes", "Screen time", "min", "down", 15, "%s more screen time", "%s less screen time",
                _metric("screen.minutes"), False, "phone"),
@@ -131,7 +131,7 @@ OUTCOMES: Dict[str, OutcomeDef] = {o.key: o for o in (
     OutcomeDef("day_hr", "Daytime heart rate", "bpm", "down", 2, "daytime heart rate %s higher",
                "daytime heart rate %s lower", daytime_hr, False, "heart", True),
 )}
-NIGHT = ("score", "duration_min", "onset_min", "hrv_ms", "resting_hr")
+NIGHT = ("score", "duration_min", "onset_min", "resting_hr", "resp_rate")
 NIGHT_AND_DAY = NIGHT + ("day_hr",)
 
 
@@ -290,10 +290,10 @@ CAUSES: Tuple[CauseDef, ...] = (
              expected="hurt"),
     CauseDef("off_rhythm", "Off-rhythm bedtimes", _onset_offset, "high", _fixed(OFF_RHYTHM_MIN), "min",
              "nights you fell asleep %s or more away from your usual time", "On your %d %s",
-             ("score", "duration_min", "hrv_ms", "resting_hr"), source="sleep", expected="hurt"),
+             ("score", "duration_min", "resting_hr", "resp_rate"), source="sleep", expected="hurt"),
     CauseDef("sleep_debt", "Built-up sleep debt", _sleep_debt, "high", _fixed(SLEEP_DEBT_MIN), "min",
              "nights after 3 nights adding up to %s or more short of your sleep need", "On your %d %s",
-             ("hrv_ms", "resting_hr"), source="sleep", expected="hurt"),
+             ("resting_hr", "resp_rate"), source="sleep", expected="hurt"),
     CauseDef("short_night", "Short nights", _last_night, "low", _q(1 / 3), "min", "nights under %s of sleep",
              "On the days after your %d %s", ("steps", "screen_minutes", "pickups", "day_hr"), source="sleep"),
     CauseDef("alcohol", "Evenings with alcohol", _metric("intake.alcohol_units"), "high", _fixed(1.0), "units",
@@ -301,7 +301,7 @@ CAUSES: Tuple[CauseDef, ...] = (
              expected="hurt"),
     CauseDef("more_coffee", "More coffee than usual", _metric("intake.coffee_cups"), "high", _q(2 / 3, 1), "cups",
              "days with %s or more cups of coffee", "On the nights after your %d %s",
-             ("score", "duration_min", "onset_min", "hrv_ms", "day_hr"), CHECKIN_MIN_DAYS, source="check-in",
+             ("score", "duration_min", "onset_min", "resting_hr", "day_hr"), CHECKIN_MIN_DAYS, source="check-in",
              expected="hurt"),
 )
 CAUSES_BY_KEY = {c.key: c for c in CAUSES}
@@ -497,7 +497,7 @@ class OutcomeEffect:
     n_without: int
     mean_with: Optional[float]
     mean_without: Optional[float]
-    effect: Optional[float]                    # with - without, stratified (HRV in % of the without mean)
+    effect: Optional[float]                    # with - without, stratified
     ci_low: Optional[float]
     ci_high: Optional[float]
     confidence: str
@@ -612,6 +612,8 @@ def fmt(v: float, unit: str) -> str:
         return "%d%%" % round(v)
     if unit == "bpm":
         return ("%.1f" % v).rstrip("0").rstrip(".") + " bpm"
+    if unit == "br/min":
+        return ("%.1f" % v).rstrip("0").rstrip(".") + " breaths/min"
     if unit == "per hour":
         return ("%.1f" % v).rstrip("0").rstrip(".")
     return "%d" % round(v)
@@ -685,11 +687,6 @@ def _outcome_effect(ds: Dataset, od: OutcomeDef, active: Dict[date, bool], rng: 
     excludes = lo is not None and hi is not None and (lo > 0 or hi < 0)
     hint_excludes = hlo is not None and hhi is not None and (hlo > 0 or hhi < 0)
     strength = (min(abs(lo), abs(hi)) / sd) if excludes else (min(abs(hlo), abs(hhi)) / sd if hint_excludes else 0.0)
-    if od.unit == "%":                         # HRV: ms differ by device, so say it in % of the person's usual
-        if not mean_without:
-            return None
-        scale = 100.0 / mean_without
-        effect, lo, hi = effect * scale, (lo * scale if lo is not None else None), (hi * scale if hi is not None else None)
     conf = confidence_for(lo, hi, n_with, n_without)
     tier = None
     if abs(effect) >= od.min_effect:

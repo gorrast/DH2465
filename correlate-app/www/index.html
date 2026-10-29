@@ -121,10 +121,6 @@
   .axis { display: flex; justify-content: space-between; color: var(--dim); font-size: 0.7rem; margin-top: 4px; }
   svg.spark { width: 100%; height: 34px; display: block; }
   svg.spark polyline { fill: none; stroke: var(--err); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
-  svg.path { width: 100%; height: 180px; display: block; background: var(--panel-2); border-radius: 10px; }
-  svg.path polyline { fill: none; stroke: var(--blue); stroke-width: 1.5; opacity: 0.7; vector-effect: non-scaling-stroke; }
-  svg.path circle { fill: var(--blue); }
-  svg.path circle.latest { fill: var(--pulse); }
 
   /* agenda */
   .day-head { color: var(--dim); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; margin: 14px 0 6px; }
@@ -195,7 +191,7 @@
   <section class="card" id="account-card">
     <div class="card-head"><h2>Account &amp; sync</h2><span class="sub" id="last-sync"></span></div>
     <form class="signin" id="signin-form" hidden>
-      <div class="status" style="margin-bottom:4px">Sign in with your StressLess account to sync sleep, steps and screen time.</div>
+      <div class="status" style="margin-bottom:4px">Sign in with your StressLess account to sync sleep, heart rate, vitals, steps and screen time.</div>
       <input id="signin-email" type="email" autocomplete="username" placeholder="Email" required />
       <input id="signin-password" type="password" autocomplete="current-password" placeholder="Password" required />
       <button type="submit" id="btn-signin">Sign in</button>
@@ -204,7 +200,8 @@
       <div class="row"><span id="account-email"></span><button class="clear-btn" id="btn-signout">Sign out</button></div>
       <button id="btn-sync" style="width:100%;margin-top:8px">Sync</button>
       <div id="consent" hidden style="margin-top:12px">
-        <div class="status">StressLess stores your sleep, steps and app usage (which apps, and when) in your account to
+        <div class="status">StressLess stores your sleep, heart rate, resting heart rate, breathing rate, blood oxygen, steps and app usage
+          (which apps, and when) in your account to
           explain how your days affect your sleep. You can delete it with your account at any time.</div>
         <button id="btn-consent" style="width:100%">I agree, sync</button>
       </div>
@@ -219,17 +216,15 @@
       <button id="btn-calendar">Connect</button></div>
     <div class="row"><span><span class="dot off" id="dot-health"></span>Steps &amp; workouts</span>
       <button id="btn-health">Connect</button></div>
-    <div class="row"><span><span class="dot off" id="dot-sleep"></span>Sleep</span>
-      <button id="btn-sleep">Connect</button></div>
-    <div class="row"><span><span class="dot off" id="dot-location"></span>Background location</span>
-      <button id="btn-location">Connect</button></div>
+    <div class="row"><span><span class="dot off" id="dot-vitals"></span>Sleep &amp; vitals</span>
+      <button id="btn-vitals">Connect</button></div>
     <div class="row"><span><span class="dot off" id="dot-usagestats"></span>App usage</span>
       <button id="btn-usagestats">Connect</button></div>
   </section>
 
   <section class="card">
     <div class="card-head"><h2>Today</h2><span class="sub" id="today-date"></span></div>
-    <div id="today-body" class="empty">Connect calendar and location to see today's plan next to where you've actually been.</div>
+    <div id="today-body" class="empty">Connect your calendar to see today's plan.</div>
   </section>
 
   <section class="card">
@@ -241,11 +236,6 @@
       </div>
     </div>
     <div id="cal-body" class="empty">Connect your calendar to see events here.</div>
-  </section>
-
-  <section class="card">
-    <div class="card-head"><h2>Location</h2><span class="sub" id="loc-sub"></span></div>
-    <div id="loc-body" class="empty">Connect background location to see your movement here.</div>
   </section>
 
   <section class="card">
@@ -265,8 +255,8 @@
   </section>
 
   <section class="card">
-    <div class="card-head"><h2>Sleep</h2><span class="sub">last 30 days</span></div>
-    <div id="sleep-body" class="empty">Connect sleep to see your nights here.</div>
+    <div class="card-head"><h2>Sleep &amp; vitals</h2><span class="sub">last 30 days</span></div>
+    <div id="vitals-body" class="empty">Connect sleep &amp; vitals to see your nights, heart rate and vitals here.</div>
   </section>
 
   <section class="card">

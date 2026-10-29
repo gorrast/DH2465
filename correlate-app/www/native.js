@@ -1,6 +1,6 @@
 // native.js
 // Bridges the dashboard to native plugins (calendar, Health Connect / HealthKit,
-// background location) and renders everything as cards. Every native call is
+// app usage) and renders everything as cards. Every native call is
 // also written to the on-screen debug log at the bottom of the page.
 
 const BACKEND_URL = window.localStorage.getItem("BACKEND_URL") || "http://10.0.2.2:3000"; // 10.0.2.2 for Android Emulator, localhost:3000 for adb reverse
@@ -8,11 +8,14 @@ const BACKEND_URL = window.localStorage.getItem("BACKEND_URL") || "http://10.0.2
 // All fetched data lives here so renderers (and you, via the console) can reach it.
 const S = (window.__app = {
   events: [],
-  pings: [],
   steps: [], // [{ ms, value }] one per day
   workouts: [],
   sleep: [],
   sleepSessions: [], // full sessions with stages, normalised for POST /api/sync
+  heartRate: [], // Health Connect heart-rate records, averaged to one sample per minute, for POST /api/sync
+  vitals: { resting: [], spo2: [], resp: [] }, // point readings, for POST /api/sync
+  hcRead: null, // what the last Health Connect read returned, per record type
+  hcPermissions: {}, // API data type -> granted
   appUsage: [],
   usageDays: [],
   usageSelected: null,
@@ -202,38 +205,21 @@ function renderTiles() {
     tile("blue", S.events.length ? fmtNum(S.events.length) : "—", "calendar events") +
     tile("green", S.steps.length ? fmtNum(stepsTotal) : "—", "steps this year") +
     tile("violet", sleepHours.length ? (sleepHours.reduce((a, b) => a + b, 0) / sleepHours.length).toFixed(1) + " h" : "—", "avg sleep") +
-    tile("amber", S.pings.length ? fmtNum(S.pings.length) : "—", "location pings");
+    tile("amber", S.workouts.length ? fmtNum(S.workouts.length) : "—", "workouts");
 }
 
 function renderToday() {
   const today = startOfDay(Date.now());
   $("today-date").textContent = new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
   const evs = S.events.filter((e) => e.endDate > today && e.startDate < today + DAY);
-  const pings = S.pings.filter((p) => p.time >= today);
 
-  let html = "";
-  if (!S.events.length && !S.pings.length) {
-    $("today-body").innerHTML = `<div class="empty">Connect calendar and location to see today's plan next to where you've actually been.</div>`;
+  if (!S.events.length) {
+    $("today-body").innerHTML = `<div class="empty">Connect your calendar to see today's plan.</div>`;
     return;
   }
-  if (S.events.length) {
-    html += evs.length
-      ? evs.map(evRowHtml).join("")
-      : `<div class="empty">No events on your calendar today.</div>`;
-  }
-  if (S.pings.length) {
-    html += `<div class="day-head">Where you've been today</div>`;
-    if (pings.length) {
-      html += statHtml([
-        ["pings today", fmtNum(pings.length)],
-        ["first seen", fmtTime(pings[0].time)],
-        ["last seen", fmtTime(pings[pings.length - 1].time)],
-      ]);
-      html += `<div class="sub">Comparing positions to event locations needs geocoding, which is the next step.</div>`;
-    } else {
-      html += `<div class="empty">No location pings yet today.</div>`;
-    }
-  }
+  const html = evs.length
+    ? evs.map(evRowHtml).join("")
+    : `<div class="empty">No events on your calendar today.</div>`;
   $("today-body").innerHTML = html;
 }
 
@@ -310,51 +296,6 @@ function renderCalendar() {
     html;
 }
 
-function renderLocation() {
-  const pings = S.pings;
-  $("loc-sub").textContent = pings.length ? `${fmtNum(pings.length)} pings` : "";
-  if (!pings.length) {
-    $("loc-body").innerHTML = `<div class="empty">Connect background location to see your movement here. Pings arrive as you move.</div>`;
-    return;
-  }
-  const pts = pings.slice(-300);
-  const lat0 = pts.reduce((a, p) => a + p.lat, 0) / pts.length;
-  const kx = Math.cos((lat0 * Math.PI) / 180);
-  const xs = pts.map((p) => p.lon * kx), ys = pts.map((p) => p.lat);
-  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
-  const W = 300, H = 180, pad = 14;
-  const spanX = maxX - minX || 1e-5, spanY = maxY - minY || 1e-5;
-  const scale = Math.min((W - 2 * pad) / spanX, (H - 2 * pad) / spanY);
-  const ox = (W - spanX * scale) / 2, oy = (H - spanY * scale) / 2;
-  const px = (x) => (ox + (x - minX) * scale).toFixed(1);
-  const py = (y) => (H - (oy + (y - minY) * scale)).toFixed(1);
-  const line = pts.map((_, i) => `${px(xs[i])},${py(ys[i])}`).join(" ");
-  const lastIdx = pts.length - 1;
-  const svg =
-    `<svg class="path" viewBox="0 0 ${W} ${H}"><polyline points="${line}"/>` +
-    `<circle cx="${px(xs[0])}" cy="${py(ys[0])}" r="3"/>` +
-    `<circle class="latest" cx="${px(xs[lastIdx])}" cy="${py(ys[lastIdx])}" r="5"/></svg>`;
-
-  const last = pings[pings.length - 1];
-  const recent = pings.slice(-5).reverse();
-  $("loc-body").innerHTML =
-    svg +
-    `<div class="sub" style="margin:6px 0 10px">Your path (green = latest). Oldest of the last ${pts.length} pings to newest.</div>` +
-    statHtml([
-      ["latest", `${last.lat.toFixed(5)}, ${last.lon.toFixed(5)}`],
-      ["accuracy", last.accuracy != null ? `±${Math.round(last.accuracy)} m` : "—"],
-      ["at", fmtTime(last.time)],
-    ]) +
-    `<div class="day-head">Recent pings</div>` +
-    recent
-      .map(
-        (p) =>
-          `<div class="ev"><div class="t">${esc(fmtTime(p.time))}</div><div class="b"><div class="title">${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}</div>` +
-          `<div class="meta">${p.accuracy != null ? "±" + Math.round(p.accuracy) + " m" : ""}</div></div></div>`
-      )
-      .join("");
-}
-
 function renderSteps() {
   if (!S.steps.length) {
     $("steps-body").innerHTML = `<div class="empty">No step data loaded yet.</div>`;
@@ -424,43 +365,93 @@ function renderWorkouts() {
     .join("");
 }
 
-function renderSleep() {
-  if (!S.sleep.length) {
-    $("sleep-body").innerHTML = `<div class="empty">No sleep sessions found in the last 30 days (or none loaded yet).</div>`;
+function renderVitals() {
+  const body = $("vitals-body");
+  if (!S.hcRead) {
+    body.innerHTML = `<div class="empty">Connect sleep &amp; vitals to see your nights, heart rate and vitals here.</div>`;
     return;
   }
+  let html = `<div class="day-head">Read from Health Connect (last 30 days)</div>` + hcReadHtml();
+
+  // sleep
+  html += `<div class="day-head" style="margin-top:16px">Sleep</div>`;
   const nights = S.sleep;
-  const hours = nights.map((n) => n.hours);
-  const avg = hours.reduce((a, b) => a + b, 0) / hours.length;
-  const best = nights.reduce((b, n) => (n.hours > b.hours ? n : b), nights[0]);
-  $("sleep-body").innerHTML =
-    statHtml([
-      ["avg / night", `${avg.toFixed(1)} h`],
-      ["longest", `${best.hours.toFixed(1)} h`],
-      ["nights", String(nights.length)],
-    ]) +
-    barsSvg(hours, nights.map((n) => `${fmtDay(n.startMs)}: ${n.hours.toFixed(1)} h`), "violet") +
-    `<div class="axis"><span>${esc(fmtDay(nights[0].startMs))}</span><span>hours slept</span><span>${esc(fmtDay(nights[nights.length - 1].startMs))}</span></div>` +
-    `<div class="day-head" style="margin-top:16px">Latest nights</div>` +
-    nights
-      .slice(-7)
-      .reverse()
-      .map(
-        (n) =>
-          `<div class="ev"><div class="t">${esc(fmtDay(n.startMs))}</div><div class="b"><div class="title">${esc(fmtTime(n.startMs))} → ${esc(fmtTime(n.endMs))}</div>` +
-          `<div class="meta">${esc(fmtDur(n.endMs - n.startMs))}</div></div></div>`
-      )
-      .join("");
+  if (!nights.length) {
+    html += `<div class="empty">No sleep sessions found.</div>`;
+  } else {
+    const hours = nights.map((n) => n.hours);
+    const avg = hours.reduce((a, b) => a + b, 0) / hours.length;
+    const best = nights.reduce((b, n) => (n.hours > b.hours ? n : b), nights[0]);
+    html +=
+      statHtml([
+        ["avg / night", `${avg.toFixed(1)} h`],
+        ["longest", `${best.hours.toFixed(1)} h`],
+        ["nights", String(nights.length)],
+      ]) +
+      barsSvg(hours, nights.map((n) => `${fmtDay(n.startMs)}: ${n.hours.toFixed(1)} h`), "violet") +
+      `<div class="axis"><span>${esc(fmtDay(nights[0].startMs))}</span><span>hours slept</span><span>${esc(fmtDay(nights[nights.length - 1].startMs))}</span></div>`;
+  }
+
+  // heart rate: the latest day with readings, minute by minute
+  html += `<div class="day-head" style="margin-top:16px">Heart rate</div>`;
+  const samples = S.heartRate.flatMap((r) => r.samples);
+  if (!samples.length) {
+    html += `<div class="empty">No heart rate found. Your watch app has to share heart rate with Health Connect.</div>`;
+  } else {
+    const days = new Set(samples.map((x) => dayKey(x.t)));
+    const lastDay = [...days].sort().pop();
+    const today = samples.filter((x) => dayKey(x.t) === lastDay).sort((a, b) => a.t - b.t);
+    const bpm = today.map((x) => x.bpm);
+    const latest = today[today.length - 1];
+    html +=
+      statHtml([
+        ["minutes", fmtNum(samples.length)],
+        ["days", String(days.size)],
+        ["latest", `${latest.bpm} bpm`],
+      ]) +
+      sparkSvg(bpm) +
+      `<div class="axis"><span>${esc(fmtTime(today[0].t))}</span><span>${esc(fmtDay(today[0].t))}: ${Math.min(...bpm)}–${Math.max(...bpm)} bpm</span><span>${esc(fmtTime(latest.t))}</span></div>`;
+  }
+
+  // vitals: the latest reading of each, then the most recent readings
+  html += `<div class="day-head" style="margin-top:16px">Vitals</div>`;
+  const kinds = [
+    ["resting", "resting HR", "bpm", (v) => `${Math.round(v.bpm)} bpm`],
+    ["resp", "breathing", "rate", (v) => `${v.rate.toFixed(1)} /min`],
+    ["spo2", "blood oxygen", "percent", (v) => `${v.percent.toFixed(1)} %`],
+  ];
+  const latestOf = (k) => S.vitals[k][S.vitals[k].length - 1];
+  html += statHtml(kinds.map(([k, label, , show]) => [label, latestOf(k) ? show(latestOf(k)) : "—"]));
+  const recent = kinds
+    .flatMap(([k, label, , show]) => S.vitals[k].map((v) => ({ ms: toMs(v.time), label, text: show(v) })))
+    .sort((a, b) => b.ms - a.ms)
+    .slice(0, 8);
+  html += recent.length
+    ? recent
+        .map((r) => `<div class="ev"><div class="t">${esc(fmtDay(r.ms))}</div><div class="b"><div class="title">${esc(r.text)}</div><div class="meta">${esc(r.label)} · ${esc(fmtTime(r.ms))}</div></div></div>`)
+        .join("")
+    : `<div class="empty">No resting heart rate, breathing rate or blood oxygen found.</div>`;
+  body.innerHTML = html;
+}
+
+// One line per record type: how many came back, or why none did
+function hcReadHtml() {
+  return Object.entries(S.hcRead)
+    .map(([type, r]) => {
+      const state = r.error ? "err" : r.allowed === false ? "off" : "on";
+      const text = r.error ? "read failed" : r.allowed === false ? "not allowed" : `${fmtNum(r.count)} ${r.unit}`;
+      return `<div class="row"><span><span class="dot ${state}"></span>${esc(HC_LABELS[type])}</span><span class="sub">${esc(text)}</span></div>`;
+    })
+    .join("");
 }
 
 function renderAll() {
   renderTiles();
   renderToday();
   renderCalendar();
-  renderLocation();
   renderSteps();
   renderWorkouts();
-  renderSleep();
+  renderVitals();
   renderAppUsage();
 }
 
@@ -624,7 +615,7 @@ async function connectHealth() {
     }
 
     // capacitor-health has no sleep support and no standalone heart rate;
-    // heart rate only comes inside workout records. Sleep is read in connectSleep().
+    // heart rate only comes inside workout records. Sleep and all-day heart rate are read in connectVitals().
     const permResult = await Health.requestHealthPermissions({
       permissions: ["READ_STEPS", "READ_HEART_RATE", "READ_WORKOUTS"],
     });
@@ -688,75 +679,27 @@ async function connectHealth() {
   }
 }
 
-// --- Background location -------------------------------------------------------
-let pingCount = 0;
-let renderQueued = false;
-function queueRender() {
-  if (renderQueued) return;
-  renderQueued = true;
-  requestAnimationFrame(() => {
-    renderQueued = false;
-    renderTiles();
-    renderToday();
-    renderLocation();
-  });
-}
+// --- Sleep & vitals (Health Connect) ------------------------------------------------
+// Android -> capacitor-health-connect: sleep sessions with stages, heart rate, resting heart rate, blood oxygen and
+// breathing rate. Each type is asked for and read on its own, so one refused permission does not hide the rest.
+// iOS is out of scope for the MVP.
+const HC_TYPES = {
+  // plugin record type: [Health Connect permission, data type the API stores it under, unit shown in the app]
+  SleepSession: ["READ_SLEEP", "sleep_session", "sessions"],
+  HeartRateSeries: ["READ_HEART_RATE", "heart_rate", "minutes"],
+  RestingHeartRate: ["READ_RESTING_HEART_RATE", "resting_heart_rate", "readings"],
+  RespiratoryRate: ["READ_RESPIRATORY_RATE", "respiratory_rate", "readings"],
+  OxygenSaturation: ["READ_OXYGEN_SATURATION", "oxygen_saturation", "readings"],
+};
+const HC_LABELS = {
+  SleepSession: "Sleep",
+  HeartRateSeries: "Heart rate",
+  RestingHeartRate: "Resting heart rate",
+  RespiratoryRate: "Breathing rate",
+  OxygenSaturation: "Blood oxygen",
+};
+const HC_MAX_RECORDS = 50000;
 
-async function connectLocation() {
-  if (!window.Capacitor?.isNativePlatform()) {
-    log("Location: not running as a native app (browser tab)", undefined, "error");
-    return;
-  }
-  const BackgroundGeolocation = window.Capacitor.Plugins?.BackgroundGeolocation;
-  if (!BackgroundGeolocation) {
-    log("Background location plugin not found on window.Capacitor.Plugins", "Registered plugin names: " + registeredNames().join(", "), "error");
-    dot("dot-location", "err");
-    return;
-  }
-
-  try {
-    const watcherId = await BackgroundGeolocation.addWatcher(
-      {
-        backgroundMessage: "Correlate is checking your location against your calendar.",
-        backgroundTitle: "Correlate running",
-        requestPermissions: true,
-        distanceFilter: 10, // metres; lowered for testing so pings arrive faster
-      },
-      (location, error) => {
-        if (error) {
-          log("Location watcher error", String(error), "error");
-          return;
-        }
-        pingCount += 1;
-        S.pings.push({
-          lat: location.latitude,
-          lon: location.longitude,
-          accuracy: location.accuracy,
-          time: location.time || Date.now(),
-        });
-        if (S.pings.length > 2000) S.pings.splice(0, S.pings.length - 2000);
-        log(`Location ping #${pingCount}`, {
-          lat: location.latitude,
-          lon: location.longitude,
-          accuracy: location.accuracy,
-          time: new Date(location.time).toLocaleTimeString(),
-        });
-        queueRender();
-        postToBackend("/location/ping", { lat: location.latitude, lon: location.longitude, timestamp: location.time });
-      }
-    );
-
-    log("Location watcher started", { watcherId });
-    dot("dot-location", "on");
-    window.__watcherId = watcherId;
-  } catch (err) {
-    log("Location setup threw an error", String(err), "error");
-    dot("dot-location", "err");
-  }
-}
-
-// --- Sleep (separate plugin per platform) --------------------------------------
-// Android -> capacitor-health-connect (raw SleepSessionRecord). iOS is out of scope for the MVP.
 const sleepArray = (res) => res?.records || res?.resultData || res?.result || res?.data || (Array.isArray(res) ? res : []);
 const isoOrNull = (v) => {
   const ms = toMs(v);
@@ -801,48 +744,135 @@ function parseSleep(res) {
     .sort((a, b) => a.startMs - b.startMs);
 }
 
-async function connectSleep() {
+// Every page of one record type in [start, end]
+async function readAllRecords(HealthConnect, type, start, end) {
+  const records = [];
+  let pageToken;
+  do {
+    const res = await HealthConnect.readRecords({
+      type,
+      timeRangeFilter: { type: "between", startTime: start, endTime: end },
+      pageSize: 1000,
+      ...(pageToken ? { pageToken } : {}),
+    });
+    records.push(...sleepArray(res));
+    pageToken = res?.pageToken || undefined;
+  } while (pageToken && records.length < HC_MAX_RECORDS);
+  return records;
+}
+
+const recordMeta = (r, ms, prefix) => ({
+  id: r.metadata?.id || `${prefix}:${ms}`,
+  tzOffsetMin: offsetMin(r.startZoneOffset ?? r.zoneOffset, ms),
+  source: r.metadata?.dataOrigin || null,
+  modifiedAt: isoOrNull(r.metadata?.lastModifiedTime),
+});
+
+// HeartRateRecord: a span with samples inside, averaged here to one sample per minute to keep the upload small
+function heartRateRecords(records) {
+  return records
+    .map((r) => {
+      const startMs = toMs(r.startTime), endMs = toMs(r.endTime);
+      if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return null;
+      const perMinute = new Map();
+      for (const x of r.samples || []) {
+        const t = toMs(x.time), bpm = Number(x.beatsPerMinute);
+        if (!Number.isFinite(t) || !Number.isFinite(bpm)) continue;
+        const m = Math.floor(t / 60000);
+        const acc = perMinute.get(m) || [0, 0];
+        acc[0] += bpm;
+        acc[1] += 1;
+        perMinute.set(m, acc);
+      }
+      const samples = [...perMinute.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .map(([m, [sum, n]]) => ({ t: m * 60000, bpm: Math.round(sum / n) }));
+      return { ...recordMeta(r, startMs, "hr"), start: new Date(startMs).toISOString(), end: new Date(endMs).toISOString(), samples };
+    })
+    .filter(Boolean);
+}
+
+// Resting heart rate, blood oxygen, breathing rate: one reading at a point in time
+function pointRecords(records, prefix, field, valueOf) {
+  return records
+    .map((r) => {
+      const ms = toMs(r.time), value = Number(valueOf(r));
+      if (!Number.isFinite(ms) || !Number.isFinite(value)) return null;
+      return { ...recordMeta(r, ms, prefix), time: new Date(ms).toISOString(), [field]: value };
+    })
+    .filter(Boolean)
+    .sort((a, b) => toMs(a.time) - toMs(b.time));
+}
+
+async function connectVitals() {
   if (!window.Capacitor?.isNativePlatform()) {
-    log("Sleep: not running as a native app (browser tab)", undefined, "error");
+    log("Sleep & vitals: not running as a native app (browser tab)", undefined, "error");
     return;
   }
-
   const platform = window.Capacitor.getPlatform();
+  if (platform !== "android") {
+    log("Sleep & vitals: unsupported platform", platform, "error");
+    return;
+  }
+  const HealthConnect = findPlugin(["HealthConnect", "CapacitorHealthConnect", "HealthConnectPlugin"]);
+  if (!HealthConnect) {
+    log("capacitor-health-connect plugin not found", "Registered plugin names: " + registeredNames().join(", "), "error");
+    dot("dot-vitals", "err");
+    return;
+  }
   const end = new Date();
   const start = new Date(end.getTime() - 30 * DAY);
-
-  if (platform === "android") {
-    const HealthConnect = findPlugin(["HealthConnect", "CapacitorHealthConnect", "HealthConnectPlugin"]);
-    if (!HealthConnect) {
-      log("capacitor-health-connect plugin not found", "Registered plugin names: " + registeredNames().join(", "), "error");
-      dot("dot-sleep", "err");
-      return;
-    }
+  try {
+    const availability = await HealthConnect.checkAvailability();
+    log("Health Connect availability", availability);
+    const types = Object.keys(HC_TYPES);
     try {
-      const availability = await HealthConnect.checkAvailability();
-      log("Health Connect availability", availability);
-
-      await HealthConnect.requestHealthPermissions({
-        read: ["SleepSession"], // confirm this literal against the plugin's typings
-        write: [],
-      });
-
-      const res = await HealthConnect.readRecords({
-        type: "SleepSession", // confirm this literal against the plugin's typings
-        timeRangeFilter: { type: "between", startTime: start, endTime: end },
-      });
-      log("Sleep records (raw response)", res);
-      S.sleep = parseSleep(res);
-      S.sleepSessions = sleepSessionsAndroid(res);
-      log(`Sleep: ${S.sleep.length} sessions parsed`);
-      dot("dot-sleep", "on");
-      renderAll();
+      await HealthConnect.requestHealthPermissions({ read: types, write: [] });
     } catch (err) {
-      log("Sleep (Android) call threw an error", String(err), "error");
-      dot("dot-sleep", "err");
+      log("Health Connect permission dialog", String(err), "error");
     }
-  } else {
-    log("Sleep: unsupported platform", platform, "error");
+    // ask again what is granted: a dismissed dialog reports nothing, even for permissions given earlier
+    const perm = await HealthConnect.checkHealthPermissions({ read: types, write: [] });
+    log("Health Connect permissions", perm);
+    const granted = new Set((perm?.grantedPermissions || []).map((p) => String(p).split(".").pop()));
+
+    const read = {};
+    const raw = {};
+    for (const type of types) {
+      const [permission, dataType, unit] = HC_TYPES[type];
+      const allowed = granted.has(permission);
+      S.hcPermissions[dataType] = allowed;
+      if (!allowed) {
+        read[type] = { allowed: false, count: 0, unit };
+        continue;
+      }
+      try {
+        raw[type] = await readAllRecords(HealthConnect, type, start, end);
+        read[type] = { allowed: true, count: raw[type].length, unit };
+        log(`${HC_LABELS[type]}: ${raw[type].length} records`, raw[type].slice(0, 3));
+      } catch (err) {
+        read[type] = { allowed: true, count: 0, unit, error: String(err) };
+        log(`${HC_LABELS[type]}: read failed`, String(err), "error");
+      }
+    }
+
+    const sleep = { records: raw.SleepSession || [] };
+    S.sleep = parseSleep(sleep);
+    S.sleepSessions = sleepSessionsAndroid(sleep);
+    S.heartRate = heartRateRecords(raw.HeartRateSeries || []);
+    S.vitals = {
+      resting: pointRecords(raw.RestingHeartRate || [], "rhr", "bpm", (r) => r.beatsPerMinute),
+      resp: pointRecords(raw.RespiratoryRate || [], "resp", "rate", (r) => r.rate),
+      spo2: pointRecords(raw.OxygenSaturation || [], "spo2", "percent", (r) => r.percentage?.value),
+    };
+    if (read.HeartRateSeries.allowed) read.HeartRateSeries.count = S.heartRate.reduce((n, r) => n + r.samples.length, 0);
+    S.hcRead = read;
+    const failed = Object.values(read).some((r) => r.error);
+    dot("dot-vitals", failed ? "err" : granted.size ? "on" : "off");
+    renderAll();
+  } catch (err) {
+    log("Sleep & vitals call threw an error", String(err), "error");
+    dot("dot-vitals", "err");
   }
 }
 
@@ -1040,8 +1070,12 @@ function syncPayload(usage) {
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       tzOffsetMin: -new Date().getTimezoneOffset(),
     },
-    permissions: { app_usage: Boolean(usage) },
+    permissions: { app_usage: Boolean(usage), ...S.hcPermissions },
     sleep: S.sleepSessions,
+    heartRate: S.heartRate,
+    restingHeartRate: S.vitals.resting,
+    oxygenSaturation: S.vitals.spo2,
+    respiratoryRate: S.vitals.resp,
     steps: S.steps.map((s) => ({ date: dayKey(s.ms), steps: Math.round(s.value) })),
     screenTime: usage
       ? {
@@ -1062,8 +1096,8 @@ async function syncToBackend() {
   try {
     if (!API_URL || API_URL.includes("your-app")) throw new Error("API_URL is not set in www/config.js");
     if (window.Capacitor?.isNativePlatform()) {
-      syncStatus("Reading sleep, steps and screen time from the phone…");
-      await connectSleep();
+      syncStatus("Reading sleep, heart rate, vitals, steps and screen time from the phone…");
+      await connectVitals();
       await connectHealth();
       await connectUsageStats();
     }
@@ -1074,8 +1108,9 @@ async function syncToBackend() {
       log("Usage sessions failed", String(err), "error");
     }
     const payload = syncPayload(usage);
-    if (!payload.sleep.length && !payload.steps.length && !payload.screenTime?.sessions.length) {
-      syncStatus("Nothing to sync yet: no sleep, steps or screen time could be read (check permissions above).", "err");
+    const vitalsCount = payload.restingHeartRate.length + payload.oxygenSaturation.length + payload.respiratoryRate.length;
+    if (!payload.sleep.length && !payload.heartRate.length && !vitalsCount && !payload.steps.length && !payload.screenTime?.sessions.length) {
+      syncStatus("Nothing to sync yet: no sleep, heart rate, vitals, steps or screen time could be read (check permissions above).", "err");
       return;
     }
 
@@ -1106,7 +1141,9 @@ async function syncToBackend() {
     const n = data.stored;
     const lastNight = data.nights?.[data.nights.length - 1];
     syncStatus(
-      `Synced ${n.nights} nights, ${n.step_days} days of steps, ${n.screen_sessions} app sessions (${n.screen_days} days).` +
+      `Synced ${n.nights} nights (${n.nights_with_vitals} with vitals), ${n.heart_rate_days} days of heart rate ` +
+        `(${fmtNum(n.heart_rate_samples)} minutes), ${n.resting_hr} resting HR, ${n.resp_rate} breathing rate and ${n.spo2} blood oxygen readings, ` +
+        `${n.step_days} days of steps, ${n.screen_sessions} app sessions (${n.screen_days} days).` +
         (lastNight ? ` Sleep score ${lastNight.night}: ${lastNight.score} (${lastNight.rating}).` : ""),
       "ok"
     );
@@ -1141,8 +1178,7 @@ renderAccount();
 
 $("btn-calendar")?.addEventListener("click", connectCalendar);
 $("btn-health")?.addEventListener("click", connectHealth);
-$("btn-sleep")?.addEventListener("click", connectSleep);
-$("btn-location")?.addEventListener("click", connectLocation);
+$("btn-vitals")?.addEventListener("click", connectVitals);
 $("btn-usagestats")?.addEventListener("click", connectUsageStats);
 
 renderAll();

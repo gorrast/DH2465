@@ -2,7 +2,7 @@
   "name": "correlate-app",
   "version": "0.1.0",
   "private": true,
-  "description": "Calendar + health + location correlation MVP (web dashboard + Capacitor native shell)",
+  "description": "Calendar + health correlation MVP (web dashboard + Capacitor native shell)",
   "scripts": {
     "sync": "npx cap sync",
     "android:open": "npx cap open android",
@@ -10,7 +10,6 @@
     "server": "node server/index.js"
   },
   "dependencies": {
-    "@capacitor-community/background-geolocation": "^1.2.26",
     "@capacitor/android": "^8.0.0",
     "@capacitor/app": "^8.0.0",
     "@capacitor/core": "^8.0.0",

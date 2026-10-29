@@ -37,8 +37,8 @@ class MemoryStore(UserStore):
     def answers(self) -> Dict[str, Dict[str, Any]]:
         return {k: dict(v) for k, v in self._answers.items()}
 
-    def save_answer(self, check_id: str, answer: str, event_id: Optional[str], visit_id: Optional[str]) -> None:
-        self._answers[check_id] = {"answer": answer, "event_id": event_id, "visit_id": visit_id, "ts": _now()}
+    def save_answer(self, check_id: str, answer: str, event_id: Optional[str]) -> None:
+        self._answers[check_id] = {"answer": answer, "event_id": event_id, "ts": _now()}
 
     def user_events(self) -> List[CalendarEvent]:
         return [copy.deepcopy(e) for e in self._events.values()]

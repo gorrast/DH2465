@@ -31,8 +31,8 @@ def rows_from(ds):
                "out_of_bed_at": _iso(n.out_of_bed), "asleep_min": n.duration_min, "deep_min": n.deep_min,
                "rem_min": n.rem_min, "core_min": n.core_min, "awake_min": n.awake_min, "interruptions": n.interruptions,
                "has_stages": bool(n.stages), "stages": [{"kind": s.kind, "start": _iso(s.start), "end": _iso(s.end)} for s in n.stages],
-               "hrv_rmssd_ms": n.hrv_ms, "hrv_sdnn_ms": None, "resting_hr": n.resting_hr, "resp_rate": n.resp_rate,
-               "spo2": n.spo2, "skin_temp_dev": n.wrist_temp_dev, "score": n.score, "score_parts": n.score_parts,
+               "resting_hr": n.resting_hr, "resp_rate": n.resp_rate,
+               "spo2": n.spo2, "score": n.score, "score_parts": n.score_parts,
                "score_source": "stressless", "algorithm_version": "v1"}
               for n in ds.nights if n.worn]
     hr = [{"day": h.date.isoformat(), "source": "health_connect", "utc_offset_min": 120, "bpm": h.bpm,
@@ -135,14 +135,11 @@ class LoaderTests(unittest.TestCase):
         self.assertEqual(ds.unlocks_on(y), [local])                                           # local time, unlocks only
         self.assertEqual(ds.unlocks_on(ANCHOR), [])
 
-    def test_uncategorized_events_are_classified_and_hrv_measure_is_not_mixed(self):
+    def test_uncategorized_events_are_classified(self):
         store = real_store()
         store.tables["calendar_events"][0]["category"] = "uncategorized"
-        for r in store.tables["sleep_nights"][:3]:                   # a few SDNN nights in an RMSSD history
-            r["hrv_sdnn_ms"], r["hrv_rmssd_ms"] = 99.0, None
         ds = load_dataset(store, ANCHOR)
         self.assertNotEqual(ds.events[0].type, "uncategorized")
-        self.assertNotIn(99.0, [n.hrv_ms for n in ds.nights])
 
     def test_readiness_comes_from_the_sync_tables(self):
         sources = real_sources(real_store(), self.ds, ANCHOR)

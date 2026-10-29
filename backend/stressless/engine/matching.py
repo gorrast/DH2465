@@ -6,7 +6,7 @@ import statistics
 from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from ..models import CalendarEvent, Dataset, LocationVisit, SleepNight
+from ..models import CalendarEvent, Dataset, SleepNight
 from ..timeutil import at, day_range, overlap_minutes
 from .features import day_features
 
@@ -167,21 +167,6 @@ def workout_signature(ds: Dataset, start: datetime, end: datetime) -> Dict[str, 
     vals = [v for v in hr if v is not None]
     return {"minutes_over_120": sum(1 for v in vals if v > 120), "mean": (round(sum(vals) / len(vals), 1) if vals else None),
             "max": (max(vals) if vals else None), "min": (min(vals) if vals else None), "n_samples": len(vals)}
-
-
-def visits_during(ds: Dataset, start: datetime, end: datetime) -> List[Tuple[LocationVisit, int]]:
-    out = []
-    seen = set()
-    for d in day_range(start.date(), end.date()):
-        for v in ds.visits_on(d):
-            if v.id in seen:
-                continue
-            seen.add(v.id)
-            ov = overlap_minutes(v.start, v.end, start, end)
-            if ov > 0:
-                out.append((v, ov))
-    out.sort(key=lambda t: -t[1])
-    return out
 
 
 def night_hr_series(ds: Dataset, night: Optional[SleepNight]) -> List[Optional[float]]:

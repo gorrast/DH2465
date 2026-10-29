@@ -9,14 +9,12 @@ from typing import Dict, List, Optional, Tuple
 from ..models import Dataset, RecoveryMetric, SleepNight
 from ..timeutil import at
 
-METRIC_KEYS = ("score", "hrv_ms", "resting_hr", "resp_rate", "wrist_temp_dev", "spo2", "duration_min",
+METRIC_KEYS = ("score", "resting_hr", "resp_rate", "spo2", "duration_min",
                "interruptions", "awake_min", "bedtime_min", "onset_min", "wake_min")
 
 RECOVERY_DEFS = (
-    ("hrv_ms", "Overnight HRV", "ms", "up"),
     ("resting_hr", "Resting heart rate", "bpm", "down"),
-    ("wrist_temp_dev", "Wrist temperature", "°C", "zero"),
-    ("resp_rate", "Respiratory rate", "br/min", "zero"),
+    ("resp_rate", "Breathing rate", "br/min", "zero"),
     ("spo2", "Blood oxygen", "%", "up"),
 )
 
@@ -127,8 +125,6 @@ def recovery_metrics(ds: Dataset, night_date: date, window: int = 28) -> List[Re
         med = base["median"]
         delta = _finite(value - med) if (value is not None and med is not None) else None
         delta_pct = _finite(delta / med * 100.0) if (delta is not None and med not in (None, 0)) else None
-        if key == "wrist_temp_dev":
-            delta_pct = None
         series: List[Optional[float]] = []
         for k in range(13, -1, -1):
             d = night_date - timedelta(days=k)

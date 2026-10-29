@@ -15,7 +15,7 @@ import { RealityView } from './Reality';
 import { DailyGenerationForm, useDailyWrittenReport } from './DailyWrittenReport';
 import { DateNav, Skeleton, useLoad } from './common';
 
-const MARKERS = ['hrv_ms', 'resting_hr', 'wrist_temp_dev'];
+const MARKERS = ['resting_hr', 'resp_rate', 'spo2'];
 
 function DailyReportPrompt({ paused, controller }: { paused: boolean; controller: ReturnType<typeof useDailyWrittenReport> }) {
   const [checkinOpen, setCheckinOpen] = useState(false);
@@ -206,8 +206,8 @@ function MorningReport({ report, day, veiled, onReveal, motionPaused, onToggleMo
       <header className="ah-section-heading"><div><span className="ah-eyebrow">Follow the rhythm</span><RevealHeading paused={motionPaused}>A day. A body. A connection.</RevealHeading></div></header>
       <div className="ah-timeline-frame" data-tour="timeline">
         <div className="ah-trace-header"><span><i className="ah-live-dot" />{fmt.day(report.night_date)}<span className="ah-trace-subtitle">Calendar meets body</span></span><span className="ah-trace-legend"><i />Heart rate <b />Your usual</span></div>
-        <div className="ah-timeline-scroll"><DayTimeline className="ah-timeline" date={day.date} events={day.events} visits={day.visits} hr={day.hr} norm={day.norm} night={day.night} nightPrev={day.night_prev} workouts={day.workouts} checks={day.checks} cursorMinute={cursor} highlightRange={rangeStart == null ? undefined : [rangeStart, Math.min(1440, rangeStart + (chosenEvidence.series?.length || 0) * (chosenEvidence.series_step_min || 5))]} onSeek={setCursor} /></div>
-        <div className="ah-inspection"><div><strong>{minuteLabel(cursor)}</strong><span>{info?.event?.title || info?.place?.place_name || 'A moment in your day'}</span></div><p><strong>{fmt.num(info?.hr, 0)} <small>bpm</small></strong><span>{info?.norm == null ? 'No personal baseline' : `Your usual ${fmt.num(info.norm, 0)} bpm`}</span></p></div>
+        <div className="ah-timeline-scroll"><DayTimeline className="ah-timeline" date={day.date} events={day.events} hr={day.hr} norm={day.norm} night={day.night} nightPrev={day.night_prev} workouts={day.workouts} checks={day.checks} cursorMinute={cursor} highlightRange={rangeStart == null ? undefined : [rangeStart, Math.min(1440, rangeStart + (chosenEvidence.series?.length || 0) * (chosenEvidence.series_step_min || 5))]} onSeek={setCursor} /></div>
+        <div className="ah-inspection"><div><strong>{minuteLabel(cursor)}</strong><span>{info?.event?.title || 'A moment in your day'}</span></div><p><strong>{fmt.num(info?.hr, 0)} <small>bpm</small></strong><span>{info?.norm == null ? 'No personal baseline' : `Your usual ${fmt.num(info.norm, 0)} bpm`}</span></p></div>
         <label className="ah-scrubber"><span className="sr-only">Inspect time of day</span><input type="range" min={0} max={1439} value={cursor} aria-valuetext={`${minuteLabel(cursor)}, ${info?.hr == null ? 'heart rate unavailable' : info.hr + ' beats per minute'}, ${info?.event?.title || 'no calendar event'}`} onChange={(e) => setCursor(+e.target.value)} /></label>
         <p className="ah-chart-note">Select an event or move through the day. The dotted line is your personal baseline; the shaded area shows readings above it.</p>
       </div>
@@ -221,8 +221,8 @@ function MorningReport({ report, day, veiled, onReveal, motionPaused, onToggleMo
 
 function Metric({ marker: m, paused = false }: { marker: any; paused?: boolean }) {
   const reduced = useReducedMotion();
-  const value = m.key === 'wrist_temp_dev' ? fmt.signed(m.value, 1) : fmt.num(m.value, m.key === 'resp_rate' || m.key === 'spo2' ? 1 : 0);
-  return <motion.article className="ah-metric" variants={quietItem} transition={{ ...calmTransition, duration: reduced || paused ? 0 : 0.65 }}><span className="ah-eyebrow">{m.label}</span><p className="ah-metric-value">{value}<span>{m.unit}</span></p><p>{m.delta == null ? 'Building your baseline' : m.key === 'hrv_ms' && m.delta_pct != null ? fmt.pct(m.delta_pct) + ' vs your usual' : fmt.signed(m.delta, 1) + ' ' + m.unit + ' vs your usual'}</p><span className="ah-marker-status">{m.status}</span></motion.article>;
+  const value = fmt.num(m.value, m.key === 'resp_rate' || m.key === 'spo2' ? 1 : 0);
+  return <motion.article className="ah-metric" variants={quietItem} transition={{ ...calmTransition, duration: reduced || paused ? 0 : 0.65 }}><span className="ah-eyebrow">{m.label}</span><p className="ah-metric-value">{value}<span>{m.unit}</span></p><p>{m.delta == null ? 'Building your baseline' : fmt.signed(m.delta, 1) + ' ' + m.unit + ' vs your usual'}</p><span className="ah-marker-status">{m.status}</span></motion.article>;
 }
 
 export function MorningView({ date, reveal }: { date?: string; reveal?: boolean }) {

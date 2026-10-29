@@ -174,10 +174,12 @@ export function HabitsView() {
                         {"n = " + h.n_with + " vs " + h.n_without + " nights"}
                       </span>
                       {h.metric_effects &&
-                      h.metric_effects.hrv_ms_pct !== null &&
-                      h.metric_effects.hrv_ms_pct !== undefined ? (
+                      h.metric_effects.resp_rate !== null &&
+                      h.metric_effects.resp_rate !== undefined ? (
                         <span>
-                          {"HRV " + fmt.pct(h.metric_effects.hrv_ms_pct, 0)}
+                          {"Breathing " +
+                            fmt.signed(h.metric_effects.resp_rate, 1) +
+                            " /min"}
                         </span>
                       ) : null}
                       {h.metric_effects &&

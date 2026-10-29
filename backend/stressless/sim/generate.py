@@ -390,8 +390,8 @@ def generate_dataset(persona_key: str = "alex", seed: int = 7, days: int = 70, a
         in_last7 = (end - d).days < 7
         if showcase and d == end:
             # the hero night: fixed, modest noise so the story lands regardless of seed
-            noise.update({"bed": 0.2, "onset": 0.3, "wake": 0.0, "awake": 0.0, "hrv_ln": -0.3, "rhr": 0.4, "resp": 0.0,
-                          "temp": 0.0, "spo2": 0.0, "life": 0.3, "jitter": 0.0, "interrupt_u": 0.42, "gap_u": 1.0})
+            noise.update({"bed": 0.2, "onset": 0.3, "wake": 0.0, "awake": 0.0, "rhr": 0.4, "resp": 0.0,
+                          "spo2": 0.0, "life": 0.3, "jitter": 0.0, "interrupt_u": 0.42, "gap_u": 1.0})
         if showcase and in_last7:
             unworn = False
         elif showcase and d == forced["unworn_night"]:
@@ -417,10 +417,12 @@ def generate_dataset(persona_key: str = "alex", seed: int = 7, days: int = 70, a
     summary["unworn_social_nights"] = sum(1 for n, tn in zip(nights, truth_nights) if not n.worn and tn.regressors.get("evening_social"))
     summary["skipped_gym_day"] = forced["skipped_gym_day"].isoformat() if forced.get("skipped_gym_day") else None
     summary["unbooked_gym_day"] = forced["unbooked_gym_day"].isoformat() if forced.get("unbooked_gym_day") else None
-    truth = SimTruth(nights=truth_nights, events=truth_events, unbooked=unbooked_ids, effect_table=total,
+    # visits stay inside the simulator; the truth keeps only when the unbooked gym sessions happened
+    unbooked_gym = ["%s/%s" % (v.start.isoformat(), v.end.isoformat()) for v in visits if v.id in set(unbooked_ids) and v.place_type == "gym"]
+    truth = SimTruth(nights=truth_nights, events=truth_events, unbooked=unbooked_gym, effect_table=total,
                      effect_table_direct=direct, effect_table_design={k: float(persona.sensitivities.get(k, 0.0)) for k in CALENDAR_KEYS},
                      hidden_summary=summary)
-    ds = Dataset(persona=persona, seed=seed, source="demo", start=start, end=end, today=today, events=events, visits=visits,
+    ds = Dataset(persona=persona, seed=seed, source="demo", start=start, end=end, today=today, events=events,
                  hr_days=hr_days, nights=nights, activity=activity, truth=truth, generated_at=datetime.now(tz(persona.tz)),
                  showcase=showcase)
     return ds

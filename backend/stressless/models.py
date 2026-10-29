@@ -20,8 +20,6 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from .timeutil import DEFAULT_TZ, parse_date, parse_dt
 
 EVENT_TYPES = ("meeting", "focus", "workout", "social", "travel", "personal", "protected")
-PLACE_TYPES = ("home", "office", "gym", "restaurant", "bar", "transit", "airport",
-               "hotel", "away", "outdoors", "other")
 WORKOUT_SLOTS = ("none", "morning", "midday", "evening", "late")
 STAGE_KINDS = ("awake", "core", "deep", "rem")
 CONFIDENCE_LEVELS = ("high", "medium", "low")
@@ -40,7 +38,6 @@ class Persona:
     home_city: str = "Stockholm"
     # physiology baselines
     resting_hr: int = 56
-    hrv_ms: float = 48.0
     resp_rate: float = 14.6
     sleep_need_min: int = 450
     usual_bedtime: float = 22.75   # hours on weekdays (22.75 = 22:45)
@@ -52,7 +49,7 @@ class Persona:
 
 
 # --------------------------------------------------------------------------- #
-# Raw sources: calendar, location, watch
+# Raw sources: calendar, watch
 # --------------------------------------------------------------------------- #
 @dataclass
 class CalendarEvent:
@@ -67,22 +64,6 @@ class CalendarEvent:
     source: str = "demo"                       # demo | ics | user | suggestion
     attended: Optional[bool] = None            # None = unknown; set by reality-check answers/imports
     notes: Optional[str] = None
-
-    @property
-    def duration_min(self) -> int:
-        return int((self.end - self.start).total_seconds() // 60)
-
-
-@dataclass
-class LocationVisit:
-    id: str
-    place_type: str                            # PLACE_TYPES
-    place_name: str
-    start: datetime
-    end: datetime
-    lat: float = 59.3293
-    lon: float = 18.0686
-    source: str = "demo"
 
     @property
     def duration_min(self) -> int:
@@ -156,10 +137,8 @@ class SleepNight:
     deep_min: int = 0
     rem_min: int = 0
     core_min: int = 0
-    hrv_ms: Optional[float] = None             # overnight SDNN
     resting_hr: Optional[int] = None
-    resp_rate: Optional[float] = None
-    wrist_temp_dev: Optional[float] = None     # degC vs personal baseline
+    resp_rate: Optional[float] = None          # breaths per minute while asleep
     spo2: Optional[float] = None               # percent
     score: Optional[int] = None                # 0..100, None when not worn
     score_parts: Dict[str, int] = field(default_factory=dict)   # duration/consistency/interruptions
@@ -190,7 +169,7 @@ class SimTruthEvent:
 class SimTruth:
     nights: List[SimTruthNight] = field(default_factory=list)
     events: List[SimTruthEvent] = field(default_factory=list)
-    unbooked: List[str] = field(default_factory=list)      # visit ids that had no calendar event
+    unbooked: List[str] = field(default_factory=list)      # "start/end" ISO spans of exercise that had no calendar event
     effect_table: Dict[str, float] = field(default_factory=dict)   # realised TOTAL effect incl. correlated hidden factors
     effect_table_direct: Dict[str, float] = field(default_factory=dict)   # realised direct effect (hidden factors removed)
     effect_table_design: Dict[str, float] = field(default_factory=dict)   # nominal points-per-unit from Persona.sensitivities
@@ -290,7 +269,7 @@ class ModelSummary:
 # --------------------------------------------------------------------------- #
 @dataclass
 class Evidence:
-    kind: str                                  # "hr" | "hrv" | "rhr" | "bedtime" | "duration" | "interruptions" | "location" | "calendar" | "temp" | "resp" | "spo2"
+    kind: str                                  # "hr" | "rhr" | "bedtime" | "duration" | "interruptions" | "calendar" | "resp" | "spo2"
     text: str                                  # "Heart rate 12 bpm above your evening norm until 22:00"
     value: Optional[float] = None
     baseline: Optional[float] = None
@@ -334,7 +313,7 @@ class Suggestion:
 
 @dataclass
 class RecoveryMetric:
-    key: str                                   # hrv_ms | resting_hr | resp_rate | wrist_temp_dev | spo2
+    key: str                                   # resting_hr | resp_rate | spo2
     label: str
     value: Optional[float]
     baseline: Optional[float]
@@ -370,18 +349,18 @@ class MorningReport:
     confidence_note: str = ""
     calm_day_pred: Optional[float] = None      # "a calm day would predict ..."
     rating: Optional[str] = None               # Apple-style band label for the score
-    sources: Dict[str, Any] = field(default_factory=dict)   # {"calendar_events": 6, "maps_places": 4, "watch_minutes": 1392}
+    sources: Dict[str, Any] = field(default_factory=dict)   # {"calendar_events": 6, "watch_minutes": 1392}
 
 
 @dataclass
 class RealityCheck:
     id: str
     date: date
-    kind: str                                  # "booked_not_seen" | "seen_not_booked" | "location_mismatch"
+    kind: str                                  # "booked_not_seen" | "seen_not_booked"
     question: str                              # "Did you actually go to the gym on Tue 18:00?"
     status: str                                # "open" | "yes" | "no"
     event_id: Optional[str] = None
-    visit_id: Optional[str] = None
+    workout_id: Optional[str] = None           # the watch workout behind a "seen_not_booked" check
     evidence: List[Evidence] = field(default_factory=list)
     suggested_event: Optional[CalendarEvent] = None
     answered_at: Optional[datetime] = None
@@ -414,7 +393,7 @@ class Habit:
     direction: str                             # "good" | "bad" | "neutral"
     confidence: str                            # CONFIDENCE_LEVELS
     example_dates: List[date] = field(default_factory=list)
-    metric_effects: Dict[str, Optional[float]] = field(default_factory=dict)  # hrv_ms pct, resting_hr bpm
+    metric_effects: Dict[str, Optional[float]] = field(default_factory=dict)  # resting_hr bpm, resp_rate breaths/min
     raw_effect: Optional[float] = None         # unstratified mean difference ("simple comparison")
     rank_score: Optional[float] = None         # conservative effect x confidence weight used for ordering
 
@@ -446,7 +425,6 @@ class Dataset:
     end: date                                  # last night date (normally yesterday)
     today: date                                # the "morning" the demo opens on
     events: List[CalendarEvent] = field(default_factory=list)
-    visits: List[LocationVisit] = field(default_factory=list)
     hr_days: List[HeartRateDay] = field(default_factory=list)
     nights: List[SleepNight] = field(default_factory=list)
     activity: List[DailyActivity] = field(default_factory=list)
@@ -468,13 +446,6 @@ class Dataset:
         for lst in self._events_by_day.values():
             lst.sort(key=lambda e: e.start)
         self._events_by_id: Dict[str, CalendarEvent] = {e.id: e for e in self.events}
-        self._visits_by_day: Dict[date, List[LocationVisit]] = {}
-        for v in self.visits:
-            d = v.start.date()
-            self._visits_by_day.setdefault(d, []).append(v)
-            if v.end.date() != d:
-                self._visits_by_day.setdefault(v.end.date(), []).append(v)
-        self._visits_by_id: Dict[str, LocationVisit] = {v.id: v for v in self.visits}
         self._hr: Dict[date, HeartRateDay] = {h.date: h for h in self.hr_days}
         self._nights: Dict[date, SleepNight] = {n.date: n for n in self.nights}
         self._activity: Dict[date, DailyActivity] = {a.date: a for a in self.activity}
@@ -493,12 +464,6 @@ class Dataset:
 
     def event(self, event_id: str) -> Optional[CalendarEvent]:
         return self._events_by_id.get(event_id)
-
-    def visits_on(self, d: date) -> List[LocationVisit]:
-        return sorted(self._visits_by_day.get(d, []), key=lambda v: v.start)
-
-    def visit(self, visit_id: str) -> Optional[LocationVisit]:
-        return self._visits_by_id.get(visit_id)
 
     def hr(self, d: date) -> Optional[HeartRateDay]:
         return self._hr.get(d)

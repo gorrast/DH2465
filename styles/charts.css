@@ -120,12 +120,6 @@
   font-weight: 600;
   pointer-events: none;
 }
-.c-timeline .c-loc-label {
-  font-size: 10px;
-  fill: var(--ink-primary);
-  opacity: 0.85;
-  pointer-events: none;
-}
 .c-timeline .c-evt {
   cursor: default;
 }

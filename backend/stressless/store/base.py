@@ -32,7 +32,7 @@ class UserStore:
     def answers(self) -> Dict[str, Dict[str, Any]]:
         raise NotImplementedError
 
-    def save_answer(self, check_id: str, answer: str, event_id: Optional[str], visit_id: Optional[str]) -> None:
+    def save_answer(self, check_id: str, answer: str, event_id: Optional[str]) -> None:
         raise NotImplementedError
 
     def user_events(self) -> List[CalendarEvent]:

@@ -81,7 +81,7 @@ Rules:
 - No medical advice, no diagnoses, and no alarm. If something looks off, say it is worth keeping an eye on.
 - Every finding must list the pattern (and metric) keys it rests on, exactly as they appear in the JSON.
 - If notes say data is missing or history is short, make that clear in caveats and keep claims modest.
-- Write in English, friendly and plain, without jargon. Spell out what HRV is the first time you use it."""
+- Write in English, friendly and plain, without jargon."""
 
 TASK = {
     "daily": "Write this morning's daily report: what in yesterday likely shaped last night and today, told through "

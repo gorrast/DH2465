@@ -75,7 +75,7 @@ def analyze_media(ds: Dataset, media_rows: Sequence[Dict[str, Any]]) -> Dict[str
         days.append({
             "date": day, "events": events, "music": music, "podcasts": podcasts,
             "total": music + podcasts, "late": _minutes(late_events),
-            "score": float(night.score), "hrv": night_metric(night, "hrv_ms"),
+            "score": float(night.score), "resp_rate": night_metric(night, "resp_rate"),
             "resting_hr": night_metric(night, "resting_hr"), "duration": night_metric(night, "duration_min"),
             "bedtime": night_metric(night, "bedtime_min"), "late_meeting": features.late_meeting_hours > 0,
             "meetings": features.n_meetings,
@@ -102,10 +102,10 @@ def analyze_media(ds: Dataset, media_rows: Sequence[Dict[str, Any]]) -> Dict[str
             if music_score is not None and podcast_score is not None:
                 add("Music nights versus podcast nights", "Music appeared on %d nights averaging %.0f sleep points; podcasts appeared on %d nights averaging %.0f." % (len(music_days), music_score, len(podcast_days), podcast_score), len(music_days) + len(podcast_days), "compare")
 
-        hrv_days = [day for day in days if day["hrv"] is not None]
-        music_hrv = _corr([day["music"] for day in hrv_days], [day["hrv"] for day in hrv_days])
-        if music_hrv is not None:
-            add("Music and overnight HRV", "Music minutes had a %s association with next-night HRV across %d nights (r = %+.2f)." % ("positive" if music_hrv > 0 else "negative", len(hrv_days), music_hrv), len(hrv_days), "recovery")
+        resp_days = [day for day in days if day["resp_rate"] is not None]
+        music_resp = _corr([day["music"] for day in resp_days], [day["resp_rate"] for day in resp_days])
+        if music_resp is not None:
+            add("Music and breathing rate", "Music minutes went with %s breathing while asleep across %d nights (r = %+.2f)." % ("faster" if music_resp > 0 else "slower", len(resp_days), music_resp), len(resp_days), "recovery")
 
         meeting_days = [day for day in days if day["late_meeting"]]
         calm_days = [day for day in days if not day["late_meeting"]]

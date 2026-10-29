@@ -6,7 +6,7 @@ import re
 from datetime import date, datetime, timedelta, timezone
 from typing import List, Optional
 
-from ..models import CalendarEvent, DailyActivity, HeartRateDay, LocationVisit, SleepNight
+from ..models import CalendarEvent, DailyActivity, HeartRateDay, SleepNight
 from ..timeutil import tz
 
 _TS_APPLE = re.compile(r"^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) ([+-]\d{4})$")
@@ -60,38 +60,9 @@ def classify_event(title: str, location_hint: Optional[str] = None) -> str:
     return "meeting"
 
 
-def classify_place(name: str, semantic: Optional[str] = None) -> str:
-    n = (name or "").lower()
-    sem = (semantic or "").lower()
-    if "home" in sem or n in ("home", "hem"):
-        return "home"
-    if "work" in sem or re.search(r"\b(office|kontor|hq|headquarters)\b", n):
-        return "office"
-    if re.search(r"\b(gym|sats|friskis|nordic wellness|fitness|crossfit|yoga)\b", n):
-        return "gym"
-    if re.search(r"\b(bar|pub|brewery|tap ?room|club)\b", n):
-        return "bar"
-    if re.search(r"\b(restaurant|restaurang|bistro|kitchen|pizzeria|sushi|trattoria|café|cafe|brasserie|krog)\b", n):
-        return "restaurant"
-    if re.search(r"\b(airport|arlanda|terminal|flygplats)\b", n):
-        return "airport"
-    if re.search(r"\b(hotel|hostel|inn)\b", n):
-        return "hotel"
-    if re.search(r"\b(park|trail|loop|forest|beach|lake)\b", n):
-        return "outdoors"
-    if re.search(r"\b(station|central|centralen|metro|t-bana|bus)\b", n):
-        return "transit"
-    return "other"
-
-
 class CalendarSource(abc.ABC):
     @abc.abstractmethod
     def events(self, start: date, end: date) -> List[CalendarEvent]: ...
-
-
-class LocationSource(abc.ABC):
-    @abc.abstractmethod
-    def visits(self, start: date, end: date) -> List[LocationVisit]: ...
 
 
 class BiometricSource(abc.ABC):

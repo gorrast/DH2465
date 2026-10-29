@@ -1,5 +1,5 @@
 "use client";
-/* Reality check inbox: ask only when calendar, Maps and the body disagree (SPEC §9.4). */
+/* Reality check inbox: ask only when the calendar and the watch disagree (SPEC §9.4). */
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { api } from "@/lib/api";
@@ -11,7 +11,6 @@ import { ErrorCard, Skeleton, ViewHead, useLoad } from "./common";
 
 const KIND_ICON: Record<string, string> = {
   calendar: "calendar",
-  location: "map",
   hr: "watch",
 };
 
@@ -54,11 +53,7 @@ function CheckCard({
             (c.kind === "seen_not_booked" ? "badge-accent" : "badge-warning")
           }
         >
-          {c.kind === "seen_not_booked"
-            ? "seen, not booked"
-            : c.kind === "location_mismatch"
-              ? "location mismatch"
-              : "booked, not seen"}
+          {c.kind === "seen_not_booked" ? "seen, not booked" : "booked, not seen"}
         </span>
         <span className="tiny muted">{fmt.day(c.date)}</span>
       </div>
@@ -212,7 +207,7 @@ export function RealityView({
                       <Icon name="check" size={26} />
                       <h2>All clear</h2>
                       <p>
-                        Calendar, Maps and watch agree for the last two weeks.
+                        Calendar and watch agree for the last two weeks.
                       </p>
                     </div>
                   ) : (

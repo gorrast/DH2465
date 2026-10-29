@@ -78,7 +78,7 @@ class SupabaseStore(UserStore):
                     log.warning("skipping unreadable user event: %s", exc)
             self._snap = {
                 "profile": raw.get("profile"),
-                "answers": {a["check_id"]: {"answer": a["answer"], "event_id": a.get("event_id"), "visit_id": a.get("visit_id"), "ts": a.get("ts")}
+                "answers": {a["check_id"]: {"answer": a["answer"], "event_id": a.get("event_id"), "ts": a.get("ts")}
                             for a in raw.get("answers") or []},
                 "events": events,
                 "accepted": {a["suggestion_id"]: a["event_id"] for a in raw.get("accepted") or []},
@@ -100,10 +100,10 @@ class SupabaseStore(UserStore):
     def answers(self) -> Dict[str, Dict[str, Any]]:
         return {k: dict(v) for k, v in self._state()["answers"].items()}
 
-    def save_answer(self, check_id: str, answer: str, event_id: Optional[str], visit_id: Optional[str]) -> None:
-        row = {"check_id": check_id, "answer": answer, "event_id": event_id, "visit_id": visit_id, "ts": _now()}
+    def save_answer(self, check_id: str, answer: str, event_id: Optional[str]) -> None:
+        row = {"check_id": check_id, "answer": answer, "event_id": event_id, "ts": _now()}
         self._upsert("answers", row, "user_id,check_id")
-        self._state()["answers"][check_id] = {k: row[k] for k in ("answer", "event_id", "visit_id", "ts")}
+        self._state()["answers"][check_id] = {k: row[k] for k in ("answer", "event_id", "ts")}
 
     def user_events(self) -> List[CalendarEvent]:
         return list(self._state()["events"].values())

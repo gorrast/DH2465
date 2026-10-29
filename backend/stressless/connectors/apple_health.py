@@ -15,11 +15,9 @@ from .base import parse_ts
 log = logging.getLogger("stressless.connectors.apple_health")
 
 HR = "HKQuantityTypeIdentifierHeartRate"
-HRV = "HKQuantityTypeIdentifierHeartRateVariabilitySDNN"
 RHR = "HKQuantityTypeIdentifierRestingHeartRate"
 RESP = "HKQuantityTypeIdentifierRespiratoryRate"
 SPO2 = "HKQuantityTypeIdentifierOxygenSaturation"
-TEMP = "HKQuantityTypeIdentifierAppleSleepingWristTemperature"
 STEPS = "HKQuantityTypeIdentifierStepCount"
 SLEEP = "HKCategoryTypeIdentifierSleepAnalysis"
 SLEEP_KINDS = {"HKCategoryValueSleepAnalysisAsleepCore": "core", "HKCategoryValueSleepAnalysisAsleepDeep": "deep",
@@ -75,10 +73,10 @@ def parse_export(path: str, tzname: str, start: date, end: date) -> Tuple[List[H
                 slot = hr_sum.setdefault(d, [[0.0, 0.0] for _ in range(1440)])[s_dt.hour * 60 + s_dt.minute]
                 slot[0] += val
                 slot[1] += 1
-            elif t in (HRV, RHR, RESP, SPO2, TEMP) and val == val:
+            elif t in (RHR, RESP, SPO2) and val == val:
                 if t == SPO2 and val <= 1.0:
                     val *= 100.0
-                nd = night_date(s_dt) if t in (HRV, RESP, SPO2, TEMP) else s_dt.date() - timedelta(days=1)
+                nd = night_date(s_dt) if t in (RESP, SPO2) else s_dt.date() - timedelta(days=1)
                 per_night[t][nd].append(val)
             elif t == STEPS and val == val:
                 steps[s_dt.date()] += val
@@ -92,12 +90,10 @@ def parse_export(path: str, tzname: str, start: date, end: date) -> Tuple[List[H
             root.clear()
 
     hr_days = [HeartRateDay(date=d, bpm=[int(round(s / c)) if c else None for s, c in slots]) for d, slots in sorted(hr_sum.items())]
-    temp_all = sorted(per_night[TEMP].items())
-    temp_base = statistics.median([statistics.median(v) for _, v in temp_all[:14]]) if temp_all else None
     nights: List[SleepNight] = []
     from ..sim.sleep_score import compute_score
     recent_bed: List[float] = []
-    for nd in sorted(set(list(sleep_segs.keys()) + list(per_night[HRV].keys()))):
+    for nd in sorted(sleep_segs.keys()):
         if nd < start or nd > end:
             continue
         srcs = sleep_segs.get(nd, {})
@@ -123,11 +119,10 @@ def parse_export(path: str, tzname: str, start: date, end: date) -> Tuple[List[H
         score, parts = compute_score({"duration_min": duration, "bedtime_min": bed_min, "interruptions": interruptions, "awake_min": awake, "sleep_need_min": 450}, recent_bed)
         recent_bed = (recent_bed + [bed_min])[-14:]
         med = lambda t: (statistics.median(per_night[t][nd]) if per_night[t].get(nd) else None)
-        temp_dev = (med(TEMP) - temp_base) if (med(TEMP) is not None and temp_base is not None) else None
         nights.append(SleepNight(date=nd, worn=True, in_bed_start=bed, sleep_onset=onset, wake_time=wake, out_of_bed=max(x[1] for x in inbed),
                                  stages=stages, interruptions=interruptions, awake_min=awake, duration_min=duration, deep_min=mins("deep"),
-                                 rem_min=mins("rem"), core_min=mins("core"), hrv_ms=med(HRV), resting_hr=int(round(med(RHR))) if med(RHR) is not None else None,
-                                 resp_rate=med(RESP), wrist_temp_dev=round(temp_dev, 2) if temp_dev is not None else None, spo2=med(SPO2),
+                                 rem_min=mins("rem"), core_min=mins("core"), resting_hr=int(round(med(RHR))) if med(RHR) is not None else None,
+                                 resp_rate=med(RESP), spo2=med(SPO2),
                                  score=score, score_parts=parts, score_source="stressless"))
     activity = [DailyActivity(date=d, steps=int(steps.get(d, 0)), active_minutes=sum(int((w.end - w.start).total_seconds() // 60) for w in workouts.get(d, [])),
                               workouts=workouts.get(d, [])) for d in sorted(set(list(steps.keys()) + list(workouts.keys()))) if start <= d <= end]

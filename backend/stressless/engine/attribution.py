@@ -12,7 +12,7 @@ from datetime import date, timedelta
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from ..models import (Cause, Coefficient, Dataset, Evidence, FACTOR_LABELS, ModelSummary, REGRESSOR_KEYS)
-from ..timeutil import at, day_hour, fmt_minutes, hour_label
+from ..timeutil import at, day_hour, fmt_minutes, hour_label, parse_dt
 from . import baselines as bl
 from .features import day_features
 from .matching import event_response
@@ -321,9 +321,12 @@ def explain_night(ds: Dataset, morning: date, fit_: FitResult, norm: Sequence[Op
     causes: List[Cause] = []
     helpers: List[Cause] = []
 
-    def hrv_text() -> str:
-        m = recovery.get("hrv_ms")
-        return "Overnight HRV %s vs your baseline" % _pct(m.delta_pct if m else None)
+    def rhr_evidence() -> Tuple[str, Optional[Evidence]]:
+        m = recovery.get("resting_hr")
+        if not m or m.delta is None:
+            return "", None
+        text = "Resting heart rate %+.0f bpm vs your baseline" % m.delta
+        return text, Evidence(kind="rhr", text=text, value=m.value, baseline=m.baseline, unit="bpm", series=m.series)
 
     def build(k: str, c: float) -> Cause:
         title, detail, evidence, ev_ids = FACTOR_LABELS.get(k, k), "", [], []
@@ -345,14 +348,13 @@ def explain_night(ds: Dataset, morning: date, fit_: FitResult, norm: Sequence[Op
                                          series_baseline=resp["series_norm"], series_start=resp["series_start"], series_step_min=5))
         elif k == "meetings_over_3":
             title = "%d meetings, %d back-to-back" % (f.n_meetings, f.max_b2b_run) if f.max_b2b_run >= 3 else "%d meetings" % f.n_meetings
-            detail = hrv_text()
-            m = recovery.get("hrv_ms")
-            evidence.append(Evidence(kind="hrv", text=detail, value=m.value if m else None, baseline=m.baseline if m else None, unit="ms",
-                                     series=m.series if m else None))
+            detail, chip = rhr_evidence()
+            if chip is not None:
+                evidence.append(chip)
             ev_ids = [e.id for e in events if e.type == "meeting"]
         elif k == "b2b_over_2":
             title = "%d meetings back-to-back" % f.max_b2b_run
-            detail = hrv_text()
+            detail = rhr_evidence()[0]
             ev_ids = [e.id for e in events if e.type == "meeting"]
         elif k == "evening_social":
             socials = [e for e in events if e.type == "social"]
@@ -371,11 +373,10 @@ def explain_night(ds: Dataset, morning: date, fit_: FitResult, norm: Sequence[Op
                 evidence.append(Evidence(kind="bedtime", text=parts[0], value=bed_v, baseline=bed_base["median"], unit="min"))
             if rhr and rhr.delta is not None:
                 evidence.append(Evidence(kind="rhr", text="Resting heart rate %+.0f bpm vs baseline" % rhr.delta, value=rhr.value, baseline=rhr.baseline, unit="bpm", series=rhr.series))
-            temp = recovery.get("wrist_temp_dev")
-            hrv = recovery.get("hrv_ms")
-            if (rhr and rhr.z is not None and rhr.z >= 1.0) or (temp and temp.z is not None and temp.z >= 1.0) or (hrv and hrv.z is not None and hrv.z <= -1.0):
-                evidence.append(Evidence(kind="temp", text="Body signals (RHR %+.0f bpm, wrist temp %+.1f °C) suggest more than the late evening itself — e.g. alcohol, which the calendar cannot see" % (
-                    rhr.delta if (rhr and rhr.delta is not None) else 0.0, temp.value if (temp and temp.value is not None) else 0.0)))
+            br = recovery.get("resp_rate")
+            if (rhr and rhr.z is not None and rhr.z >= 1.0) or (br and br.z is not None and br.z >= 1.0):
+                evidence.append(Evidence(kind="resp", text="Body signals (resting heart rate %+.0f bpm, breathing rate %+.1f /min) suggest more than the late evening itself — e.g. alcohol, which the calendar cannot see" % (
+                    rhr.delta if (rhr and rhr.delta is not None) else 0.0, br.delta if (br and br.delta is not None) else 0.0)))
         elif k == "workout_late":
             wos = [e for e in events if e.type == "workout"]
             ev = max(wos, key=lambda e: e.start) if wos else None
@@ -438,13 +439,12 @@ def explain_night(ds: Dataset, morning: date, fit_: FitResult, norm: Sequence[Op
             proximal.append(Evidence(kind="duration", text="Asleep %s (you need about %s)" % (fmt_minutes(dur_v), fmt_minutes(need)), value=dur_v, baseline=float(need), unit="min"))
         if int_base["median"] is not None and night.interruptions is not None:
             proximal.append(Evidence(kind="interruptions", text="%d interruptions (usually %d)" % (night.interruptions, int(round(int_base["median"]))), value=float(night.interruptions), baseline=int_base["median"]))
-        for key in ("hrv_ms", "resting_hr"):
-            m = recovery.get(key)
-            if m and m.delta is not None:
-                if key == "hrv_ms":
-                    proximal.append(Evidence(kind="hrv", text="HRV %s vs baseline" % _pct(m.delta_pct), value=m.value, baseline=m.baseline, unit="ms"))
-                else:
-                    proximal.append(Evidence(kind="rhr", text="Resting heart rate %+.0f bpm vs baseline" % m.delta, value=m.value, baseline=m.baseline, unit="bpm"))
+        m = recovery.get("resting_hr")
+        if m and m.delta is not None:
+            proximal.append(Evidence(kind="rhr", text="Resting heart rate %+.0f bpm vs baseline" % m.delta, value=m.value, baseline=m.baseline, unit="bpm"))
+        m = recovery.get("resp_rate")
+        if m and m.delta is not None:
+            proximal.append(Evidence(kind="resp", text="Breathing rate %+.1f /min vs baseline" % m.delta, value=m.value, baseline=m.baseline, unit="br/min"))
 
     predicted = predict(fit_, reg) if not fit_.insufficient else None
     residual = None
@@ -452,12 +452,12 @@ def explain_night(ds: Dataset, morning: date, fit_: FitResult, norm: Sequence[Op
         residual = fit_.loo_residuals.get(night_date, night.score - predicted)
     note = None
     if residual is not None and fit_.rmse_loo:
-        temp = recovery.get("wrist_temp_dev")
+        br = recovery.get("resp_rate")
         if residual <= -1.5 * fit_.rmse_loo:
             note = ("About %d points are not explained by your calendar. Hidden factors like alcohol, caffeine, screens, "
                     "a short night before, or illness may matter." % int(round(abs(residual))))
-            if temp and temp.z is not None and temp.z >= 1.5 and temp.value is not None:
-                note += " Wrist temperature is %+.1f °C above baseline — a sign of illness or alcohol." % temp.value
+            if br and br.z is not None and br.z >= 1.5 and br.delta is not None:
+                note += " Breathing rate is %+.1f breaths/min above your baseline — a sign of illness or alcohol." % br.delta
         elif residual >= 1.5 * fit_.rmse_loo:
             note = "You slept better than your calendar predicts."
     meta = {"predicted": _finite(predicted), "calm_day_pred": _finite(fit_.calm_day_pred) if not fit_.insufficient else None,
@@ -573,20 +573,20 @@ def validation(ds: Dataset, fit_: FitResult, fit_before: Optional[FitResult], ch
     wfh = set()
     for te in truth.events:
         ev = ds.event(te.event_id)
-        if ev is None or ev.type not in ("workout", "social", "travel"):
+        if ev is None or ev.type != "workout":
             continue
         if te.attended is False:
             positives.add(te.event_id)
         if te.reason == "wfh":
             wfh.add(te.event_id)
-    predicted = {c.event_id for c in checks if c.kind in ("booked_not_seen", "location_mismatch") and c.event_id}
+    predicted = {c.event_id for c in checks if c.kind == "booked_not_seen" and c.event_id}
     tp = len(predicted & positives)
     fp = len(predicted - positives - wfh)
     fn = len(positives - predicted)
-    unbooked = set(truth.unbooked)
-    seen = {c.visit_id for c in checks if c.kind == "seen_not_booked" and c.visit_id}
-    tp_u = len(seen & unbooked)
-    fn_u = len(unbooked - seen)
+    seen = [c.suggested_event for c in checks if c.kind == "seen_not_booked" and c.suggested_event is not None]
+    spans = [tuple(parse_dt(p, ds.persona.tz) for p in u.split("/")) for u in truth.unbooked]
+    tp_u = sum(1 for s, e in spans if any(ev.start < e and s < ev.end for ev in seen))
+    fn_u = len(spans) - tp_u
     reality = {"booked_not_seen": {"tp": tp, "fp": fp, "fn": fn,
                                    "precision": _finite(round(tp / (tp + fp), 2)) if (tp + fp) else None,
                                    "recall": _finite(round(tp / (tp + fn), 2)) if (tp + fn) else None},

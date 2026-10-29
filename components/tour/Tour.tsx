@@ -8,7 +8,7 @@ interface Step { title: string; text: string; href: string; anchor: string; onEn
 function buildSteps(today: string, replay: MutableRefObject<ReplayControls | null>): Step[] {
   return [
     { title: 'Your daily brief', text: 'Start with last night’s sleep score, then explore how your day may have shaped your night.', href: '/daily/' + today, anchor: 'watch-card' },
-    { title: 'Connect the dots', text: 'Explore patterns from your calendar, location and heart rate. These are associations from your history, never certainties.', href: '/daily/' + today, anchor: 'causes' },
+    { title: 'Connect the dots', text: 'Explore patterns from your calendar and heart rate. These are associations from your history, never certainties.', href: '/daily/' + today, anchor: 'causes' },
     { title: 'Confirm your activities', text: 'When the signals disagree, confirm or deny an activity. Your answers update the patterns behind your report.', href: '/daily/' + today + '#reality-check', anchor: 'inbox' },
     { title: 'Your weekly patterns', text: 'Weekly brings your statistics and sleep patterns together. Explore meeting load, recent nights and recurring activities.', href: '/weekly', anchor: 'buckets' },
     { title: 'Connect your world', text: 'Import your media exports or use optional sync. Each source has its own setup guide and works independently.', href: '/connect', anchor: 'connections' },

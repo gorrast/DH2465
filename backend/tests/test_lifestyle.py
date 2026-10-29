@@ -108,12 +108,12 @@ class LifestyleTests(unittest.TestCase):
             ds.day_metrics[d] = {"intake.alcohol_units": 3.0 if drinks else 0.0, "intake.coffee_cups": 2.0}
             if drinks:
                 n = ds.night(d)
-                n.hrv_ms *= 0.8
+                n.resp_rate += 1.0
                 n.resting_hr += 4
         p = {p.key: p for p in lifestyle_patterns(ds, ANCHOR)}["alcohol"]
         self.assertEqual(p.description, "evenings with alcohol")
         self.assertEqual(p.direction, "hurt")
-        self.assertIn(p.primary.key, ("hrv_ms", "resting_hr"))
+        self.assertIn(p.primary.key, ("resp_rate", "resting_hr"))
         self.assertIn("evenings with alcohol", p.detail())
         # Coffee never varied, so there is nothing to compare.
         self.assertNotIn("more_coffee", {q.key for q in lifestyle_patterns(ds, ANCHOR)})

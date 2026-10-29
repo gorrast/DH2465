@@ -127,7 +127,6 @@ export function Shell({ children }: { children: ReactNode }) {
         title: "Simulating 70 days of " + name + "'s life",
         steps: [
           "Booking the calendar",
-          "Tracing locations with Maps",
           "Simulating heart rate and sleep",
           "Fitting the personal model",
         ],

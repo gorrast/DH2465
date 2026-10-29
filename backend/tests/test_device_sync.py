@@ -34,6 +34,18 @@ def night(day, bed=22.5, wake=30.75, awake=None, sid=None, stage=4):
             "modifiedAt": "2026-10-12T07:00:00Z", "stages": stages}
 
 
+def heart(day, start_h, minutes, bpm=60, rid=None, step_s=60):
+    """A Health Connect-shaped heart-rate record: one sample every ``step_s`` seconds from ``start_h`` on ``day``."""
+    t0 = local_ms(day, start_h)
+    n = minutes * 60 // step_s
+    return {"id": rid or "hr-%s-%s" % (day, start_h), "start": t0, "end": t0 + minutes * 60000, "tzOffsetMin": 120,
+            "source": "com.watch", "samples": [{"t": t0 + k * step_s * 1000, "bpm": bpm} for k in range(n)]}
+
+
+def vital(day, hour, field, value, rid):
+    return {"id": rid, "time": local_ms(day, hour), "tzOffsetMin": 120, "source": "com.watch", field: value}
+
+
 def batch(**parts):
     return ds.parse(dict({"device": DEVICE}, **parts))
 
@@ -108,6 +120,44 @@ class ParseAndDeriveTests(unittest.TestCase):
         b = batch(screenTime={"from": local_ms(d, 23), "to": local_ms(d, 26), "sessions": [{"pkg": "a", "start": local_ms(d, 23.5), "end": local_ms(d, 25)}]})
         self.assertEqual({r["day"] for r in ds.metric_rows(b)}, {"2026-10-11"})
 
+    def test_heart_rate_becomes_a_minute_day(self):
+        d = "2026-10-10"
+        b = batch(heartRate=[heart(d, 8, 3, bpm=70, step_s=20), heart(d, 23.98, 3, bpm=80)])   # crosses midnight
+        rows = {r["day"]: r for r in ds.heart_rate_day_rows(b)}
+        self.assertEqual(sorted(rows), ["2026-10-10", "2026-10-11"])
+        day = rows[d]
+        self.assertEqual(len(day["bpm"]), 1440)
+        self.assertEqual(day["bpm"][8 * 60:8 * 60 + 4], [70, 70, 70, None])
+        self.assertEqual((day["worn_minutes"], day["utc_offset_min"], day["data_origin"]), (5, 120, "com.watch"))
+        recs = [r for r in ds.source_records(b) if r["data_type"] == "heart_rate"]
+        self.assertEqual(len(recs), 2)
+        self.assertEqual((recs[0]["value"], recs[0]["unit"], len(recs[0]["payload"]["samples"])), (70.0, "bpm", 9))
+
+    def test_heart_rate_merges_with_the_stored_day(self):
+        d = "2026-10-10"
+        stored = [None] * 1440
+        stored[60] = 55
+        stored[8 * 60] = 99
+        row = ds.heart_rate_day_rows(batch(heartRate=[heart(d, 8, 2, bpm=70)]), {d: stored})[0]
+        self.assertEqual((row["bpm"][60], row["bpm"][8 * 60], row["worn_minutes"]), (55, 70, 3))
+
+    def test_glitches_are_dropped_not_fatal(self):
+        b = batch(heartRate=[{"id": "x", "start": 1, "end": 2, "samples": [{"t": 1, "bpm": 0}, {"t": 2, "bpm": 300}]}],
+                  oxygenSaturation=[vital("2026-10-10", 3, "percent", 12, "o1")])
+        self.assertEqual((b["heart_rate"][0]["samples"], b["spo2"]), ([], []))
+
+    def test_night_gets_vitals_measured_while_asleep(self):
+        d = "2026-10-10"
+        b = batch(sleep=[night(d)],
+                  oxygenSaturation=[vital(d, 26, "percent", 96, "o1"), vital(d, 28, "percent", 98, "o2"), vital(d, 12, "percent", 90, "o3")],
+                  respiratoryRate=[vital(d, 27, "rate", 14.2, "r1")],
+                  restingHeartRate=[vital(d, 9, "bpm", 70, "rh0"), vital("2026-10-11", 0, "bpm", 54, "rh1")])
+        row = ds.sleep_night_rows(b)[0]
+        self.assertEqual((row["spo2"], row["resp_rate"], row["resting_hr"]), (97.0, 14.2, 54))   # daily RHR dated the wake morning
+        self.assertEqual(sorted(r["data_type"] for r in ds.source_records(b) if r["data_type"] != "sleep_session"),
+                         ["oxygen_saturation"] * 3 + ["respiratory_rate"] + ["resting_heart_rate"] * 2)
+        self.assertIsNone(ds.sleep_night_rows(batch(sleep=[night(d)]))[0]["spo2"])
+
     def test_rejects_malformed_input(self):
         for bad in ({"steps": []}, {"device": {"installId": "short"}},
                     {"device": DEVICE, "steps": [{"date": "10/01", "steps": 1}]},
@@ -116,13 +166,18 @@ class ParseAndDeriveTests(unittest.TestCase):
                     {"device": DEVICE, "screenTime": "nope"},
                     {"device": DEVICE, "screenTime": {"from": 1, "to": 2, "screenEvents": [{"type": "boom", "ts": 1}]}},
                     {"device": dict(DEVICE, tzOffsetMin=9999)},
+                    {"device": DEVICE, "heartRate": [{"start": 2, "end": 1}]},
+                    {"device": DEVICE, "heartRate": [{"start": 1, "end": 2, "samples": [{"t": 1, "bpm": "fast"}]}]},
+                    {"device": DEVICE, "restingHeartRate": [{"time": 1}]},
+                    {"device": DEVICE, "respiratoryRate": "nope"},
                     {"device": DEVICE, "steps": [{}] * (ds.MAX_DAYS + 1)}, []):
             with self.assertRaises(ValueError, msg=repr(bad)[:80]):
                 ds.parse(bad)
 
 
 ENV = {"NEXT_PUBLIC_SUPABASE_URL": "https://db.test", "SUPABASE_SERVICE_ROLE_KEY": "service-key"}
-TABLES = ("profiles", "provider_connections", "connection_streams", "source_records", "sleep_nights", "daily_activity", "daily_metrics")
+TABLES = ("profiles", "provider_connections", "connection_streams", "source_records", "sleep_nights", "heart_rate_days", "daily_activity",
+          "daily_metrics")
 
 
 class SyncApiTests(unittest.TestCase):
@@ -153,6 +208,7 @@ class SyncApiTests(unittest.TestCase):
         d = "2026-10-10"
         return {"device": DEVICE, "permissions": {"sleep_session": True, "steps": True, "app_usage": True},
                 "sleep": [night(d)], "steps": [{"date": d, "steps": steps}],
+                "heartRate": [heart(d, 8, 30, bpm=65)], "restingHeartRate": [vital("2026-10-11", 0, "bpm", 55, "rh1")],
                 "screenTime": {"from": local_ms(d, 0), "to": local_ms(d, 25),
                                "sessions": [{"pkg": "com.video", "start": local_ms(d, 23.5), "end": local_ms(d, video_end)}],
                                "screenEvents": [{"type": "unlock", "ts": local_ms(d, 23.4)}]}}
@@ -161,8 +217,10 @@ class SyncApiTests(unittest.TestCase):
         r = self.client.post("/api/sync", json=self.payload())
         self.assertEqual(r.status_code, 200, r.text)
         body = r.json()
-        self.assertEqual(body["stored"], {"records": 4, "nights": 1, "step_days": 1, "screen_sessions": 1, "screen_days": 2})
-        self.assertEqual(body["nights"][0]["night"], "2026-10-10")
+        self.assertEqual(body["stored"], {"records": 6, "nights": 1, "step_days": 1, "heart_rate_days": 1, "heart_rate_samples": 30,
+                                          "resting_hr": 1, "spo2": 0, "resp_rate": 0, "nights_with_vitals": 1,
+                                          "screen_sessions": 1, "screen_days": 2})
+        self.assertEqual((body["nights"][0]["night"], body["nights"][0]["resting_hr"]), ("2026-10-10", 55))
 
         conns = self.rows("provider_connections", user_id="user-a")
         self.assertEqual(sorted(c["provider"] for c in conns), ["health_connect", "screen_time"])
@@ -170,14 +228,17 @@ class SyncApiTests(unittest.TestCase):
         by_provider = {c["provider"]: c["id"] for c in conns}
         recs = self.rows("source_records", user_id="user-a")
         self.assertEqual(sorted((r["source"], r["data_type"]) for r in recs),
-                         [("health_connect", "sleep_session"), ("health_connect", "steps"), ("screen_time", "app_usage"), ("screen_time", "screen_event")])
+                         [("health_connect", "heart_rate"), ("health_connect", "resting_heart_rate"), ("health_connect", "sleep_session"),
+                          ("health_connect", "steps"), ("screen_time", "app_usage"), ("screen_time", "screen_event")])
         self.assertTrue(all(r["connection_id"] == by_provider[r["source"]] for r in recs))
         self.assertEqual(self.rows("sleep_nights", user_id="user-a")[0]["night_date"], "2026-10-10")
+        hr = self.rows("heart_rate_days", user_id="user-a")[0]
+        self.assertEqual((hr["day"], len(hr["bpm"]), hr["worn_minutes"], hr["bpm"][8 * 60]), ("2026-10-10", 1440, 30, 65))
         self.assertEqual(self.rows("daily_activity", user_id="user-a")[0]["steps"], 8000)
         late = self.rows("daily_metrics", user_id="user-a", day="2026-10-10", metric_key="screen.late_minutes")[0]
         self.assertEqual((late["value"], late["source"]), (60.0, "screen_time"))
         streams = {(s["connection_id"], s["data_type"]): s for s in self.rows("connection_streams", user_id="user-a")}
-        self.assertEqual(len(streams), 4)
+        self.assertEqual(len(streams), 6)
         self.assertEqual(streams[(by_provider["health_connect"], "steps")]["data_until"], "2026-10-10T22:00:00.000Z")
 
     def test_resync_overwrites_instead_of_duplicating(self):
@@ -185,7 +246,8 @@ class SyncApiTests(unittest.TestCase):
         r = self.client.post("/api/sync", json=self.payload(steps=9000, video_end=25))
         self.assertEqual(r.status_code, 200, r.text)
         self.assertEqual(len(self.rows("provider_connections")), 2)
-        self.assertEqual(len(self.rows("source_records")), 4)
+        self.assertEqual(len(self.rows("source_records")), 6)
+        self.assertEqual(len(self.rows("heart_rate_days")), 1)
         self.assertEqual(self.rows("daily_activity")[0]["steps"], 9000)
         video = self.rows("source_records", data_type="app_usage")[0]
         self.assertEqual(video["value"], 90.0)   # the session that was still open grew

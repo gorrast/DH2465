@@ -63,7 +63,7 @@ const CHALLENGES: [string, string][] = [
   ],
   [
     "The calendar misses coffee, alcohol, screens and unbooked stress",
-    "Nights the calendar cannot explain are flagged; body signals (resting heart rate, wrist temperature) hint at alcohol or illness; unbooked activities are detected from Maps and the watch.",
+    "Nights the calendar cannot explain are flagged; body signals (resting heart rate, breathing rate) hint at alcohol or illness; unbooked workouts are detected from the watch.",
   ],
   [
     "Cold start: value shows up only after weeks",
@@ -140,12 +140,6 @@ function LabBody({
             icon="calendar"
             title="Calendar"
             sub={(src.calendar_events || "–") + " events yesterday"}
-          />
-          <span className="v-lab-arrow">→</span>
-          <Step
-            icon="map"
-            title="Maps"
-            sub={(src.maps_places || "–") + " places"}
           />
           <span className="v-lab-arrow">→</span>
           <Step
@@ -483,8 +477,9 @@ function ValidationDetails({ val }: { val: any }) {
           </tbody>
         </table>
         <p className="tiny muted">
-          Meetings attended from home never trigger a question: location cannot
-          tell a video call from a skipped one, so we do not ask.
+          Only workouts trigger a question. Dinners, trips and meetings leave
+          no clear mark on heart rate, and neither does a workout the watch
+          barely saw, so we do not ask about them.
         </p>
       </div>
       <div className="card">

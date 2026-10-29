@@ -1,9 +1,9 @@
 # Correlate — MVP native shell
 
 A thin Capacitor wrapper around a web dashboard (`www/`), used only for the
-three things a website can't do on its own: reading the device calendar,
-reading Apple HealthKit / Android Health Connect, and background
-geofencing/location. Everything else (the actual correlation logic, the UI)
+things a website can't do on its own: reading the device calendar,
+reading Apple HealthKit / Android Health Connect, and Android app usage.
+Everything else (the actual correlation logic, the UI)
 lives in normal web code and can keep evolving like a website.
 
 ## What's here
@@ -29,7 +29,6 @@ npm install
 # Add the native plugins used in native.js
 npm install capacitor-health                     # HealthKit + Health Connect, one API
 npm install @ebarooni/capacitor-calendar          # device calendar (EventKit / CalendarContract)
-npm install @capacitor-community/background-geolocation  # background location
 
 npx cap init   # if capacitor.config.json wasn't already picked up
 npx cap add ios
@@ -80,14 +79,16 @@ To distribute to other testers before a public launch, Play Console's
 **internal testing track** needs only a one-time $25 developer account fee,
 no review.
 
-## Sign in & Sync (sleep, steps, screen time → Supabase)
+## Sign in & Sync (sleep, heart rate, vitals, steps, screen time → Supabase)
 
 The **Account & sync** card signs in with the same Supabase email/password account as the web app
 (`www/auth.js`, plain Supabase Auth REST calls). **Sync** re-reads the phone's data and POSTs it to the
 StressLess API (`POST /api/sync`) with the user's access token. The app sends everything it can read
 and the API decides what to keep:
 
-- **Sleep:** Health Connect sessions with their stages (last 30 days).
+- **Sleep & vitals** (Health Connect, last 30 days): sleep sessions with their stages; heart rate, averaged on
+  the phone to one sample per minute; resting heart rate, breathing rate and blood oxygen readings. Each type is
+  asked for separately, and the Sleep & vitals card lists how many records of each came back (or "not allowed").
 - **Steps:** daily totals since 1 January.
 - **Screen time:** every foreground app session and screen/lock event of the last 7 days
   (`UsageStats.getUsageSessions`). Android only keeps about a week of these, so sync at least weekly.
@@ -96,7 +97,9 @@ The API (`backend/stressless/server/phone_sync.py`) follows the ingest flow in `
 - It checks consent; the first sync asks for it.
 - It records this install as its own connection (`health_connect` and `screen_time`).
 - It upserts the raw `source_records`.
-- It recomputes `sleep_nights` (scored), `daily_activity` and the `screen.*` rows in `daily_metrics`.
+- It recomputes `sleep_nights` (scored, with the resting heart rate, breathing rate and blood oxygen measured while
+  asleep), `heart_rate_days` (1440 minutes, merged with what is already stored for that day), `daily_activity` and
+  the `screen.*` rows in `daily_metrics`.
 
 Syncing the same days again overwrites instead of duplicating.
 
@@ -121,15 +124,8 @@ Then update `BACKEND_URL` at the top of `www/native.js` to point at it
 
 ## What's stubbed vs. real
 
-- **Calendar sync, health sync, location pings** — wired up and functional
-  once you add the plugins above and grant permissions on-device.
-- **Correlation logic** (`/correlate/schedule-adherence` in the backend) —
-  intentionally minimal right now: it just counts location pings inside an
-  event's time window. The real version needs: geocoding each event's
-  location text into coordinates, registering an actual geofence per event
-  (not just raw pings), and computing arrival/departure deltas against the
-  planned start/end times — worth building once you've confirmed the data
-  pipeline itself works end-to-end.
+- **Calendar sync, health sync** — wired up and functional once you add the
+  plugins above and grant permissions on-device.
 - **Design** — the dashboard is intentionally plain right now (dark,
   functional, no branding decisions made yet) since the point of this pass
   is proving the native data pipeline works, not visual polish.

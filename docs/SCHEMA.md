@@ -29,8 +29,8 @@ web app never queries tables directly.
 | Suggestions | Stored in StressLess only, as a `calendar_events` row with provider `stressless`, plus the .ics download. Google stays read-only. |
 | Sync tokens | Health Connect changes tokens and HealthKit anchors stay on the phone. A reinstall re-reads everything, and the raw unique key makes that harmless. |
 | Sleep score | Always computed by StressLess when data arrives (`score_source`, `algorithm_version`). Neither platform exposes one. |
-| Baselines | Usual resting HR, HRV, sleep need, bed and wake times are computed from history, not stored. |
-| HRV | RMSSD (Health Connect) and SDNN (HealthKit) are different measures, kept in separate keys and columns and never mixed. |
+| Baselines | Usual resting HR, breathing rate, sleep need, bed and wake times are computed from history, not stored. |
+| Heart rate | The app averages Health Connect samples to one per minute; `heart_rate_days` merges each sync into the stored day. HRV and skin temperature are not collected. |
 | Local time | `profiles.time_zone` (IANA) defines "today", "last night" and the Monday-to-Sunday week. Night D starts on the evening of local date D. Every derived row stores the UTC offset it used. |
 
 ## Layers
@@ -68,7 +68,7 @@ lists, so a new source means new rows, not ALTERs on several tables.
 | Table | Key | Holds |
 |---|---|---|
 | `sources` | `key` | Every provider: `google_calendar`, `health_connect`, `apple_health`, `stressless` (accepted suggestions), `manual`, plus the legacy `apple_calendar` and `garmin` (`active = false`). Also `category` and `delivery` (oauth, phone, file, manual, internal). |
-| `data_types` | `key` | Raw record and sync-stream kinds: `sleep_session`, `heart_rate`, `hrv_rmssd`, `hrv_sdnn`, `resting_heart_rate`, `respiratory_rate`, `oxygen_saturation`, `skin_temperature`, `steps`, `exercise`, `calendar_event`. |
+| `data_types` | `key` | Raw record and sync-stream kinds: `sleep_session`, `heart_rate`, `resting_heart_rate`, `respiratory_rate`, `oxygen_saturation`, `steps`, `exercise`, `calendar_event`. |
 | `metric_definitions` | `key` (`screen.minutes`) | Keys allowed in `daily_metrics`, with label, unit and good direction. These are the report's `Metric` keys. It starts empty. |
 
 ### Sources and sync
@@ -103,7 +103,7 @@ is one local date, so the 70-day history a report needs is one query of about 70
 
 | Table | Key | Engine type | Notes |
 |---|---|---|---|
-| `sleep_nights` | `(user_id, night_date)` | `SleepNight` | Times (in bed, onset, wake, out of bed), minutes per stage, interruptions, `stages jsonb`, `has_stages`, `hrv_rmssd_ms`/`hrv_sdnn_ms`, resting HR, respiratory rate, SpO2, skin temperature deviation, `score`, `score_parts`, `algorithm_version`. No row means the watch was not worn. |
+| `sleep_nights` | `(user_id, night_date)` | `SleepNight` | Times (in bed, onset, wake, out of bed), minutes per stage, interruptions, `stages jsonb`, `has_stages`, resting HR, respiratory rate, SpO2 (measured while asleep), `score`, `score_parts`, `algorithm_version`. No row means the watch was not worn. |
 | `heart_rate_days` | `(user_id, day)` | `HeartRateDay` | `bpm smallint[1440]`, where `bpm[i]` is minute i-1 of the local wall clock and null means not worn. DST days keep 1440 entries. Plus `worn_minutes`. |
 | `daily_activity` | `(user_id, day)` | `DailyActivity` | `steps`, `active_min`, `hourly_steps` (24 or empty), `workouts jsonb` (`WatchWorkout` fields plus `data_origin`). |
 | `daily_metrics` | `(user_id, day, metric_key)` | report `Metric` | Any other per-day value. `metric_key` references `metric_definitions`. This is the extension point. |
@@ -206,7 +206,7 @@ A view that needs time spans (a song at 23:40) reads `source_records` for that d
 - Phone app:
   - Supabase login and the upload calls
   - raw sleep and workout records with stages and heart-rate timestamps
-  - the extra Health Connect permissions (HRV, resting HR, respiratory rate, SpO2, history, background)
+  - the extra Health Connect permissions (history beyond 30 days, background reads); heart rate, resting HR, respiratory rate and SpO2 are synced
 
 ## Open items
 

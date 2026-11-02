@@ -17,7 +17,7 @@ Generate once and keep it current: write with ``--date D`` and run the server wi
 report sees the same "today", the same last night and the same links (the anchor applies to every user on that server).
 
 ``--write`` and ``--remove`` replace or delete *all* of the demo user's data rows, so they refuse to run on an account
-that has data from anywhere but this script (a real phone sync or Google Calendar). Uses SUPABASE_SERVICE_ROLE_KEY.
+that has data from anywhere but this script (a real phone sync or Google Calendar), unless ``--force`` is given. Uses SUPABASE_SERVICE_ROLE_KEY.
 """
 from __future__ import annotations
 
@@ -55,31 +55,49 @@ CONFIG: Dict[str, Any] = {
     "sensitivities": {"meetings_over_3": -2.0, "b2b_over_2": -1.5, "late_meeting_hours": -4.0, "evening_social": -16.0,
                       "workout_morning": 15.0, "workout_late": -3.0, "travel": -9.0, "early_start": -3.0,
                       "protected_evening": 4.0},
-    # The week of a student with a part-time café job: (title, [(weekday, from, to)], category, place, guests, effect).
-    # Each title is a recurring series; "effect" names an entry in class_effects.
-    "week": [("Statistics lecture", [(1, 8.25, 12.0), (3, 8.25, 12.0)], "meeting", "Lecture hall F1", 30, "stress"),
-             ("Interaction Design studio", [(0, 13.0, 15.0), (4, 9.0, 11.0)], "meeting", "Design studio", 12, "enjoy"),
-             ("Café shift", [(5, 7.0, 13.0), (6, 16.0, 21.0)], "meeting", "Café", 3, None)],
-    # stored with another category than the simulator uses: the shift is a meeting to the simulator (so the late
-    # shift delays bedtime), but the app would call it a meeting ("late meetings", "time in meetings")
-    "stored_as": {"Café shift": "personal"},
-    # per class day: daytime heart rate from the class to 22:00, minutes to fall asleep, overnight HRV and resting HR
-    "class_effects": {"stress": {"day_hr": 6, "onset_min": 30, "hrv": -0.20, "resting_hr": 3},
-                      "enjoy": {"day_hr": -3, "onset_min": -8, "hrv": 0.06, "resting_hr": -1}},
-    "study": {"title": "Study session", "place": "KTH Library", "share": {"weekday": 0.55, "sat": 0.15, "sun": 0.6},
-              "slots": {"weekday": [(14.0, 16.0), (16.0, 18.0), (18.5, 20.5)], "weekend": [(13.0, 16.0)]}},
-    # focus music: on this share of study blocks the artist plays through it; those blocks keep only this share of
-    # their pickups (unlocks) and have a calmer heart rate, and those days have less screen time
-    "focus_artist": ("Ludovico Einaudi", "modern classical", 0.55),
+    # A GTM manager at a Stockholm software company who plans the whole day, work and private life.
+    # Recurring series: (title, [(weekday, from, to)], category, place, guests, effect); "effect" names an entry in
+    # series_effects. Daily ones (standup, lunch) cannot be tested as causes: every workday has them.
+    "week": [("Team standup", [(wd, 8.5, 8.75) for wd in range(5)], "meeting", "Google Meet", 7, None),
+             ("Lunch", [(wd, 12.0, 13.0) for wd in range(5)], "personal", None, 0, None),
+             ("Coffee break", [(wd, 15.25, 15.5) for wd in range(5)], "personal", None, 0, None),
+             ("Leadership presentation", [(1, 10.0, 11.5)], "meeting", "Board room", 9, "stress"),
+             ("Customer demo", [(3, 14.0, 15.0)], "meeting", "Zoom", 6, "stress"),
+             ("Product workshop", [(0, 13.0, 15.0), (4, 10.0, 12.0)], "meeting", "Workshop room", 8, "enjoy"),
+             ("Family call", [(6, 17.0, 17.75)], "personal", None, 2, "calm"),
+             # customer day: three accounts that matter differently to the company, seen in the heart rate during the call
+             ("Northwind Bank weekly", [(2, 9.5, 10.25)], "meeting", "Zoom", 5, "key_account"),
+             ("Lumen Retail check-in", [(2, 11.0, 11.75)], "meeting", "Google Meet", 4, "mid_account"),
+             ("Kettle Labs sync", [(2, 14.0, 14.75)], "meeting", "Google Meet", 3, "small_account")],
+    # during_hr: heart rate during the meeting itself. The others are per day: daytime heart rate 08:00-22:00 (the
+    # whole day, so the day's other meetings share it), minutes to fall asleep, overnight HRV and resting HR.
+    # Presenting is the stressful kind of meeting, the workshop the kind they enjoy.
+    "series_effects": {"stress": {"during_hr": 10, "day_hr": 6, "onset_min": 30, "hrv": -0.20, "resting_hr": 3},
+                       "enjoy": {"during_hr": -2, "day_hr": -3, "onset_min": -8, "hrv": 0.06, "resting_hr": -1},
+                       "calm": {"day_hr": -2, "onset_min": -10, "hrv": 0.05, "resting_hr": -1},
+                       "key_account": {"during_hr": 12}, "mid_account": {"during_hr": 5},
+                       "small_account": {"during_hr": -3}},
+    # the rest of a workday: more meetings between 9 and 17 (most on the presentation days, so those are the busy
+    # days), and calls outside office hours on random workdays (random, so they share no days with the series above)
+    "meetings": {"pool": ["Pipeline sync", "Customer call", "1:1", "Marketing sync", "Partner call", "Hiring interview",
+                          "Forecast review", "Campaign planning", "Sales enablement", "Analyst briefing"],
+                 "per_day": {0: (1, 2), 1: (3, 4), 2: (0, 1), 3: (3, 4), 4: (1, 2)}, "hours": (9.0, 17.0)},
+    "late_call": ("Call with US team", 18.5, 19.5, 0.25),
+    "early_call": ("Call with APAC team", 7.0, 7.75, 0.25),
+    "after_work": ("After-work", 17.5, 21.0, 0.15),      # social, on random workdays too
+    "focus": {"title": "Deep work", "share": {"weekday": 0.7, "sat": 0.0, "sun": 0.1},
+              "slots": {"weekday": [(9.0, 11.0), (13.0, 15.0), (15.5, 17.5)], "weekend": [(13.0, 15.0)]}},
+    # focus music: on this share of deep-work blocks the artist plays through it; those blocks keep only this share
+    # of their pickups (unlocks) and have a calmer heart rate, and those days have less screen time
+    "focus_artist": ("Brian Eno", "ambient", 0.55),
     "focus_effects": {"pickups": 0.35, "screen_minutes": -40, "hr": -4},
-    "waking": {"weekday": (7.5, 23.5), "weekend": (9.5, 24.0)},   # hours the day's unlocks fall in
-    # on days without a class effect, so the class links and the workout links stay apart
-    "workouts": [("Morning run", "Djurgården", [(2, 7.0, 7.75, 0.95)]),
-                 ("Gym", "SATS KTH", [(2, 18.0, 19.0, 0.6), (5, 15.0, 16.0, 0.6)])],
+    "waking": {"weekday": (6.5, 23.5), "weekend": (8.5, 24.0)},   # hours the day's unlocks fall in
+    # on days without a series effect, so the meeting links and the workout links stay apart
+    "workouts": [("Morning run", "Djurgården", [(2, 6.75, 7.5, 0.95), (5, 9.0, 9.75, 0.8)]),
+                 ("Gym", "SATS Odenplan", [(2, 18.0, 19.0, 0.7), (6, 10.0, 11.0, 0.7)])],
     "late_gym": 0.3,                        # share of gym sessions moved to 20:00-21:00
-    "socials": [("Pub night", 3, 19.0, 23.0, 0.45), ("Dinner with friends", 4, 19.5, 23.5, 0.5),
-                ("Party", 5, 20.0, 23.75, 0.45)],
-    "one_offs": [("Group project meeting", 2, 10.0, 11.0, 0.6, "meeting", "Group room", 4)],
+    "socials": [("Dinner with friends", 4, 19.0, 23.0, 0.5), ("Dinner party", 5, 19.5, 23.75, 0.5)],
+    "one_offs": [("Grocery shopping", 5, 11.0, 12.0, 0.6, "personal", None, 0)],
     # music: the artists the engine tests, as (artist, share of days, minutes per day), and a long tail of others
     # (one on most days, too rare for the engine to test: each tested artist is another chance of a false link)
     "artists": [("Metallica", 0.30, (20, 60)), ("Bon Iver", 0.40, (15, 45))],
@@ -96,7 +114,7 @@ CONFIG: Dict[str, Any] = {
     "shows": ["Stranger Things", "Bron", "The Crown", "Dark"],
     "netflix_days": 0.40,                   # share of evenings with Netflix
     "netflix_late": 0.45,                   # share of those running past 22:00 (pushes bedtime later)
-    "late_screen": 0.18,                    # share of other evenings with long late phone use
+    "late_screen": 0.25,                    # share of other evenings with long late phone use
     "late_screen_delay": (30, 50),          # minutes late Netflix or late phone use push bedtime, on top of the simulator's 20
     "run_steps": 5000,                      # extra steps on a run day
     "coffee_heavy": 0.22,                   # share of days with 4-5 cups (slower to fall asleep)
@@ -108,20 +126,31 @@ CONFIG: Dict[str, Any] = {
 # early hint is fine, the engine gives one to about half of all causes without an effect; a strong link is not).
 # Links from sleep to sleep (off_rhythm, sleep_debt, short_night) follow from the night itself and are not planted.
 PLANTED: Dict[str, Dict[str, str]] = {
-    "series_statistics_lecture": {"direction": "hurt", "strength": "strong",
-                                  "how": "stressful class: daytime HR +6, 30 min slower to sleep, HRV -20 %"},
-    "series_interaction_design_studio": {"direction": "helped", "strength": "strong",
-                                         "how": "enjoyed class: daytime HR -3, 8 min faster to sleep, HRV +6 %"},
-    "series_café_shift":  {"direction": "hurt", "strength": "strong",
-                           "how": "early Saturday and late Sunday shifts: later bedtime, earlier wake (simulator)"},
-    "busy_days":          {"direction": "hurt", "strength": "weak", "how": "the long Statistics days"},
-    "pair_ludovico_einaudi_during_study_session": {"direction": "helped", "strength": "strong",
-                                     "how": "study blocks with it: 65 % fewer pickups and HR -4 while studying, "
-                                            "40 min less screen time that day"},
-    "artist_ludovico_einaudi": {"direction": "helped", "strength": "weak", "how": "follows from the calmer study blocks"},
+    "series_leadership_presentation": {"direction": "hurt", "strength": "strong",
+                                       "how": "presenting: daytime HR +6, 30 min slower to sleep, HRV -20 %"},
+    "series_customer_demo": {"direction": "hurt", "strength": "strong", "how": "presenting, as above"},
+    "series_product_workshop": {"direction": "helped", "strength": "strong",
+                                "how": "the meeting they enjoy: daytime HR -3, 8 min faster to sleep, HRV +6 %"},
+    "meeting_hr_northwind_bank_weekly": {"direction": "hurt", "strength": "strong",
+                                         "how": "key account: heart rate +12 during the call"},
+    "meeting_hr_lumen_retail_check_in": {"direction": "hurt", "strength": "weak", "how": "mid account: +5 during the call"},
+    "meeting_hr_kettle_labs_sync": {"direction": "helped", "strength": "weak", "how": "small, friendly account: -3"},
+    "meeting_hr_leadership_presentation": {"direction": "hurt", "strength": "strong", "how": "presenting: +10 during it"},
+    "meeting_hr_customer_demo": {"direction": "hurt", "strength": "strong", "how": "presenting: +10 during it"},
+    "meeting_hr_product_workshop": {"direction": "helped", "strength": "weak", "how": "the meeting they enjoy: -2"},
+    "series_family_call": {"direction": "helped", "strength": "strong",
+                           "how": "a calmer Sunday evening, 10 min faster to sleep (and Sundays have no meetings)"},
+    "pair_brian_eno_during_deep_work": {"direction": "helped", "strength": "strong",
+                                        "how": "deep work with it: 65 % fewer pickups and HR -4 during the block, "
+                                               "40 min less screen time that day"},
+    "artist_brian_eno": {"direction": "none", "strength": "none",
+                         "how": "control: only the deep-work blocks change, not the day or the night"},
+    "busy_days":          {"direction": "hurt", "strength": "weak", "how": "the presentation days are the busiest"},
+    "back_to_back_days":  {"direction": "hurt", "strength": "weak", "how": "slower to fall asleep (simulator)"},
+    "late_meetings":      {"direction": "hurt", "strength": "strong", "how": "US calls until 19:30: later bedtime (simulator)"},
     "social_evenings":    {"direction": "hurt", "strength": "strong", "how": "~90 min later bedtime, often drinks (simulator)"},
     "cardio_days":        {"direction": "helped", "strength": "strong", "how": "morning runs: faster onset, less waking, higher HRV (simulator)"},
-    "early_starts":       {"direction": "hurt", "strength": "weak", "how": "Saturday opening shifts: wake earlier (simulator)"},
+    "early_starts":       {"direction": "hurt", "strength": "strong", "how": "APAC calls at 07:00: wake 45 min earlier (simulator)"},
     "late_workouts":      {"direction": "hurt", "strength": "weak", "how": "late gym: later bedtime, less deep sleep (simulator)"},
     "active_days":        {"direction": "helped", "strength": "weak", "how": "follows from the runs (5 000 extra steps)"},
     "workout_days":       {"direction": "helped", "strength": "weak", "how": "follows from the runs"},
@@ -229,8 +258,8 @@ def _slug(text: str) -> str:
     return "-".join("".join(ch if ch.isalnum() else " " for ch in text.lower()).split())
 
 
-def student_week(start: date, end: date, rng: random.Random) -> List[CalendarEvent]:
-    """CONFIG's week, study blocks, workouts, socials and one-offs for every day of ``start..end``."""
+def planned_week(start: date, end: date, rng: random.Random) -> List[CalendarEvent]:
+    """CONFIG's week, the other meetings, calls, deep work, workouts, socials and one-offs for ``start..end``."""
     zone = CONFIG["time_zone"]
     events: List[CalendarEvent] = []
 
@@ -258,29 +287,62 @@ def student_week(start: date, end: date, rng: random.Random) -> List[CalendarEve
                     late = title == "Gym" and rng.random() < CONFIG["late_gym"]
                     if free(d, 20.0 if late else s, 21.0 if late else e):
                         add(d, title, 20.0 if late else s, 21.0 if late else e, "workout", place)
+        if dow < 5:
+            for title, s, e, share in (CONFIG["early_call"], CONFIG["late_call"]):
+                if rng.random() < share and free(d, s, e):
+                    add(d, title, s, e, "meeting", "Zoom", rng.randint(3, 8))
+            title, s, e, share = CONFIG["after_work"]
+            if dow < 4 and rng.random() < share and free(d, s, e):
+                add(d, title, s, e, "social", None, rng.randint(3, 10))
+            fc = CONFIG["focus"]
+            if rng.random() < fc["share"]["weekday"]:
+                for s, e in fc["slots"]["weekday"]:
+                    if free(d, s, e):
+                        add(d, fc["title"], s, e, "focus", None)
+                        break
+            m = CONFIG["meetings"]
+            want, tries = rng.randint(*m["per_day"][dow]), 0
+            while want and tries < 40:
+                tries += 1
+                s = rng.choice([h / 2.0 for h in range(int(m["hours"][0] * 2), int(m["hours"][1] * 2))])
+                e = s + rng.choice([0.5, 1.0])
+                if e <= m["hours"][1] and free(d, s, e):
+                    add(d, rng.choice(m["pool"]), s, e, "meeting", rng.choice(["Zoom", "Google Meet", "Room 3"]),
+                        rng.randint(2, 8))
+                    want -= 1
+        else:
+            fc = CONFIG["focus"]
+            if rng.random() < fc["share"]["sat" if dow == 5 else "sun"]:
+                for s, e in fc["slots"]["weekend"]:
+                    if free(d, s, e):
+                        add(d, fc["title"], s, e, "focus", None)
+                        break
         for title, wd, s, e, share in CONFIG["socials"]:
             if wd == dow and rng.random() < share and free(d, s, e):
                 add(d, title, s, e, "social", None, rng.randint(2, 6))
         for title, wd, s, e, share, kind, place, guests in CONFIG["one_offs"]:
             if wd == dow and rng.random() < share and free(d, s, e):
                 add(d, title, s, e, kind, place, guests)
-        st = CONFIG["study"]
-        if rng.random() < st["share"]["weekday" if dow < 5 else ("sat" if dow == 5 else "sun")]:
-            for s, e in st["slots"]["weekday" if dow < 5 else "weekend"]:
-                if free(d, s, e):
-                    add(d, st["title"], s, e, "focus", st["place"])
-                    break
         d += timedelta(days=1)
     return sorted(events, key=lambda ev: ev.start)
 
 
-def class_effect(events: List[CalendarEvent], d: date) -> Optional[Tuple[Dict[str, float], datetime]]:
-    """The class effect of day ``d`` and when the class started, if a class with an effect was that day."""
+def series_effect(events: List[CalendarEvent], d: date) -> Optional[Tuple[Dict[str, float], datetime]]:
+    """The day-wide effect of day ``d``'s series and when it started, if a series with one was that day."""
     by_title = {w[0]: w[5] for w in CONFIG["week"]}
     for ev in events:
-        if ev.start.date() == d and by_title.get(ev.title):
-            return CONFIG["class_effects"][by_title[ev.title]], ev.start
+        eff = CONFIG["series_effects"].get(by_title.get(ev.title) or "")
+        if ev.start.date() == d and eff and "day_hr" in eff:
+            return eff, ev.start
     return None
+
+
+def during_effects(events: List[CalendarEvent], d: date) -> List[Tuple[CalendarEvent, float]]:
+    """Day ``d``'s series events with a heart-rate effect during them."""
+    by_title = {w[0]: w[5] for w in CONFIG["week"]}
+    effs = [(ev, CONFIG["series_effects"].get(by_title.get(ev.title) or "", {}).get("during_hr")) for ev in events
+            if ev.start.date() == d]
+    return [(ev, bpm) for ev, bpm in effs if bpm]
 
 
 def plan_days(start: date, end: date, rng: random.Random) -> Dict[date, Dict[str, Any]]:
@@ -308,15 +370,15 @@ def generate(cal: Dict[str, Any], today: date) -> Dict[str, Any]:
     start = today - timedelta(days=days)
     plan = plan_days(start, today + timedelta(days=7), rng)
 
-    events = student_week(start, today + timedelta(days=7), random.Random("seed-demo-week-%d" % CONFIG["seed"]))
+    events = planned_week(start, today + timedelta(days=7), random.Random("seed-demo-week-%d" % CONFIG["seed"]))
 
     def calendar(persona, cal_start, cal_end, cal_today, cal_rng):
-        day_kind = {ev.start.date(): "office" for ev in events if ev.recurring_key}
+        day_kind = {ev.start.date(): "office" for ev in events if ev.start.weekday() < 5}
         return [ev for ev in events if cal_start <= ev.start.date() <= cal_end], [], day_kind
 
     def hook(d: date, f: DayFeatures, hidden: Dict[str, Any]) -> None:
         p = plan[d]
-        eff = class_effect(events, d)
+        eff = series_effect(events, d)
         if eff:
             hidden["extra_onset_min"] = eff[0]["onset_min"]
         hidden["screens_late"] = p["late_tv"] or p["late_phone"]
@@ -348,25 +410,29 @@ def generate(cal: Dict[str, Any], today: date) -> Dict[str, Any]:
         p = plan[d]
         weekend = d.weekday() >= 5
         h = ds.hr(d)
-        study = [ev for ev in events if ev.start.date() == d and ev.type == "focus"]
-        focus_day = bool(study) and rng.random() < focus_share
-        # music: blocks through the day, a track every ~3.5 minutes, never during study blocks
+        today_events = [ev for ev in events if ev.start.date() == d]
+        focus = [ev for ev in today_events if ev.type == "focus"]
+        focus_day = bool(focus) and rng.random() < focus_share
+        # music: blocks through the day, a track every ~3.5 minutes, in the gaps between calendar events
         clock = datetime.combine(d, time(10 if weekend else 7, 40), z)
         blocks = [a for a in CONFIG["artists"] if a[0] in p["artists"]] + [(a, 0, CONFIG["tail_minutes"]) for a in p["tail"]]
         for artist, _, (lo, hi) in blocks:
             left = rng.uniform(lo, hi)
-            for ev in study:
-                if ev.start - timedelta(minutes=hi) < clock < ev.end:
-                    clock = ev.end
+            moved = True
+            while moved:
+                moved = False
+                for ev in today_events:
+                    if ev.start < clock + timedelta(minutes=left) and clock < ev.end:
+                        clock, moved = ev.end, True
             while left > 0:
                 m = min(left, rng.uniform(2.8, 4.5))
                 clock += timedelta(minutes=m)
                 play("spotify", clock, "%s track %d" % (artist, rng.randint(1, 12)), artist, m, "music")
                 left -= m
             clock += timedelta(minutes=rng.uniform(60, 240))
-        # study music: the focus artist through the study block, a calmer heart rate while studying
+        # focus music: the focus artist through the deep-work block, a calmer heart rate during it
         if focus_day:
-            ev = study[0]
+            ev = focus[0]
             t, until = ev.start + timedelta(minutes=rng.uniform(0, 10)), ev.end - timedelta(minutes=rng.uniform(0, 15))
             while t < until:
                 m = rng.uniform(3.0, 6.5)
@@ -378,11 +444,16 @@ def generate(cal: Dict[str, Any], today: date) -> Dict[str, Any]:
                 for m in range(s0, min(1440, s0 + ev.duration_min)):
                     if h.bpm[m] is not None:
                         h.bpm[m] += CONFIG["focus_effects"]["hr"]
-        # class days: daytime heart rate from the class to 22:00, and that night's HRV and resting heart rate
-        eff = class_effect(events, d)
+        # series days: daytime heart rate 08:00-22:00, and that night's HRV and resting heart rate; and the heart rate
+        # during the meetings that have an effect of their own (the customers, the presentations)
+        eff = series_effect(events, d)
         if eff and h is not None:
-            s0 = eff[1].hour * 60 + eff[1].minute
-            h.bpm = [b if b is None or not (s0 <= m < 22 * 60) else b + eff[0]["day_hr"] for m, b in enumerate(h.bpm)]
+            h.bpm = [b if b is None or not (8 * 60 <= m < 22 * 60) else b + eff[0]["day_hr"] for m, b in enumerate(h.bpm)]
+        for ev, bpm in during_effects(events, d) if h is not None else []:
+            s0 = ev.start.hour * 60 + ev.start.minute
+            for m in range(s0, min(1440, s0 + ev.duration_min)):
+                if h.bpm[m] is not None:
+                    h.bpm[m] += bpm
         n = ds.night(d)
         if eff and n is not None and n.worn and n.hrv_ms is not None:
             n.hrv_ms = round(n.hrv_ms * (1 + eff[0]["hrv"]), 1)
@@ -412,7 +483,7 @@ def generate(cal: Dict[str, Any], today: date) -> Dict[str, Any]:
         times = sorted(datetime.combine(d, time(0, 0), z) + timedelta(hours=urng.uniform(lo, hi))
                        for _ in range(int(round(sc("pickups", 70.0) * rng.lognormvariate(0, 0.2)))))
         if focus_day:
-            times = [t for t in times if not (study[0].start <= t < study[0].end) or urng.random() < fe["pickups"]]
+            times = [t for t in times if not (focus[0].start <= t < focus[0].end) or urng.random() < fe["pickups"]]
         for t in times:
             unlocks.append(screen_event(d, t, len(unlocks)))
         for k, v in (("minutes", minutes), ("late_minutes", late), ("pickups", len(times))):
@@ -468,7 +539,7 @@ def to_rows(gen: Dict[str, Any], hrv_key: str) -> Dict[str, List[Dict[str, Any]]
                                "max_hr": w.max_hr, "calories": w.calories, "data_origin": SEED} for w in a.workouts]}
                 for a in ds.activity]
     events = [{"provider": "manual", "provider_event_id": "%s-%s" % (SEED, e.id), "title": e.title,
-               "category": CONFIG["stored_as"].get(e.title, e.type),
+               "category": e.type,
                "starts_at": _iso(e.start), "ends_at": _iso(e.end), "location": e.location_hint,
                "guests": [{"response_status": "accepted"}] * max(0, e.attendees - 1), "recurring_key": e.recurring_key}
               for e in ds.events]
@@ -546,10 +617,13 @@ CONFLICT = {"sleep_nights": "user_id,night_date", "heart_rate_days": "user_id,da
             "media_events": "user_id,id", "source_records": "user_id,source,source_record_id"}
 
 
-def guard(user_id: str) -> None:
-    """Refuse to touch an account that has data this script did not write."""
+def guard(user_id: str, force: bool = False) -> None:
+    """Refuse to touch an account that has data this script did not write, unless ``force`` (someone imported into
+    the demo account by mistake, and it should be replaced)."""
     uid = {"user_id": "eq." + user_id}
     db("GET", "admin/users/" + user_id, api="auth/v1")   # exits on 404: sign the demo account up in the app first
+    if force:
+        return
     checks = [("provider_connections", "provider_account_id", "not.like.%s*" % SEED),
               ("sleep_nights", "data_origin", "not.eq." + SEED),
               ("calendar_events", "provider_event_id", "not.like.%s*" % SEED),
@@ -558,11 +632,12 @@ def guard(user_id: str) -> None:
     for table, col, cond in checks:
         rows = db("GET", table, params=dict(uid, select=col, limit="1", **{col: cond})) or []
         if rows:
-            raise SystemExit("Refusing: %s has %s rows not written by this script. Is this a real account?" % (user_id, table))
+            raise SystemExit("Refusing: %s has %s rows not written by this script. Is this a real account? If it is the "
+                             "demo account and those rows should go, add --force." % (user_id, table))
 
 
 def remove(user_id: str) -> None:
-    for table in TABLES + ("connection_streams", "provider_connections"):
+    for table in TABLES + ("media_documents", "connection_streams", "provider_connections"):
         db("DELETE", table, params={"user_id": "eq." + user_id})
     print("Removed the demo data of %s." % user_id)
 
@@ -608,6 +683,9 @@ def main() -> None:
     group = ap.add_mutually_exclusive_group()
     group.add_argument("--write", action="store_true", help="replace the demo account's data")
     group.add_argument("--remove", action="store_true", help="delete the demo account's data")
+    ap.add_argument("--force", action="store_true",
+                    help="with --write or --remove: also replace data this script did not write (an import someone "
+                         "made into the demo account)")
     args = ap.parse_args()
     if (args.write or args.remove) and not args.user:
         ap.error("--write and --remove need --user")
@@ -615,7 +693,7 @@ def main() -> None:
         ap.error("--user and --calibrate must be different accounts")
 
     if args.remove:
-        guard(args.user)
+        guard(args.user, args.force)
         remove(args.user)
         return
     today = date.fromisoformat(args.date) if args.date else date.today()
@@ -632,7 +710,7 @@ def main() -> None:
         with open(args.key, "w", encoding="utf-8") as fh:
             json.dump(dict(result, config={k: v for k, v in CONFIG.items()}, date=today.isoformat()), fh, indent=2, default=str)
     if args.write:
-        guard(args.user)
+        guard(args.user, args.force)
         write(args.user, rows, today)
     else:
         print("\nDry run: nothing written (add --write).")

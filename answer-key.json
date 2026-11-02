@@ -1,9 +1,25 @@
 {
   "planted": {
-    "series_statistics_lecture": {
+    "series_leadership_presentation": {
       "direction": "hurt",
       "strength": "strong",
-      "how": "stressful class: daytime HR +6, 30 min slower to sleep, HRV -20 %",
+      "how": "presenting: daytime HR +6, 30 min slower to sleep, HRV -20 %",
+      "found": {
+        "direction": "hurt",
+        "tier": "strong",
+        "outcomes": [
+          "onset_min",
+          "hrv_ms",
+          "resting_hr",
+          "day_hr"
+        ]
+      },
+      "ok": true
+    },
+    "series_customer_demo": {
+      "direction": "hurt",
+      "strength": "strong",
+      "how": "presenting, as above",
       "found": {
         "direction": "hurt",
         "tier": "strong",
@@ -18,10 +34,97 @@
       },
       "ok": true
     },
-    "series_interaction_design_studio": {
+    "series_product_workshop": {
       "direction": "helped",
       "strength": "strong",
-      "how": "enjoyed class: daytime HR -3, 8 min faster to sleep, HRV +6 %",
+      "how": "the meeting they enjoy: daytime HR -3, 8 min faster to sleep, HRV +6 %",
+      "found": {
+        "direction": "helped",
+        "tier": "strong",
+        "outcomes": [
+          "onset_min",
+          "hrv_ms",
+          "day_hr"
+        ]
+      },
+      "ok": true
+    },
+    "meeting_hr_northwind_bank_weekly": {
+      "direction": "hurt",
+      "strength": "strong",
+      "how": "key account: heart rate +12 during the call",
+      "found": {
+        "direction": "hurt",
+        "tier": "strong",
+        "outcomes": [
+          "hr_in_northwind_bank_weekly"
+        ]
+      },
+      "ok": true
+    },
+    "meeting_hr_lumen_retail_check_in": {
+      "direction": "hurt",
+      "strength": "weak",
+      "how": "mid account: +5 during the call",
+      "found": {
+        "direction": "hurt",
+        "tier": "strong",
+        "outcomes": [
+          "hr_in_lumen_retail_check_in"
+        ]
+      },
+      "ok": true
+    },
+    "meeting_hr_kettle_labs_sync": {
+      "direction": "helped",
+      "strength": "weak",
+      "how": "small, friendly account: -3",
+      "found": {
+        "direction": "helped",
+        "tier": "strong",
+        "outcomes": [
+          "hr_in_kettle_labs_sync"
+        ]
+      },
+      "ok": true
+    },
+    "meeting_hr_leadership_presentation": {
+      "direction": "hurt",
+      "strength": "strong",
+      "how": "presenting: +10 during it",
+      "found": {
+        "direction": "hurt",
+        "tier": "strong",
+        "outcomes": [
+          "hr_in_leadership_presentation"
+        ]
+      },
+      "ok": true
+    },
+    "meeting_hr_customer_demo": {
+      "direction": "hurt",
+      "strength": "strong",
+      "how": "presenting: +10 during it",
+      "found": {
+        "direction": "hurt",
+        "tier": "strong",
+        "outcomes": [
+          "hr_in_customer_demo"
+        ]
+      },
+      "ok": true
+    },
+    "meeting_hr_product_workshop": {
+      "direction": "helped",
+      "strength": "weak",
+      "how": "the meeting they enjoy: -2",
+      "found": null,
+      "ok": true
+    },
+    "series_family_call": {
+      "direction": "helped",
+      "strength": "strong",
+      "how": "a calmer Sunday evening, 10 min faster to sleep (and Sundays have no meetings)",
       "found": {
         "direction": "helped",
         "tier": "strong",
@@ -36,17 +139,29 @@
       },
       "ok": true
     },
-    "series_caf\u00e9_shift": {
-      "direction": "hurt",
+    "pair_brian_eno_during_deep_work": {
+      "direction": "helped",
       "strength": "strong",
-      "how": "early Saturday and late Sunday shifts: later bedtime, earlier wake (simulator)",
+      "how": "deep work with it: 65 % fewer pickups and HR -4 during the block, 40 min less screen time that day",
       "found": {
-        "direction": "hurt",
+        "direction": "helped",
         "tier": "strong",
         "outcomes": [
-          "score",
+          "pickups_during_deep_work"
+        ]
+      },
+      "ok": true
+    },
+    "artist_brian_eno": {
+      "direction": "none",
+      "strength": "none",
+      "how": "control: only the deep-work blocks change, not the day or the night",
+      "found": {
+        "direction": "hurt",
+        "tier": "hint",
+        "outcomes": [
           "duration_min",
-          "onset_min",
+          "hrv_ms",
           "resting_hr"
         ]
       },
@@ -55,39 +170,45 @@
     "busy_days": {
       "direction": "hurt",
       "strength": "weak",
-      "how": "the long Statistics days",
+      "how": "the presentation days are the busiest",
       "found": {
         "direction": "hurt",
         "tier": "strong",
         "outcomes": [
-          "duration_min",
+          "hrv_ms",
+          "resting_hr",
           "day_hr"
         ]
       },
       "ok": true
     },
-    "pair_ludovico_einaudi_during_study_session": {
-      "direction": "helped",
-      "strength": "strong",
-      "how": "study blocks with it: 40 % fewer pickups, less screen time, HR -4 while studying",
+    "back_to_back_days": {
+      "direction": "hurt",
+      "strength": "weak",
+      "how": "slower to fall asleep (simulator)",
       "found": {
-        "direction": "helped",
+        "direction": "hurt",
         "tier": "strong",
         "outcomes": [
-          "pickups"
+          "onset_min",
+          "resting_hr",
+          "day_hr"
         ]
       },
       "ok": true
     },
-    "artist_ludovico_einaudi": {
-      "direction": "helped",
-      "strength": "weak",
-      "how": "follows from the calmer study blocks",
+    "late_meetings": {
+      "direction": "hurt",
+      "strength": "strong",
+      "how": "US calls until 19:30: later bedtime (simulator)",
       "found": {
-        "direction": "helped",
-        "tier": "hint",
+        "direction": "hurt",
+        "tier": "strong",
         "outcomes": [
-          "resting_hr"
+          "duration_min",
+          "onset_min",
+          "resting_hr",
+          "day_hr"
         ]
       },
       "ok": true
@@ -103,6 +224,7 @@
           "score",
           "duration_min",
           "onset_min",
+          "hrv_ms",
           "resting_hr"
         ]
       },
@@ -116,9 +238,6 @@
         "direction": "helped",
         "tier": "strong",
         "outcomes": [
-          "score",
-          "duration_min",
-          "onset_min",
           "resting_hr"
         ]
       },
@@ -126,14 +245,15 @@
     },
     "early_starts": {
       "direction": "hurt",
-      "strength": "weak",
-      "how": "Saturday opening shifts: wake earlier (simulator)",
+      "strength": "strong",
+      "how": "APAC calls at 07:00: wake 45 min earlier (simulator)",
       "found": {
         "direction": "hurt",
-        "tier": "hint",
+        "tier": "strong",
         "outcomes": [
           "score",
-          "duration_min"
+          "duration_min",
+          "onset_min"
         ]
       },
       "ok": true
@@ -149,15 +269,7 @@
       "direction": "helped",
       "strength": "weak",
       "how": "follows from the runs (5 000 extra steps)",
-      "found": {
-        "direction": "helped",
-        "tier": "strong",
-        "outcomes": [
-          "score",
-          "duration_min",
-          "onset_min"
-        ]
-      },
+      "found": null,
       "ok": true
     },
     "workout_days": {
@@ -168,9 +280,8 @@
         "direction": "helped",
         "tier": "strong",
         "outcomes": [
-          "score",
           "duration_min",
-          "onset_min",
+          "hrv_ms",
           "resting_hr"
         ]
       },
@@ -181,15 +292,15 @@
       "strength": "strong",
       "how": "Netflix past 22:00 pushes bedtime ~20 min",
       "found": {
-        "direction": "hurt",
-        "tier": "strong",
+        "direction": "helped",
+        "tier": "hint",
         "outcomes": [
-          "score",
-          "duration_min",
-          "onset_min"
+          "onset_min",
+          "hrv_ms",
+          "resting_hr"
         ]
       },
-      "ok": true
+      "ok": false
     },
     "late_screen": {
       "direction": "hurt",
@@ -231,6 +342,7 @@
         "direction": "hurt",
         "tier": "strong",
         "outcomes": [
+          "hrv_ms",
           "day_hr"
         ]
       },
@@ -240,7 +352,15 @@
       "direction": "hurt",
       "strength": "weak",
       "how": "5 min slower to fall asleep",
-      "found": null,
+      "found": {
+        "direction": "hurt",
+        "tier": "strong",
+        "outcomes": [
+          "score",
+          "duration_min",
+          "onset_min"
+        ]
+      },
       "ok": true
     },
     "artist_bon_iver": {
@@ -254,26 +374,14 @@
       "direction": "none",
       "strength": "none",
       "how": "control: no effect",
-      "found": {
-        "direction": "hurt",
-        "tier": "hint",
-        "outcomes": [
-          "resting_hr"
-        ]
-      },
+      "found": null,
       "ok": true
     },
     "artist_sommar_i_p1": {
       "direction": "none",
       "strength": "none",
       "how": "control: the podcast as its own cause",
-      "found": {
-        "direction": "hurt",
-        "tier": "hint",
-        "outcomes": [
-          "resting_hr"
-        ]
-      },
+      "found": null,
       "ok": true
     }
   },
@@ -282,7 +390,9 @@
       "direction": "hurt",
       "tier": "strong",
       "outcomes": [
+        "onset_min",
         "hrv_ms",
+        "resting_hr",
         "day_hr"
       ]
     },
@@ -290,47 +400,34 @@
       "direction": "helped",
       "tier": "hint",
       "outcomes": [
-        "onset_min"
+        "hrv_ms",
+        "resting_hr"
       ]
     },
-    "low_steps": {
+    "big_listening": {
       "direction": "hurt",
       "tier": "strong",
       "outcomes": [
-        "score",
-        "duration_min",
-        "onset_min"
+        "hrv_ms",
+        "resting_hr"
       ]
     }
   },
   "derived": {
-    "short_night": {
-      "direction": "helped",
-      "tier": "strong",
-      "outcomes": [
-        "steps",
-        "day_hr"
-      ]
-    },
     "off_rhythm": {
       "direction": "hurt",
       "tier": "strong",
       "outcomes": [
         "score",
-        "hrv_ms"
-      ]
-    },
-    "sleep_debt": {
-      "direction": "helped",
-      "tier": "hint",
-      "outcomes": [
-        "hrv_ms"
+        "duration_min",
+        "hrv_ms",
+        "resting_hr"
       ]
     }
   },
   "config": {
     "days": 90,
-    "seed": 35,
+    "seed": 26,
     "name": "Demo",
     "time_zone": "Europe/Stockholm",
     "behaviour": "alex",
@@ -347,26 +444,137 @@
     },
     "week": [
       [
-        "Statistics lecture",
+        "Team standup",
         [
           [
+            0,
+            8.5,
+            8.75
+          ],
+          [
             1,
-            8.25,
-            12.0
+            8.5,
+            8.75
+          ],
+          [
+            2,
+            8.5,
+            8.75
           ],
           [
             3,
-            8.25,
-            12.0
+            8.5,
+            8.75
+          ],
+          [
+            4,
+            8.5,
+            8.75
           ]
         ],
         "meeting",
-        "Lecture hall F1",
-        30,
+        "Google Meet",
+        7,
+        null
+      ],
+      [
+        "Lunch",
+        [
+          [
+            0,
+            12.0,
+            13.0
+          ],
+          [
+            1,
+            12.0,
+            13.0
+          ],
+          [
+            2,
+            12.0,
+            13.0
+          ],
+          [
+            3,
+            12.0,
+            13.0
+          ],
+          [
+            4,
+            12.0,
+            13.0
+          ]
+        ],
+        "personal",
+        null,
+        0,
+        null
+      ],
+      [
+        "Coffee break",
+        [
+          [
+            0,
+            15.25,
+            15.5
+          ],
+          [
+            1,
+            15.25,
+            15.5
+          ],
+          [
+            2,
+            15.25,
+            15.5
+          ],
+          [
+            3,
+            15.25,
+            15.5
+          ],
+          [
+            4,
+            15.25,
+            15.5
+          ]
+        ],
+        "personal",
+        null,
+        0,
+        null
+      ],
+      [
+        "Leadership presentation",
+        [
+          [
+            1,
+            10.0,
+            11.5
+          ]
+        ],
+        "meeting",
+        "Board room",
+        9,
         "stress"
       ],
       [
-        "Interaction Design studio",
+        "Customer demo",
+        [
+          [
+            3,
+            14.0,
+            15.0
+          ]
+        ],
+        "meeting",
+        "Zoom",
+        6,
+        "stress"
+      ],
+      [
+        "Product workshop",
         [
           [
             0,
@@ -375,92 +583,210 @@
           ],
           [
             4,
-            9.0,
-            11.0
+            10.0,
+            12.0
           ]
         ],
         "meeting",
-        "Design studio",
-        12,
+        "Workshop room",
+        8,
         "enjoy"
       ],
       [
-        "Caf\u00e9 shift",
+        "Family call",
         [
           [
-            5,
-            7.0,
-            13.0
-          ],
-          [
             6,
-            16.0,
-            21.0
+            17.0,
+            17.75
+          ]
+        ],
+        "personal",
+        null,
+        2,
+        "calm"
+      ],
+      [
+        "Northwind Bank weekly",
+        [
+          [
+            2,
+            9.5,
+            10.25
           ]
         ],
         "meeting",
-        "Caf\u00e9",
+        "Zoom",
+        5,
+        "key_account"
+      ],
+      [
+        "Lumen Retail check-in",
+        [
+          [
+            2,
+            11.0,
+            11.75
+          ]
+        ],
+        "meeting",
+        "Google Meet",
+        4,
+        "mid_account"
+      ],
+      [
+        "Kettle Labs sync",
+        [
+          [
+            2,
+            14.0,
+            14.75
+          ]
+        ],
+        "meeting",
+        "Google Meet",
         3,
-        null
+        "small_account"
       ]
     ],
-    "stored_as": {
-      "Caf\u00e9 shift": "personal"
-    },
-    "class_effects": {
+    "series_effects": {
       "stress": {
+        "during_hr": 10,
         "day_hr": 6,
         "onset_min": 30,
         "hrv": -0.2,
         "resting_hr": 3
       },
       "enjoy": {
+        "during_hr": -2,
         "day_hr": -3,
         "onset_min": -8,
         "hrv": 0.06,
         "resting_hr": -1
+      },
+      "calm": {
+        "day_hr": -2,
+        "onset_min": -10,
+        "hrv": 0.05,
+        "resting_hr": -1
+      },
+      "key_account": {
+        "during_hr": 12
+      },
+      "mid_account": {
+        "during_hr": 5
+      },
+      "small_account": {
+        "during_hr": -3
       }
     },
-    "study": {
-      "title": "Study session",
-      "place": "KTH Library",
+    "meetings": {
+      "pool": [
+        "Pipeline sync",
+        "Customer call",
+        "1:1",
+        "Marketing sync",
+        "Partner call",
+        "Hiring interview",
+        "Forecast review",
+        "Campaign planning",
+        "Sales enablement",
+        "Analyst briefing"
+      ],
+      "per_day": {
+        "0": [
+          1,
+          2
+        ],
+        "1": [
+          3,
+          4
+        ],
+        "2": [
+          0,
+          1
+        ],
+        "3": [
+          3,
+          4
+        ],
+        "4": [
+          1,
+          2
+        ]
+      },
+      "hours": [
+        9.0,
+        17.0
+      ]
+    },
+    "late_call": [
+      "Call with US team",
+      18.5,
+      19.5,
+      0.25
+    ],
+    "early_call": [
+      "Call with APAC team",
+      7.0,
+      7.75,
+      0.25
+    ],
+    "after_work": [
+      "After-work",
+      17.5,
+      21.0,
+      0.15
+    ],
+    "focus": {
+      "title": "Deep work",
       "share": {
-        "weekday": 0.55,
-        "sat": 0.15,
-        "sun": 0.6
+        "weekday": 0.7,
+        "sat": 0.0,
+        "sun": 0.1
       },
       "slots": {
         "weekday": [
           [
-            14.0,
-            16.0
+            9.0,
+            11.0
           ],
           [
-            16.0,
-            18.0
+            13.0,
+            15.0
           ],
           [
-            18.5,
-            20.5
+            15.5,
+            17.5
           ]
         ],
         "weekend": [
           [
             13.0,
-            16.0
+            15.0
           ]
         ]
       }
     },
     "focus_artist": [
-      "Ludovico Einaudi",
-      "modern classical",
+      "Brian Eno",
+      "ambient",
       0.55
     ],
     "focus_effects": {
-      "pickups": 0.6,
+      "pickups": 0.35,
       "screen_minutes": -40,
       "hr": -4
+    },
+    "waking": {
+      "weekday": [
+        6.5,
+        23.5
+      ],
+      "weekend": [
+        8.5,
+        24.0
+      ]
     },
     "workouts": [
       [
@@ -469,27 +795,33 @@
         [
           [
             2,
-            7.0,
-            7.75,
+            6.75,
+            7.5,
             0.95
+          ],
+          [
+            5,
+            9.0,
+            9.75,
+            0.8
           ]
         ]
       ],
       [
         "Gym",
-        "SATS KTH",
+        "SATS Odenplan",
         [
           [
             2,
             18.0,
             19.0,
-            0.6
+            0.7
           ],
           [
-            5,
-            15.0,
-            16.0,
-            0.6
+            6,
+            10.0,
+            11.0,
+            0.7
           ]
         ]
       ]
@@ -497,37 +829,30 @@
     "late_gym": 0.3,
     "socials": [
       [
-        "Pub night",
-        3,
-        19.0,
-        23.0,
-        0.45
-      ],
-      [
         "Dinner with friends",
         4,
-        19.5,
-        23.5,
+        19.0,
+        23.0,
         0.5
       ],
       [
-        "Party",
+        "Dinner party",
         5,
-        20.0,
+        19.5,
         23.75,
-        0.45
+        0.5
       ]
     ],
     "one_offs": [
       [
-        "Group project meeting",
-        2,
-        10.0,
+        "Grocery shopping",
+        5,
         11.0,
+        12.0,
         0.6,
-        "meeting",
-        "Group room",
-        4
+        "personal",
+        null,
+        0
       ]
     ],
     "artists": [
@@ -612,7 +937,7 @@
     ],
     "netflix_days": 0.4,
     "netflix_late": 0.45,
-    "late_screen": 0.18,
+    "late_screen": 0.25,
     "late_screen_delay": [
       30,
       50

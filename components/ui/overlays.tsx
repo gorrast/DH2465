@@ -149,6 +149,7 @@ export interface ConfirmOptions {
   confirmLabel?: string;
   cancelLabel?: string;
   danger?: boolean;
+  confirmText?: string;
 }
 interface ModalState {
   opts: ConfirmOptions;
@@ -162,6 +163,10 @@ export function confirmModal(opts: ConfirmOptions): Promise<boolean> {
 
 export function ModalHost() {
   const m = useStore(modalStore);
+  const [confirmation, setConfirmation] = useState<{
+    modal: ModalState | null;
+    text: string;
+  }>({ modal: null, text: "" });
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const node = dialog.current;
@@ -171,7 +176,10 @@ export function ModalHost() {
   }, [m]);
   if (!m) return null;
   const o = m.opts;
+  const confirmationText = confirmation.modal === m ? confirmation.text : "";
+  const confirmed = !o.confirmText || confirmationText === o.confirmText;
   const close = (answer: boolean) => {
+    if (answer && !confirmed) return;
     dialog.current?.close();
     m.resolve(answer);
     modalStore.set(null);
@@ -186,6 +194,19 @@ export function ModalHost() {
     >
       <h3 id="confirm-title">{o.title || "Are you sure?"}</h3>
       <p id="confirm-body">{o.body || ""}</p>
+      {o.confirmText ? (
+        <label className="stack" style={{ marginBlock: "16px" }}>
+          <span>Type <strong>{o.confirmText}</strong> to confirm deletion.</span>
+          <input
+            className="input"
+            type="text"
+            value={confirmationText}
+            onChange={(event) => setConfirmation({ modal: m, text: event.target.value })}
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </label>
+      ) : null}
       <div className="row modal-actions">
         <button
           autoFocus
@@ -197,6 +218,7 @@ export function ModalHost() {
         </button>
         <button
           className={"btn " + (o.danger ? "btn-danger" : "btn-primary")}
+          disabled={!confirmed}
           type="button"
           onClick={() => close(true)}
         >

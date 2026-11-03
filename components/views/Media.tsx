@@ -8,6 +8,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
+import { useReducedMotion } from "motion/react";
 import { api } from "@/lib/api";
 import { prepareYoutubeImport } from "@/lib/youtube-import";
 import { Icon } from "../ui/Icon";
@@ -1325,7 +1326,7 @@ function SpotifyDocuments({ documents }: { documents: MediaDocument[] }) {
 const emptyHistory: MediaEvent[] = [];
 export function MediaView() {
   const media = useLoad(() => api.get<MediaPayload>("/api/media"), []);
-  const [paused, setPaused] = useState(false);
+  const paused = !!useReducedMotion();
   const [gameSearch, setGameSearch] = useState("");
   const [gameSort, setGameSort] = useState("minutes");
   const [steamBusy, setSteamBusy] = useState(false);
@@ -1452,14 +1453,6 @@ export function MediaView() {
     >
       <header className="media-page-header">
         <span className="eyebrow">Connect Your Data</span>
-        <button
-          className="media-motion-toggle"
-          aria-pressed={paused}
-          onClick={() => setPaused(!paused)}
-        >
-          <Icon name={paused ? "play" : "pause"} size={13} />
-          {paused ? "Resume motion" : "Pause motion"}
-        </button>
       </header>
       <section
         data-tour="connections"

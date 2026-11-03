@@ -1,5 +1,6 @@
 /* Weekly: an open dashboard, with the numbers always in view. */
 .weekly-dashboard {
+  padding-top: clamp(32px, 4vw, 64px);
   --weekly-red: #cf5a57;
   --weekly-amber: #e1b55a;
   --weekly-green: #5dad85;

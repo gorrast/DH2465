@@ -1,5 +1,6 @@
 /* After Hours: one complete report composition, scoped to Today. */
 .after-hours {
+  padding-bottom: clamp(48px, 6vw, 96px);
   --glow-report: radial-gradient(
     ellipse,
     rgb(240 145 112 / 0.22),
@@ -75,7 +76,7 @@
     scroll-snap-align: start;
     scroll-snap-stop: normal;
   }
-  .ah-report > .ah-report-footer {
+  .ah-report > .ah-report-divider {
     scroll-snap-align: end;
   }
 }
@@ -852,43 +853,10 @@
   color: var(--ink-secondary);
   font-size: 13px;
 }
-.ah-report-footer {
-  display: flex;
-  justify-content: space-between;
-  gap: 32px;
-  align-items: center;
+.ah-report-divider {
+  border: 0;
   border-top: 1px solid var(--hairline);
-  padding-top: 24px;
-}
-.ah-report-footer > div {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  max-width: 68ch;
-  color: var(--ink-muted);
-}
-.ah-report-footer svg {
-  flex: none;
-}
-.ah-report-footer p {
   margin: 0;
-  font-size: 12px;
-  line-height: 1.8;
-}
-.ah-report-footer p > span {
-  display: block;
-  margin-top: 6px;
-}
-.ah-report-footer > label {
-  font-size: 12px;
-  color: var(--ink-muted);
-  flex: none;
-}
-.ah-report-footer select {
-  display: block;
-  font-size: 12px;
-  min-height: 44px;
-  margin-top: 6px;
 }
 .ah-empty {
   padding: 32px 0;
@@ -1055,11 +1023,6 @@
   .ah-metric-value {
     margin: 16px 0 12px;
   }
-  .ah-report-footer {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 20px;
-  }
 }
 @media (max-width: 359px) {
   .app:has(.after-hours) main#view {
@@ -1152,6 +1115,30 @@
   background: var(--card);
   border: 1px solid var(--hairline);
   border-radius: 20px;
+}
+.daily-reality-check .v-reality-card,
+.daily-protect-space .ah-tonight {
+  min-height: 340px;
+}
+.daily-reality-check .v-reality-card {
+  padding: 24px;
+  border-radius: 20px;
+}
+.daily-reality-check .v-reality-question {
+  font-size: clamp(23px, 2.4vw, 30px);
+  font-weight: 400;
+  line-height: 1.4;
+  margin: 20px 0 16px;
+}
+.daily-reality-check .v-reality-evidence .chip {
+  font-size: 15px;
+}
+.daily-reality-check .v-reality-actions {
+  margin-top: 24px;
+}
+.daily-reality-check .v-reality-actions > .tiny {
+  font-size: 14px;
+  line-height: 1.7;
 }
 .daily-protect-space .ah-tonight-icon {
   justify-content: flex-start;
@@ -1424,11 +1411,15 @@
   border: 0;
 }
 .daily-insights-grid .ah-metric-value {
-  font-size: clamp(30px, 3vw, 40px);
+  font-size: clamp(36px, 3.5vw, 48px);
   margin: 16px 0 10px;
 }
 .daily-insights-grid .ah-metric-value > span {
   margin-left: 4px;
+  font-size: 14px;
+}
+.daily-insights-grid .ah-metric > p:not(.ah-metric-value) {
+  font-size: 14px;
 }
 .daily-insights-grid .ah-more {
   margin-top: 24px;

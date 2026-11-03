@@ -3,7 +3,7 @@
  * first sign-in; a reset link signs the user in through /auth/confirm and lands on /reset-password. */
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { motion, useMotionValue, useSpring } from 'motion/react';
+import { motion, useMotionValue, useSpring, useReducedMotion } from 'motion/react';
 import { ActionButton, RevealHeading } from '../ui/Motion';
 import { getSupabase } from '@/lib/supabase/client';
 
@@ -18,7 +18,7 @@ export function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const [mode, setMode] = useState<Mode>(params.get('reset') ? 'forgot' : 'signin');
-  const [motionPaused, setMotionPaused] = useState(false);
+  const motionPaused = !!useReducedMotion();
   const pageRef = useRef<HTMLDivElement>(null);
   const targetX = useMotionValue(0);
   const targetY = useMotionValue(0);
@@ -130,7 +130,6 @@ export function LoginForm() {
             </g>
             <path d="M0 100H440" stroke="var(--ink-muted)" strokeDasharray="4 6" />
           </svg>
-          <button className="login-motion-toggle" type="button" aria-pressed={motionPaused} onClick={() => setMotionPaused(paused => !paused)}>Pause animation</button>
         </div>
       </section>
       <div className="card raised login-card">

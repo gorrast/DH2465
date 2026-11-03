@@ -414,6 +414,14 @@ export function ReportCard({
   const [regenerating, setRegenerating] = useState(false);
   const c = report.content;
   const weekly = report.kind === "weekly";
+  const hideWeeklyNote = (text: string) =>
+    /These are links in your own history, not proof of cause|Alcohol was logged on \d+ evenings this week, which was more than usual/i.test(text);
+  const caveats = weekly
+    ? c.caveats.filter((text) => !hideWeeklyNote(text))
+    : c.caveats.filter(
+        (text) =>
+          !/^(?:On your (?:\d+ )?days with|Based on \d+ nights|The app explains about)/i.test(text.trim()),
+      );
 
   // Dev servers only: throw the stored report away and write it again.
   function regenerate() {
@@ -483,7 +491,7 @@ export function ReportCard({
           ) : null}
         </div>
       ) : null}
-      {c.fun_fact ? (
+      {weekly && c.fun_fact && !hideWeeklyNote(c.fun_fact) ? (
         <p className="v-home-fun small">
           <Icon name="info" size={14} />
           {c.fun_fact}
@@ -495,9 +503,9 @@ export function ReportCard({
           <p>{weekly ? c.next_week : c.suggestion}</p>
         </div>
       ) : null}
-      {c.caveats.length ? (
+      {caveats.length ? (
         <ul className="v-home-caveats tiny muted">
-          {c.caveats.map((x, i) => (
+          {caveats.map((x, i) => (
             <li key={i}>{x}</li>
           ))}
         </ul>
@@ -507,7 +515,8 @@ export function ReportCard({
           {report.mode === "claude"
             ? "Written by " + (MODEL_NAMES[report.model || ""] || report.model)
             : "Written without AI"}
-          {" · " + when(report.generated_at)} · correlation, not proof
+          {" · " + when(report.generated_at)}
+          {weekly ? " · correlation, not proof" : null}
         </span>
         {onRegenerate ? (
           <button

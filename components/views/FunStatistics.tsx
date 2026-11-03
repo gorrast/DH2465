@@ -383,7 +383,6 @@ export function FunStatisticsView({
     >
       <header className="weekly-section-heading">
         <div>
-          <span className="eyebrow">The little things add up</span>
           {embedded ? (
             <h2 id="weekly-numbers-title">Your week in numbers</h2>
           ) : (
@@ -391,8 +390,6 @@ export function FunStatisticsView({
           )}
         </div>
         <p>
-          Music, moments, and the way you move.
-          <br />
           Seven insights. Click a card to explore.
         </p>
       </header>

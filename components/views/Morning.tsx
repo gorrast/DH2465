@@ -15,7 +15,7 @@ import { RealityView } from './Reality';
 import { DailyGenerationForm, useDailyWrittenReport } from './DailyWrittenReport';
 import { DateNav, Skeleton, useLoad } from './common';
 
-const MARKERS = ['hrv_ms', 'resting_hr', 'wrist_temp_dev'];
+const MARKERS = ['hrv_ms', 'resting_hr'];
 
 function DailyReportPrompt({ paused, controller }: { paused: boolean; controller: ReturnType<typeof useDailyWrittenReport> }) {
   const [checkinOpen, setCheckinOpen] = useState(false);
@@ -133,8 +133,7 @@ function Finding({ cause: c, date, expanded, onSelect }: { cause: any; date: str
   </li>;
 }
 
-function MorningReport({ report, day, veiled, onReveal, motionPaused, onToggleMotion, morning }: { morning: string; report: any; day: any; veiled: boolean; onReveal: () => void; motionPaused: boolean; onToggleMotion: () => void }) {
-  const { meta, historyDays, setHistoryDays } = useApp();
+function MorningReport({ report, day, veiled, onReveal, motionPaused, morning }: { morning: string; report: any; day: any; veiled: boolean; onReveal: () => void; motionPaused: boolean }) {
   const heroRef = useRef<HTMLElement>(null);
   const reducedMotion = useReducedMotion();
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ['start start', 'end -35%'] });
@@ -142,7 +141,6 @@ function MorningReport({ report, day, veiled, onReveal, motionPaused, onToggleMo
   const glowOpacity = useTransform(scrollYProgress, [0, 1], [1, 0.15]);
   const [selected, setSelected] = useState<number | null>(null);
   const [cursor, setCursor] = useState(18 * 60);
-  const [moreOpen, setMoreOpen] = useState(false);
   const night = report.night;
   const causes = report.causes || [];
   const selectCause = (index: number) => {
@@ -153,15 +151,13 @@ function MorningReport({ report, day, veiled, onReveal, motionPaused, onToggleMo
   const chosenEvidence = selected == null ? null : causes[selected]?.evidence?.find((ev: any) => ev.series_start);
   const rangeStart = chosenEvidence ? minuteOf(chosenEvidence.series_start, report.night_date) : null;
   const info = day ? valueAt(day, cursor) : null;
-  const summary = report.missing_data || (report.model?.insufficient ? report.confidence_note : report.narrative?.split(/(?<=[.!?])\s+/).slice(0, 2).join(' ')) || 'Explore your recent nights to understand the patterns in your day.';
-  const recovery = report.recovery || [];
+  const recovery = (report.recovery || []).filter((m: any) => MARKERS.includes(m.key));
   const sleepSummary = <>
       <dl className="ah-sleep-facts">
         <div><dt>Sleep rating</dt><dd className="ah-summary-rating">{report.rating || 'Unavailable'}<span className="ah-summary-baseline">{report.score == null ? 'No score for this night' : report.delta_vs_baseline == null ? 'Building your personal baseline' : <><strong><ScoreChange value={report.delta_vs_baseline} digits={0} /> points</strong> · your usual {fmt.score(report.baseline_score)}</>}</span></dd></div>
         <div><dt>Time asleep</dt><dd>{night?.worn ? fmt.minutes(night.duration_min) : 'Unavailable'}</dd></div>
         <div><dt>Wake time</dt><dd>{night?.worn ? fmt.hm(night.wake_time) : 'Unavailable'}</dd></div>
       </dl>
-      <p className="ah-lead" data-tour="narrative">{veiled ? 'A score tells you how the night went. Your day can help explain why.' : <ScoreText text={summary} />}</p>
       {veiled ? <ActionButton className="btn btn-primary" data-tour="reveal" onClick={onReveal}>Explore the explanation<Icon name="chevron-right" size={16} /></ActionButton> : null}
   </>;
   const written = useDailyWrittenReport(morning, motionPaused || !!reducedMotion, sleepSummary);
@@ -171,12 +167,12 @@ function MorningReport({ report, day, veiled, onReveal, motionPaused, onToggleMo
       <p className="ah-night-date">Last night · {fmt.day(report.night_date)}</p>
       <div className="ah-hero-main">
         <div className="ah-hero-night">
-          <RevealHeading as="h1" id="morning-title" paused={motionPaused} lines={['Your night,', <em key="light">in a new light.</em>]} />
+          <RevealHeading as="h1" id="morning-title" paused={motionPaused} lines={["This night's", <em key="score">sleep score</em>]} />
           <div className="ah-score-stage"><SleepScore report={report} /></div>
         </div>
         <DailyReportPrompt paused={motionPaused} controller={written} />
       </div>
-      <div className="ah-hero-controls"><a className="ah-text-link" href="#night-explanation">Explore your night <span aria-hidden="true">↓</span></a><button className="ah-text-link ah-motion-toggle" type="button" aria-pressed={motionPaused} onClick={onToggleMotion}>Pause motion</button></div>
+      <div className="ah-hero-controls"><a className="ah-text-link" href="#night-explanation">Explore your night <span aria-hidden="true">↓</span></a></div>
     </section>
 
     {written.output}
@@ -188,24 +184,29 @@ function MorningReport({ report, day, veiled, onReveal, motionPaused, onToggleMo
 
 
     {!veiled || night?.worn ? <RevealSection paused={motionPaused} data-page-section="Findings and recovery" className={'ah-section daily-insights-grid' + (veiled || !night?.worn ? ' is-single' : '')}>
-    {!veiled ? <section className="ah-findings" data-tour="causes">
-      <header className="ah-section-heading"><div><span className="ah-eyebrow">Connect the dots</span><RevealHeading paused={motionPaused}>The day behind your night.</RevealHeading></div><p>Patterns from your own history.<br />Associations, never certainties.</p></header>
+    <section className="ah-findings">
+    {!veiled ? <div data-tour="causes">
+      <header className="ah-section-heading"><RevealHeading paused={motionPaused}>Similar day patterns</RevealHeading></header>
       {report.missing_data ? <div className="ah-empty"><RevealHeading as="h3" paused={motionPaused}>Watch data unavailable</RevealHeading><p>{report.missing_data}</p></div> : report.model?.insufficient ? <div className="ah-empty"><RevealHeading as="h3" paused={motionPaused}>Building your baseline</RevealHeading><p>{report.confidence_note}</p></div> : causes.length ? <ol className="ah-finding-list">{causes.map((c: any, i: number) => <Finding key={c.factor} cause={c} date={report.night_date} expanded={selected === i} onSelect={() => selectCause(i)} />)}</ol> : <div className="ah-empty"><RevealHeading as="h3" paused={motionPaused}>No calendar pattern stands out</RevealHeading><p>{report.unexplained_note || 'Some nights have no clear explanation in the available data.'}</p></div>}
       {report.helpers?.length ? <p className="ah-helpers"><Icon name="sun" size={16} /><span>What helped: {report.helpers.map((h: any) => h.title).join(' · ')}</span></p> : null}
+    </div> : null}
+    {night?.worn ? <section className="ah-night-details" aria-labelledby="sleep-stages-title">
+      <RevealHeading as="h3" id="sleep-stages-title" paused={motionPaused}>Your sleep, in stages</RevealHeading>
+      <p>{fmt.hm(night.sleep_onset)} asleep · {fmt.hm(night.wake_time)} awake · {night.interruptions} interruptions</p>
+      <Stages night={night} />
     </section> : null}
+    </section>
 
     {night?.worn ? <section className="ah-recovery" data-tour="recovery">
-      <header className="ah-section-heading"><div><span className="ah-eyebrow">The quieter signals</span><RevealHeading paused={motionPaused}>More than a number.</RevealHeading></div><p>Last night's recovery markers,<br />compared with your usual.</p></header>
-      <MetricGroup paused={motionPaused}>{recovery.filter((m: any) => MARKERS.includes(m.key)).map((m: any) => <Metric key={m.key} marker={m} paused={motionPaused} />)}</MetricGroup>
-      <button className="ah-text-link ah-more" aria-expanded={moreOpen} aria-controls="ah-night-details" onClick={() => setMoreOpen(!moreOpen)}>{moreOpen ? 'Close night details' : 'A closer look at the night'}<Icon name={moreOpen ? 'x' : 'chevron-right'} size={16} /></button>
-      <Collapse id="ah-night-details" open={moreOpen}><div className="ah-night-details"><div className="ah-metric-grid">{recovery.filter((m: any) => !MARKERS.includes(m.key)).map((m: any) => <Metric key={m.key} marker={m} />)}</div><RevealHeading as="h3" paused={motionPaused}>Your sleep, in stages</RevealHeading><p>{fmt.hm(night.sleep_onset)} asleep · {fmt.hm(night.wake_time)} awake · {night.interruptions} interruptions</p><Stages night={night} /><details className="ah-data-details"><summary>Read sleep-stage times</summary><div className="ah-data-scroll"><table className="data"><thead><tr><th>Stage</th><th>Start</th><th>End</th></tr></thead><tbody>{night.stages?.map((stage: any, i: number) => <tr key={i}><td>{stage.kind}</td><td>{fmt.hm(stage.start)}</td><td>{fmt.hm(stage.end)}</td></tr>)}</tbody></table></div></details></div></Collapse>
+      <header className="ah-section-heading"><RevealHeading paused={motionPaused}>Last night's recovery markers</RevealHeading></header>
+      <MetricGroup paused={motionPaused}>{recovery.map((m: any) => <Metric key={m.key} marker={m} paused={motionPaused} />)}</MetricGroup>
     </section> : null}
     </RevealSection> : null}
 
     {day ? <RevealSection paused={motionPaused} data-page-section="Your day" className="ah-section ah-day" id="day-story" tabIndex={-1}>
-      <header className="ah-section-heading"><div><span className="ah-eyebrow">Follow the rhythm</span><RevealHeading paused={motionPaused}>A day. A body. A connection.</RevealHeading></div></header>
+      <header className="ah-section-heading"><RevealHeading paused={motionPaused}>BPM and Calendar events: Overview</RevealHeading></header>
       <div className="ah-timeline-frame" data-tour="timeline">
-        <div className="ah-trace-header"><span><i className="ah-live-dot" />{fmt.day(report.night_date)}<span className="ah-trace-subtitle">Calendar meets body</span></span><span className="ah-trace-legend"><i />Heart rate <b />Your usual</span></div>
+        <div className="ah-trace-header"><span><i className="ah-live-dot" />{fmt.day(report.night_date)}</span><span className="ah-trace-legend"><i />Heart rate <b />Your usual</span></div>
         <div className="ah-timeline-scroll"><DayTimeline className="ah-timeline" date={day.date} events={day.events} visits={day.visits} hr={day.hr} norm={day.norm} night={day.night} nightPrev={day.night_prev} workouts={day.workouts} checks={day.checks} cursorMinute={cursor} highlightRange={rangeStart == null ? undefined : [rangeStart, Math.min(1440, rangeStart + (chosenEvidence.series?.length || 0) * (chosenEvidence.series_step_min || 5))]} onSeek={setCursor} /></div>
         <div className="ah-inspection"><div><strong>{minuteLabel(cursor)}</strong><span>{info?.event?.title || info?.place?.place_name || 'A moment in your day'}</span></div><p><strong>{fmt.num(info?.hr, 0)} <small>bpm</small></strong><span>{info?.norm == null ? 'No personal baseline' : `Your usual ${fmt.num(info.norm, 0)} bpm`}</span></p></div>
         <label className="ah-scrubber"><span className="sr-only">Inspect time of day</span><input type="range" min={0} max={1439} value={cursor} aria-valuetext={`${minuteLabel(cursor)}, ${info?.hr == null ? 'heart rate unavailable' : info.hr + ' beats per minute'}, ${info?.event?.title || 'no calendar event'}`} onChange={(e) => setCursor(+e.target.value)} /></label>
@@ -215,31 +216,31 @@ function MorningReport({ report, day, veiled, onReveal, motionPaused, onToggleMo
 
 
 
-    <footer className="ah-report-footer" data-tour="confidence"><div><Icon name="shield" size={18} /><p>{report.confidence_note}<span>{meta.source === 'demo' ? 'Simulated health & calendar data' : 'Imported health & calendar data'} · {report.reasoning_mode === 'claude' ? 'AI-assisted narrative' : 'Rule-based narrative'}</span></p></div><label>History used<select className="select" aria-label="Nights of history used" value={historyDays ?? 'all'} onChange={(e) => setHistoryDays(e.target.value === 'all' ? null : +e.target.value)}>{[7, 14, 28].map((n) => <option key={n} value={n}>{n} nights</option>)}<option value="all">All nights</option></select></label></footer>
+    <hr className="ah-report-divider" />
   </div>;
 }
 
 function Metric({ marker: m, paused = false }: { marker: any; paused?: boolean }) {
   const reduced = useReducedMotion();
-  const value = m.key === 'wrist_temp_dev' ? fmt.signed(m.value, 1) : fmt.num(m.value, m.key === 'resp_rate' || m.key === 'spo2' ? 1 : 0);
+  const value = fmt.num(m.value, 0);
   return <motion.article className="ah-metric" variants={quietItem} transition={{ ...calmTransition, duration: reduced || paused ? 0 : 0.65 }}><span className="ah-eyebrow">{m.label}</span><p className="ah-metric-value">{value}<span>{m.unit}</span></p><p>{m.delta == null ? 'Building your baseline' : m.key === 'hrv_ms' && m.delta_pct != null ? fmt.pct(m.delta_pct) + ' vs your usual' : fmt.signed(m.delta, 1) + ' ' + m.unit + ' vs your usual'}</p><span className="ah-marker-status">{m.status}</span></motion.article>;
 }
 
 export function MorningView({ date, reveal }: { date?: string; reveal?: boolean }) {
-  const { today, meta, go, historyDays } = useApp();
+  const { today, meta, go } = useApp();
   const morning = date || today;
   const pageRef = useRef<HTMLDivElement>(null);
   const [veiled, setVeiled] = useState(!!reveal);
-  const [motionPaused, setMotionPaused] = useState(false);
+  const motionPaused = !!useReducedMotion();
   useEffect(() => setVeiled(!!reveal), [reveal]);
   const load = useLoad(async () => {
-    const report = await api.get('/api/report/' + morning + (historyDays ? '?history_days=' + historyDays : ''));
+    const report = await api.get('/api/report/' + morning);
     const day = await api.get('/api/day/' + report.night_date).catch(() => null);
     return { report, day };
-  }, [morning, historyDays, meta.persona.key]);
+  }, [morning, meta.persona.key]);
   return <div ref={pageRef} className="after-hours">
     <header className="ah-page-header view-head"><div><span className="ah-eyebrow">Daily Tab</span><p>{fmt.dayLong(morning)}<span className="ah-demo-label">{meta.source === 'demo' ? 'Simulated example' : 'Your data'}</span></p></div><DateNav label={morning === today ? 'This morning' : fmt.day(morning)} prevHref={'/daily/' + dates.addDays(morning, -1)} nextHref={'/daily/' + dates.addDays(morning, 1)} prevDisabled={!!meta.start && morning <= dates.addDays(meta.start, 1)} nextDisabled={morning >= today} extra={morning !== today ? <button className="btn btn-sm" onClick={() => go('/daily/' + today)}>Today</button> : null} /></header>
-    {load.loading ? <div className="ah-loading" aria-busy="true"><Skeleton height={400} /><p>Preparing your daily brief…</p></div> : load.error || !load.data ? <section className="ah-empty" role="alert"><span className="ah-eyebrow">Your daily brief</span><RevealHeading as="h1">A moment out of reach.</RevealHeading><p>{load.error?.message || 'We could not load this report.'}</p><ActionButton className="btn btn-primary" onClick={load.reload}>Try again</ActionButton></section> : <MorningReport morning={morning} key={`${morning}-${historyDays}-${meta.persona.key}`} report={load.data.report} day={load.data.day} veiled={veiled} onReveal={() => setVeiled(false)} motionPaused={motionPaused} onToggleMotion={() => setMotionPaused(paused => !paused)} />}
+    {load.loading ? <div className="ah-loading" aria-busy="true"><Skeleton height={400} /><p>Preparing your daily brief…</p></div> : load.error || !load.data ? <section className="ah-empty" role="alert"><span className="ah-eyebrow">Your daily brief</span><RevealHeading as="h1">A moment out of reach.</RevealHeading><p>{load.error?.message || 'We could not load this report.'}</p><ActionButton className="btn btn-primary" onClick={load.reload}>Try again</ActionButton></section> : <MorningReport morning={morning} key={`${morning}-${meta.persona.key}`} report={load.data.report} day={load.data.day} veiled={veiled} onReveal={() => setVeiled(false)} motionPaused={motionPaused} />}
     <div data-page-section="Reality check and tonight" className={'ah-section daily-actions-grid' + (veiled ? ' is-single' : '')}>
       <section id="reality-check" className="daily-reality-check" aria-label="Reality check"><RealityView embedded onAnswered={load.reload} /></section>
       {!veiled ? <section className="daily-protect-space" aria-labelledby="protect-space-title">

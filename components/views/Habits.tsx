@@ -1,10 +1,9 @@
 "use client";
 /* Habits view: every recurring pattern ranked by effect, with intervals and the adjusted effect. */
-import Link from "next/link";
 import { ScoreChange } from "../ui/ScoreChange";
 import { useState } from "react";
 import { api } from "@/lib/api";
-import { dates, fmt } from "@/lib/format";
+import { fmt } from "@/lib/format";
 import { DataTable } from "../charts/basic";
 import { EffectBars } from "../charts/analysis";
 import { useApp } from "../shell/AppContext";
@@ -134,76 +133,7 @@ export function HabitsView() {
                 ) : null}
               </div>
             </div>
-            <div className="grid grid-3 v-habits-cards">
-              {items.map((h: any) => {
-                const adj =
-                  h.adjusted_effect !== null && h.adjusted_effect !== undefined;
-                return (
-                  <div key={h.key} className="card v-habits-card">
-                    <div className="row between">
-                      <h3>{h.title}</h3>
-                      <span className={"badge badge-" + h.confidence}>
-                        {h.confidence}
-                      </span>
-                    </div>
-                    <p className="small secondary">{h.description}</p>
-                    <div className="v-habits-effect">
-                      <div>
-                        <span className="pts" style={{ fontSize: "24px" }}>
-                          <ScoreChange
-                            value={adj ? h.adjusted_effect : h.effect}
-                          />
-                        </span>
-                        <span className="small muted">
-                          {adj ? " pts, adjusted" : " pts"}
-                        </span>
-                      </div>
-                      <div className="small secondary">
-                        Simple comparison: <ScoreChange value={h.effect} />
-                        {h.ci_low != null ? (
-                          <>
-                            {" "}
-                            (95 % <ScoreChange value={h.ci_low} /> to{" "}
-                            <ScoreChange value={h.ci_high} />)
-                          </>
-                        ) : null}
-                      </div>
-                    </div>
-                    <div className="row tiny muted">
-                      <span>
-                        {"n = " + h.n_with + " vs " + h.n_without + " nights"}
-                      </span>
-                      {h.metric_effects &&
-                      h.metric_effects.hrv_ms_pct !== null &&
-                      h.metric_effects.hrv_ms_pct !== undefined ? (
-                        <span>
-                          {"HRV " + fmt.pct(h.metric_effects.hrv_ms_pct, 0)}
-                        </span>
-                      ) : null}
-                      {h.metric_effects &&
-                      h.metric_effects.resting_hr !== null &&
-                      h.metric_effects.resting_hr !== undefined ? (
-                        <span>
-                          {"RHR " +
-                            fmt.signed(h.metric_effects.resting_hr, 1) +
-                            " bpm"}
-                        </span>
-                      ) : null}
-                    </div>
-                    {h.example_dates && h.example_dates.length ? (
-                      <div className="row tiny">
-                        <span className="muted">Recent:</span>
-                        {h.example_dates.slice(-4).map((d: string) => (
-                          <Link key={d} href={"/daily/" + dates.addDays(d, 1)}>
-                            {fmt.day(d)}
-                          </Link>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
+
           </>
         )}
       </div>

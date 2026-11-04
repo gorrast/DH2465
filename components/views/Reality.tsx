@@ -200,12 +200,6 @@ export function RealityView({
           <>
             <div className="grid grid-3">
               <div className="span-2 stack">
-                <div className="row between">
-                  <h3>One quick check</h3>
-                  <span className="small muted">
-                    {data.open.length} remaining
-                  </span>
-                </div>
                 <div className="stack" data-tour="inbox">
                   {!data.open.length ? (
                     <div className="card empty">
@@ -226,46 +220,7 @@ export function RealityView({
                       ))
                   )}
                 </div>
-                {data.open.length > 1 ? (
-                  <button
-                    className="btn btn-ghost"
-                    type="button"
-                    onClick={() => setQuestionIndex((index) => index + 1)}
-                  >
-                    Another question →
-                  </button>
-                ) : null}
               </div>
-              <div className="stack">
-                <h3>Answered</h3>
-                <div className="stack">
-                  {!data.resolved.length ? (
-                    <p className="muted small">Nothing answered yet.</p>
-                  ) : (
-                    data.resolved.map((c: any) => (
-                      <ResolvedCard
-                        key={c.id}
-                        c={c}
-                        extra={recent.current[c.id]}
-                      />
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-            <div className="stack">
-              {data.older.length ? (
-                <details className="card soft">
-                  <summary>
-                    {"Older (" + data.older.length + ") — assumed as booked"}
-                  </summary>
-                  <div className="stack" style={{ marginTop: "10px" }}>
-                    {data.older.map((c: any) => (
-                      <CheckCard key={c.id} c={c} onAnswer={answer} />
-                    ))}
-                  </div>
-                </details>
-              ) : null}
             </div>
           </>
         )}

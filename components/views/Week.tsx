@@ -117,8 +117,7 @@ export function WeekView({ end: endParam }: { end?: string }) {
   const end = endParam || today;
   const pageRef = useRef<HTMLDivElement>(null);
   const reduced = useReducedMotion();
-  const [motionPaused, setMotionPaused] = useState(false);
-  const paused = !!reduced || motionPaused;
+  const paused = !!reduced;
   const [weeks, setWeeks] = useState(4);
   const load = useLoad(() => api.get('/api/week?end=' + end + (hd ? '&history_days=' + hd : '')), [end, hd, meta.persona.key]);
   const appStatistics = useAppStatistics();
@@ -128,10 +127,10 @@ export function WeekView({ end: endParam }: { end?: string }) {
   const w = load.data;
   return <WeeklyMotionContext.Provider value={paused}>
     <div ref={pageRef} className={'v-week weekly-dashboard' + (paused ? ' is-motion-paused' : '')}>
-      <header data-page-section="Your week" className="weekly-page-heading view-head"><WeeklyAppLogos apps={headerApps} paused={paused} /><div><span className="eyebrow">Weekly Tab · A little perspective</span><RevealHeading as="h1" paused={paused} duration={1.7}>Your week, at a glance.</RevealHeading><p>See what lifts you up. Make space for more of it.</p></div><div className="weekly-page-tools"><span className="small muted">Through {fmt.day(dates.addDays(end, -1))}</span><button className="btn btn-sm btn-ghost" aria-pressed={paused} disabled={!!reduced} onClick={() => setMotionPaused(value => !value)}><Icon name={paused ? 'play' : 'pause'} size={14} />{reduced ? 'Reduced motion' : motionPaused ? 'Resume motion' : 'Pause motion'}</button></div>{floatingApps.length < 7 ? <span className="weekly-logo-example-note">{floatingApps.length ? 'Includes example app logos' : 'Example app logos · add app data to personalize'}</span> : null}</header>
+      <header data-page-section="Your week" className="weekly-page-heading view-head"><WeeklyAppLogos apps={headerApps} paused={paused} /><div><span className="eyebrow">Weekly Tab</span><RevealHeading as="h1" paused={paused} duration={1.7}>Your weekly overview.</RevealHeading></div><div className="weekly-page-tools"><span className="small muted">Through {fmt.day(dates.addDays(end, -1))}</span></div></header>
       <FunStatisticsView embedded appStatistics={appStatistics} />
       <WeeklyWrittenReport key={`${end}-${meta.persona.key}`} end={end} paused={paused} />
-      <header data-page-section="Sleep and weekly patterns" className="weekly-section-heading"><div><span className="eyebrow">Find your rhythm</span><h2>Sleep and weekly patterns</h2></div><p>Small moments in your day.<br />A bigger picture of your nights.</p></header>
+      <header data-page-section="Sleep and weekly patterns" className="weekly-section-heading"><div><span className="eyebrow">Find your rhythm</span><h2>Sleep and weekly patterns</h2></div></header>
       {load.loading ? <Skeleton height={460} /> : load.error || !w ? <ErrorCard error={load.error!} onRetry={load.reload} view="week" /> : <>
         <div className="weekly-overview-grid">
           <WeeklyReveal className="weekly-calendar-panel card" >

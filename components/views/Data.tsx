@@ -1,6 +1,7 @@
 "use client";
 /* Data & privacy: what is connected, what is read, persona/seed, import, delete (SPEC §9.4). */
 import Link from "next/link";
+import { useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { fmt } from "@/lib/format";
 import { Icon } from "../ui/Icon";
@@ -19,12 +20,6 @@ const CLASSES = [
     DEMO,
   ],
   [
-    "Location visits",
-    "place type and name, start, end",
-    "to check whether booked events happened",
-    DEMO,
-  ],
-  [
     "Sleep",
     "bedtime, stages, interruptions, wake time",
     "to compute and explain the sleep score",
@@ -38,7 +33,7 @@ const CLASSES = [
   ],
   [
     "Recovery markers",
-    "overnight HRV, resting heart rate, respiratory rate, wrist temperature, blood oxygen",
+    "overnight HRV, resting heart rate",
     "to compare each night with your own baseline",
     DEMO,
   ],
@@ -114,33 +109,42 @@ export function DataView() {
   const isDemo = meta.source === "demo";
   const hidden = facts.data && facts.data.available ? facts.data.hidden : null;
 
+  const deletingRef = useRef(false);
+  const [deleting, setDeleting] = useState(false);
+
   const deleteAll = async () => {
-    const ok = await confirmModal({
-      title: "Delete all data?",
-      body: "This permanently removes everything stored in your account: synced sleep, steps and screen time, your calendar, media imports, check-ins, reports, answers and connections. The default demo is regenerated.",
-      confirmLabel: "Delete and regenerate",
-      danger: true,
-    });
-    if (!ok) return;
-    busy({
-      title: "Deleting and regenerating",
-      steps: [
-        "Removing your data",
-        "Booking a fresh calendar",
-        "Simulating heart rate and sleep",
-        "Fitting the model",
-      ],
-    });
+    if (deletingRef.current) return;
+    deletingRef.current = true;
+    setDeleting(true);
     try {
+      const ok = await confirmModal({
+        title: "Delete all data?",
+        body: "This permanently removes everything stored in your account: synced sleep, steps and screen time, your calendar, media imports, check-ins, reports, answers and connections. This cannot be undone. The default demo is regenerated.",
+        confirmLabel: "Permanently delete all data",
+        confirmText: "DELETE",
+        danger: true,
+      });
+      if (!ok) return;
+      busy({
+        title: "Deleting and regenerating",
+        steps: [
+          "Removing your data",
+          "Booking a fresh calendar",
+          "Simulating heart rate and sleep",
+          "Fitting the model",
+        ],
+      });
       await api.post("/api/reset");
       const m = await refreshMeta();
       setHistoryDays(null);
-      busy(null);
       toast("All data deleted. Fresh demo ready.", { kind: "success" });
       go("/daily/" + m.today);
     } catch (e: any) {
-      busy(null);
       toast(e.message, { kind: "error" });
+    } finally {
+      busy(null);
+      deletingRef.current = false;
+      setDeleting(false);
     }
   };
 
@@ -151,7 +155,7 @@ export function DataView() {
         title="What StressLess reads, and why"
       />
       <div className="v-data stack" data-tour="privacy">
-        <div className="grid grid-3">
+        <div className="grid grid-2">
           <Conn
             icon="calendar"
             title="Calendar"
@@ -168,18 +172,8 @@ export function DataView() {
             status={isDemo ? "Demo data" : "Synced"}
             note={
               isDemo
-                ? "Simulated smartwatch: heart rate, sleep stages, HRV, resting heart rate, wrist temperature. In the product: Health Connect, synced by the StressLess Android app."
+                ? "Simulated smartwatch: heart rate, sleep stages, HRV, resting heart rate. In the product: Health Connect, synced by the StressLess Android app."
                 : "Sleep and steps from Health Connect, synced by the StressLess Android app. Any watch that writes to Health Connect works."
-            }
-          />
-          <Conn
-            icon="map"
-            title="Maps"
-            status={isDemo ? "Demo data" : "Not collected"}
-            note={
-              isDemo
-                ? "Simulated Google Maps timeline, used only to confirm booked events."
-                : "Your location is not collected; places only appear in the demo."
             }
           />
         </div>
@@ -218,7 +212,7 @@ export function DataView() {
               available when configured.
             </p>
             <p className="small secondary">
-              Health, calendar and location exports cannot currently be uploaded
+              Health and calendar exports cannot currently be uploaded
               through the web app. Each supported source includes its own setup
               instructions and file requirements.
             </p>
@@ -269,6 +263,7 @@ export function DataView() {
               <button
                 className="btn btn-danger"
                 type="button"
+                disabled={deleting}
                 onClick={deleteAll}
               >
                 <Icon name="trash" size={16} />

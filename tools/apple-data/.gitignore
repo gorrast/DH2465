@@ -1,0 +1,24 @@
+# Local credentials, including Supabase function env files.
+.env
+.env.*
+!.env.example
+
+# Health exports, Screen Time data, and generated runs.
+/apple_health_export/
+/exports/
+*.xml
+*.zip
+*.csv
+*.csv.gz
+*.json
+*.jsonl
+*.jsonl.gz
+*.sqlite*
+
+# Local development artifacts.
+__pycache__/
+*.pyc
+.venv/
+.DS_Store
+/supabase/.temp/
+/supabase/.branches/

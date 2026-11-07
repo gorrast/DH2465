@@ -39,6 +39,7 @@
     "node_modules",
     "backend",
     "src",
-    "supabase/functions"
+    "supabase/functions",
+    "tools/apple-data/supabase/functions"
   ]
 }

@@ -1,3 +1,3 @@
 import { redirect } from 'next/navigation';
 
-export default function Page() { redirect('/daily'); }
+export default function Page() { redirect('/project'); }

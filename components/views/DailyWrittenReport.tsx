@@ -11,6 +11,7 @@ import {
   type Report,
 } from "./Home";
 import { ReportInsights } from "./ReportInsights";
+import { ReportWriting } from "./ReportWriting";
 import { CheckinCard, type CheckinHandle } from "./Checkin";
 import { Icon } from "../ui/Icon";
 
@@ -130,7 +131,9 @@ export function useDailyWrittenReport(
             summaryAside={sleepSummary}
             insights={<ReportInsights report={report} paused={paused} />}
           />
-          {overview.data?.dev && morning === overview.data.daily.period ? (
+          {overview.data?.dev &&
+          !overview.data.read_only &&
+          morning === overview.data.daily.period ? (
             <button
               className="btn btn-sm"
               disabled={working}
@@ -243,9 +246,7 @@ export function DailyGenerationForm({
           {tooltip}
         </div>
       ) : null}
-      {working ? (
-        <p role="status">Writing your report. This can take up to a minute.</p>
-      ) : null}
+      {working ? <ReportWriting kind="daily" /> : null}
       {pending ? (
         <p role="status">
           Your report is being written.{" "}

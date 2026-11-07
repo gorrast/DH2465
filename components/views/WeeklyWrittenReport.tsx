@@ -6,6 +6,7 @@ import { dates, fmt } from "@/lib/format";
 import { Icon } from "../ui/Icon";
 import { asIfWritten, ReportCard, type Overview, type Report } from "./Home";
 import { ReportInsights } from "./ReportInsights";
+import { ReportWriting } from "./ReportWriting";
 import { Skeleton, useLoad } from "./common";
 
 /** The backend reports on the last complete Monday–Sunday week. */
@@ -148,8 +149,8 @@ export function WeeklyWrittenReport({
             report={report}
             insights={<ReportInsights report={report} paused={paused} />}
           />
-          {o?.dev && current ? consentField : null}
-          {o?.dev && current ? (
+          {o?.dev && !o.read_only && current ? consentField : null}
+          {o?.dev && !o.read_only && current ? (
             <button
               className="btn btn-sm"
               type="button"
@@ -224,11 +225,7 @@ export function WeeklyWrittenReport({
           )}
         </div>
       )}
-      {working ? (
-        <p className="small secondary" role="status">
-          Writing your weekly report. This can take up to a minute.
-        </p>
-      ) : null}
+      {working ? <ReportWriting kind="weekly" /> : null}
       {error ? (
         <p role="alert" className="v-home-error">
           {error}

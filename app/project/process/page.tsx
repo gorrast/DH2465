@@ -38,8 +38,9 @@ const STAGES = [
       'We added check-ins for coffee and alcohol, which the calendar cannot see, and a shared demo account so anyone can try the app without signing up.',
     ],
     shots: [
-      { src: '/project/after-hours-desktop.jpg', alt: 'The Daily view in the After Hours design on desktop' },
-      { src: '/project/after-hours-mobile.jpg', alt: 'The Daily view on a phone' },
+      { src: '/project/daily.jpg', alt: 'The Daily view in the After Hours design on desktop' },
+      { src: '/project/weekly-patterns.jpg', alt: 'Recurring patterns ranked by their effect on sleep' },
+      { src: '/project/weekly-report.jpg', alt: 'The weekly report' },
     ],
   },
 ];

@@ -262,6 +262,17 @@ export function Shell({ children }: { children: ReactNode }) {
       <div className="app">
         <div
           className={"rail-drawer" + (navOpen ? " is-open" : "")}
+          // a mouse opens the menu by hovering it, and closes it by leaving (unless focus is inside)
+          onPointerEnter={(e) => {
+            if (e.pointerType === "mouse") setNavOpen(true);
+          }}
+          onPointerLeave={(e) => {
+            if (
+              e.pointerType === "mouse" &&
+              !e.currentTarget.contains(document.activeElement)
+            )
+              setNavOpen(false);
+          }}
           onKeyDown={(e) => {
             if (e.key === "Escape") {
               e.stopPropagation();
@@ -281,7 +292,6 @@ export function Shell({ children }: { children: ReactNode }) {
             <Icon name={navOpen ? "x" : "menu"} size={20} />
             <span className="rail-toggle-copy">
               {navOpen ? "Close" : "Menu"}
-              <small>{navOpen ? "Esc to close" : "Click to open"}</small>
             </span>
           </button>
           <motion.aside

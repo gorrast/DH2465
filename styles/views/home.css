@@ -178,6 +178,190 @@
   font-weight: 650;
   font-variant-numeric: tabular-nums;
 }
+/* While a report is written (components/views/ReportWriting.tsx) */
+.report-writing {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  width: 100%;
+  max-width: 560px;
+  margin: 16px auto 0;
+  padding: 20px 24px;
+  border-radius: 18px;
+  background: var(--card);
+  border: 1px solid var(--hairline);
+  text-align: left;
+}
+.report-writing-ring {
+  position: relative;
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+}
+.report-writing-ring::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0 30%,
+    var(--interactive) 100%
+  );
+  -webkit-mask: radial-gradient(
+    farthest-side,
+    transparent calc(100% - 4px),
+    #000 calc(100% - 3px)
+  );
+  mask: radial-gradient(
+    farthest-side,
+    transparent calc(100% - 4px),
+    #000 calc(100% - 3px)
+  );
+  animation: report-writing-spin 1s linear infinite;
+}
+.report-writing-core {
+  position: absolute;
+  inset: 9px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--interactive-soft);
+  color: var(--interactive);
+  animation: report-writing-pulse 1.6s ease-in-out infinite;
+}
+.report-writing-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+}
+.report-writing-steps li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-muted);
+  opacity: 0.45;
+  transition:
+    opacity 0.3s ease,
+    color 0.3s ease;
+}
+.report-writing-steps li.is-done {
+  opacity: 0.8;
+}
+.report-writing-steps li.is-done .icon {
+  color: var(--interactive);
+}
+.report-writing-steps li.is-current {
+  opacity: 1;
+  color: var(--ink-primary);
+  font-weight: 600;
+}
+@keyframes report-writing-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+@keyframes report-writing-pulse {
+  50% {
+    transform: scale(0.9);
+    opacity: 0.75;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .report-writing-ring::before,
+  .report-writing-core {
+    animation: none;
+  }
+  .report-writing-steps li {
+    transition: none;
+  }
+}
+
+/* Check-in rows: one tap per drink (components/views/Checkin.tsx) */
+.checkin-rows {
+  list-style: none;
+  padding: 0;
+  margin: 14px 0 0;
+  display: grid;
+  gap: 10px;
+}
+.checkin-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--hairline);
+}
+.checkin-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--interactive-soft);
+  color: var(--interactive);
+}
+.checkin-label {
+  flex: 1;
+  min-width: 150px;
+}
+.checkin-label .title {
+  font-weight: 600;
+}
+.checkin-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.checkin-chip {
+  min-width: 38px;
+  height: 38px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  background: var(--card-2);
+  color: var(--ink-primary);
+  font: inherit;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease;
+}
+.checkin-chip:not(:disabled):hover {
+  border-color: var(--interactive);
+}
+.checkin-chip:not(:disabled):active {
+  transform: scale(0.94);
+}
+.checkin-chip.is-selected {
+  background: var(--interactive);
+  border-color: var(--interactive);
+  color: var(--interactive-ink);
+}
+.checkin-chip:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.checkin-quick-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .checkin-chip {
+    transition: none;
+  }
+}
 @media (max-width: 480px) {
   .v-home-intake li {
     flex-wrap: wrap;

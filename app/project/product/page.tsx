@@ -1,14 +1,28 @@
 import type { Metadata } from 'next';
 import { DemoButton } from '@/components/auth/DemoButton';
+import { Icon } from '@/components/ui/Icon';
 
 export const metadata: Metadata = { title: 'The product' };
 
-const SOURCES = [
-  { title: 'Calendar', text: 'what you did' },
-  { title: 'Watch', text: 'how your body reacted' },
-  { title: 'Location', text: 'where you were' },
-  { title: 'Reasoning', text: 'works out why' },
+// Media marks: the bundled Simple Icons in public/brands, coloured as in the app (lib/app-brands.ts).
+const MEDIA = [
+  { key: 'spotify', name: 'Spotify', color: '#1ed760' },
+  { key: 'netflix', name: 'Netflix', color: '#ed4254' },
+  { key: 'youtube', name: 'YouTube', color: '#ff5a63' },
 ];
+
+// How the data comes together: the sources, the two steps, and what comes out (the graphic below the intro).
+const SOURCES: { icon: string; title: string; text: string; brands?: typeof MEDIA }[] = [
+  { icon: 'calendar', title: 'Calendar', text: 'what you did' },
+  { icon: 'watch', title: 'Watch', text: 'sleep, heart rate, HRV, steps' },
+  { icon: 'map', title: 'Location', text: 'where you were' },
+  { icon: 'screen', title: 'Phone usage', text: 'when you reached for your phone' },
+  { icon: 'music', title: 'Media', text: 'what you play and watch', brands: MEDIA },
+];
+const SOURCE_H = 68;                           // px per source row, and the gap between rows: the links are drawn
+const SOURCE_GAP = 12;                         // from each row's middle to the middle of the column
+const SOURCES_H = SOURCES.length * SOURCE_H + (SOURCES.length - 1) * SOURCE_GAP;
+const INSIGHTS = ['Which meetings weigh on you', 'What helps you wind down', 'When you reach for your phone'];
 
 const FEATURES = [
   { title: 'Daily report', text: 'Each morning: your sleep score, the likely causes from yesterday\'s calendar with their evidence, and one change you can put straight into tonight\'s calendar.' },
@@ -20,12 +34,12 @@ const FEATURES = [
 ];
 
 const SHOTS = [
-  { src: '/project/morning.png', alt: 'Morning report', caption: 'The morning report' },
-  { src: '/project/morning-reveal.png', alt: 'Morning report with likely causes', caption: 'Three likely causes, with evidence' },
-  { src: '/project/replay.png', alt: 'Evening replay', caption: 'Replay of the evening' },
-  { src: '/project/habits.png', alt: 'Habits ranked by effect', caption: 'Habits ranked by effect' },
-  { src: '/project/planner.png', alt: 'Planner', caption: 'Planning a calmer evening' },
-  { src: '/project/data.png', alt: 'Data and privacy', caption: 'Data and privacy' },
+  { src: '/project/daily.jpg', alt: 'The Daily view with last night\'s sleep score', caption: 'Last night, at a glance' },
+  { src: '/project/daily-report.jpg', alt: 'A daily report with three links and a suggestion', caption: 'The daily report: what shaped last night' },
+  { src: '/project/daily-patterns.jpg', alt: 'Similar day patterns, sleep stages and recovery markers', caption: 'Similar days, sleep stages and recovery' },
+  { src: '/project/daily-heart-rate.jpg', alt: 'Heart rate through the day against the calendar', caption: 'Heart rate against the calendar' },
+  { src: '/project/weekly-report.jpg', alt: 'A weekly report with four links, the best and hardest day and a suggestion', caption: 'The weekly report' },
+  { src: '/project/weekly-patterns.jpg', alt: 'Recurring patterns ranked by their effect on sleep', caption: 'Recurring patterns, ranked by effect' },
 ];
 
 export default function ProductPage() {
@@ -43,23 +57,60 @@ export default function ProductPage() {
           <DemoButton label="Try the demo" />
         </div>
       </section>
-      <section className="site-section" aria-label="How it works">
-        <div className="site-equation">
-          {SOURCES.map((s, i) => (
-            <div key={s.title} className="site-term">
-              {i > 0 ? <span className="site-op" aria-hidden="true">+</span> : null}
-              <div>
-                <strong>{s.title}</strong>
-                <span className="small muted">{s.text}</span>
-              </div>
-            </div>
-          ))}
-          <div className="site-term">
-            <span className="site-op" aria-hidden="true">=</span>
-            <div>
-              <strong className="site-accent">StressLess</strong>
-              <span className="small muted">the explanation</span>
-            </div>
+      <section className="site-section" aria-labelledby="how">
+        <h2 id="how">How it comes together</h2>
+        <div className="site-flow">
+          <ul className="site-flow-sources" aria-label="Data sources">
+            {SOURCES.map((src) => (
+              <li key={src.title} className="site-flow-source" style={{ height: SOURCE_H }}>
+                <span className="site-flow-icon"><Icon name={src.icon} size={18} /></span>
+                <span className="site-flow-copy">
+                  <span className="site-flow-title">
+                    <strong>{src.title}</strong>
+                    {src.brands ? (
+                      <span className="site-brands">
+                        {src.brands.map((b) => (
+                          <span key={b.key} className="site-brand" role="img" aria-label={b.name} title={b.name}
+                            style={{ backgroundColor: b.color, maskImage: `url(/brands/${b.key}.svg)`, WebkitMaskImage: `url(/brands/${b.key}.svg)` }} />
+                        ))}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="small muted">{src.text}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <svg className="site-flow-links" width="72" height={SOURCES_H} viewBox={`0 0 72 ${SOURCES_H}`} aria-hidden="true">
+            {SOURCES.map((src, i) => {
+              const y = i * (SOURCE_H + SOURCE_GAP) + SOURCE_H / 2;
+              return <path key={src.title} d={`M0 ${y} C36 ${y}, 36 ${SOURCES_H / 2}, 72 ${SOURCES_H / 2}`} />;
+            })}
+          </svg>
+          <div className="site-flow-step">
+            <span className="site-flow-icon"><Icon name="lab" size={18} /></span>
+            <strong>Statistical analysis</strong>
+            <span className="small muted">
+              Compares the days with and without each meeting, habit and show in your own history, and keeps only the
+              links that hold up.
+            </span>
+          </div>
+          <span className="site-flow-arrow" aria-hidden="true" />
+          <div className="site-flow-step">
+            <span className="site-flow-icon"><Icon name="brain" size={18} /></span>
+            <strong>AI</strong>
+            <span className="small muted">
+              Picks the links worth telling and writes them in plain words, citing the numbers behind each one.
+            </span>
+          </div>
+          <span className="site-flow-arrow" aria-hidden="true" />
+          <div className="site-flow-step site-flow-out">
+            <span className="site-flow-icon"><Icon name="sparkles" size={18} /></span>
+            <strong>Insights</strong>
+            <span className="small muted">Your daily and weekly reports:</span>
+            <ul className="site-flow-insights">
+              {INSIGHTS.map((t) => <li key={t}>{t}</li>)}
+            </ul>
           </div>
         </div>
       </section>
@@ -84,7 +135,7 @@ export default function ProductPage() {
             </figure>
           ))}
         </div>
-        <p className="tiny muted">Screenshots use simulated data from the digital twin.</p>
+        <p className="tiny muted">Screenshots from the demo version.</p>
       </section>
     </>
   );

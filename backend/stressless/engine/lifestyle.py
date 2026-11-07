@@ -480,8 +480,8 @@ def _evening_minutes(ds: Dataset, d: date) -> Dict[str, float]:
 
 
 def busy_evening_causes(ds: Dataset, days: Sequence[date]) -> List[CauseDef]:
-    """A show or artist in the evening of a busy day, against busy days without it: "How I Met Your Mother after busy
-    days" (against the night after). Only busy days (the ``busy_days`` split) are compared, so the busy day itself is
+    """A show or artist in the evening of a busy day, against busy days without it: "Friends after busy days"
+    (against the night after). Only busy days (the ``busy_days`` split) are compared, so the busy day itself is
     not what differs. Picked from several candidates, so only strong links count."""
     span = _media_days(ds)
     if span is None or not _has_calendar(ds):
@@ -592,7 +592,7 @@ def _mean_hr(hr, windows: List[Tuple[datetime, datetime]], d: date, curve: List[
 
 def meeting_hr_patterns(ds: Dataset, days: Sequence[date], rng: random.Random, bootstrap: int) -> List["LifestylePattern"]:
     """Heart rate during a recurring meeting against the person's other meetings the same days: which meetings ask
-    the most of them ("Northwind Bank weekly: heart rate 11 bpm higher than in your other meetings those days").
+    the most of them ("Client weekly: heart rate 11 bpm higher than in your other meetings those days").
     Within the day, so a stressful or calm day as a whole does not count, and against the usual heart rate for the time
     of day; only strong links, as many are compared."""
     if not _has_calendar(ds):

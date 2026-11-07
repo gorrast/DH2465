@@ -26,9 +26,11 @@
         "direction": "hurt",
         "tier": "strong",
         "outcomes": [
+          "score",
+          "duration_min",
+          "onset_min",
           "hrv_ms",
-          "resting_hr",
-          "day_hr"
+          "resting_hr"
         ]
       },
       "ok": true
@@ -49,13 +51,12 @@
     "busy_how_i_met_your_mother": {
       "direction": "helped",
       "strength": "strong",
-      "how": "the wind-down after a busy day: 15 min faster to sleep, HRV +10 %",
+      "how": "the wind-down after a busy day: deep sleep share +6 points, 10 min less awake, HRV +12 %",
       "found": {
         "direction": "helped",
         "tier": "strong",
         "outcomes": [
-          "duration_min",
-          "onset_min"
+          "deep_min"
         ]
       },
       "ok": true
@@ -68,6 +69,9 @@
         "direction": "helped",
         "tier": "strong",
         "outcomes": [
+          "score",
+          "duration_min",
+          "onset_min",
           "hrv_ms",
           "resting_hr",
           "day_hr"
@@ -83,9 +87,9 @@
         "direction": "hurt",
         "tier": "strong",
         "outcomes": [
-          "steps",
           "screen_minutes",
-          "pickups"
+          "pickups",
+          "day_hr"
         ]
       },
       "ok": true
@@ -98,6 +102,9 @@
         "direction": "helped",
         "tier": "strong",
         "outcomes": [
+          "score",
+          "duration_min",
+          "onset_min",
           "hrv_ms",
           "resting_hr",
           "day_hr"
@@ -122,13 +129,7 @@
       "direction": "hurt",
       "strength": "weak",
       "how": "mid account: +5 during the call",
-      "found": {
-        "direction": "hurt",
-        "tier": "strong",
-        "outcomes": [
-          "hr_in_lumen_retail_check_in"
-        ]
-      },
+      "found": null,
       "ok": true
     },
     "meeting_hr_kettle_labs_sync": {
@@ -161,7 +162,13 @@
       "direction": "helped",
       "strength": "weak",
       "how": "the meeting they enjoy: -2",
-      "found": null,
+      "found": {
+        "direction": "helped",
+        "tier": "strong",
+        "outcomes": [
+          "hr_in_product_workshop"
+        ]
+      },
       "ok": true
     },
     "series_family_call": {
@@ -175,7 +182,6 @@
           "score",
           "duration_min",
           "onset_min",
-          "hrv_ms",
           "resting_hr",
           "day_hr"
         ]
@@ -191,6 +197,7 @@
         "tier": "strong",
         "outcomes": [
           "pickups_during_deep_work",
+          "screen_minutes",
           "hr_during_deep_work"
         ]
       },
@@ -200,8 +207,15 @@
       "direction": "none",
       "strength": "none",
       "how": "control: only the deep-work blocks change, not the day or the night",
-      "found": null,
-      "ok": true
+      "found": {
+        "direction": "helped",
+        "tier": "strong",
+        "outcomes": [
+          "score",
+          "day_hr"
+        ]
+      },
+      "ok": false
     },
     "busy_days": {
       "direction": "hurt",
@@ -214,7 +228,9 @@
           "score",
           "duration_min",
           "onset_min",
-          "resting_hr"
+          "hrv_ms",
+          "resting_hr",
+          "day_hr"
         ]
       },
       "ok": true
@@ -227,7 +243,6 @@
         "direction": "hurt",
         "tier": "strong",
         "outcomes": [
-          "score",
           "duration_min",
           "onset_min",
           "hrv_ms",
@@ -245,6 +260,8 @@
         "direction": "hurt",
         "tier": "strong",
         "outcomes": [
+          "duration_min",
+          "onset_min",
           "hrv_ms",
           "resting_hr"
         ]
@@ -261,9 +278,7 @@
         "outcomes": [
           "score",
           "duration_min",
-          "onset_min",
-          "hrv_ms",
-          "resting_hr"
+          "onset_min"
         ]
       },
       "ok": true
@@ -278,7 +293,6 @@
         "outcomes": [
           "score",
           "duration_min",
-          "onset_min",
           "hrv_ms",
           "resting_hr"
         ]
@@ -295,6 +309,7 @@
         "outcomes": [
           "score",
           "duration_min",
+          "hrv_ms",
           "resting_hr"
         ]
       },
@@ -304,14 +319,7 @@
       "direction": "hurt",
       "strength": "weak",
       "how": "late gym on random Mon-Thu evenings: later bedtime (simulator); few evenings, and never after-work ones, so it can come out either way by chance",
-      "found": {
-        "direction": "hurt",
-        "tier": "hint",
-        "outcomes": [
-          "score",
-          "duration_min"
-        ]
-      },
+      "found": null,
       "ok": true
     },
     "active_days": {
@@ -320,11 +328,9 @@
       "how": "follows from the runs (5 000 extra steps)",
       "found": {
         "direction": "helped",
-        "tier": "strong",
+        "tier": "hint",
         "outcomes": [
-          "duration_min",
-          "onset_min",
-          "resting_hr"
+          "hrv_ms"
         ]
       },
       "ok": true
@@ -339,7 +345,6 @@
         "outcomes": [
           "score",
           "duration_min",
-          "onset_min",
           "hrv_ms",
           "resting_hr"
         ]
@@ -354,10 +359,7 @@
         "direction": "hurt",
         "tier": "strong",
         "outcomes": [
-          "score",
-          "duration_min",
-          "onset_min",
-          "resting_hr"
+          "onset_min"
         ]
       },
       "ok": true
@@ -366,8 +368,16 @@
       "direction": "hurt",
       "strength": "strong",
       "how": "late phone use pushes bedtime ~20 min",
-      "found": null,
-      "ok": false
+      "found": {
+        "direction": "hurt",
+        "tier": "strong",
+        "outcomes": [
+          "score",
+          "duration_min",
+          "onset_min"
+        ]
+      },
+      "ok": true
     },
     "alcohol": {
       "direction": "hurt",
@@ -378,8 +388,6 @@
         "tier": "strong",
         "outcomes": [
           "score",
-          "duration_min",
-          "onset_min",
           "hrv_ms",
           "resting_hr"
         ]
@@ -395,6 +403,9 @@
         "tier": "strong",
         "outcomes": [
           "score",
+          "duration_min",
+          "hrv_ms",
+          "resting_hr",
           "day_hr"
         ]
       },
@@ -406,9 +417,9 @@
       "how": "5 min slower to fall asleep",
       "found": {
         "direction": "hurt",
-        "tier": "hint",
+        "tier": "strong",
         "outcomes": [
-          "day_hr"
+          "hrv_ms"
         ]
       },
       "ok": true
@@ -417,15 +428,7 @@
       "direction": "none",
       "strength": "none",
       "how": "control: played often, no effect",
-      "found": {
-        "direction": "hurt",
-        "tier": "hint",
-        "outcomes": [
-          "score",
-          "onset_min",
-          "resting_hr"
-        ]
-      },
+      "found": null,
       "ok": true
     },
     "podcast_days": {
@@ -436,7 +439,8 @@
         "direction": "helped",
         "tier": "hint",
         "outcomes": [
-          "score"
+          "score",
+          "resting_hr"
         ]
       },
       "ok": true
@@ -449,30 +453,36 @@
         "direction": "helped",
         "tier": "hint",
         "outcomes": [
-          "score"
+          "score",
+          "resting_hr"
         ]
       },
       "ok": true
     }
   },
   "unplanted": {
-    "gym_days": {
+    "big_listening": {
       "direction": "helped",
       "tier": "strong",
       "outcomes": [
-        "hrv_ms",
-        "resting_hr"
+        "score",
+        "day_hr"
       ]
     },
-    "many_pickups": {
+    "low_steps": {
+      "direction": "hurt",
+      "tier": "hint",
+      "outcomes": [
+        "score",
+        "duration_min"
+      ]
+    },
+    "heavy_screen": {
       "direction": "hurt",
       "tier": "strong",
       "outcomes": [
-        "score",
         "duration_min",
-        "onset_min",
-        "hrv_ms",
-        "resting_hr"
+        "day_hr"
       ]
     }
   },
@@ -481,27 +491,28 @@
       "direction": "hurt",
       "tier": "strong",
       "outcomes": [
-        "score",
-        "duration_min",
-        "hrv_ms",
-        "resting_hr"
+        "score"
       ]
     },
     "sleep_debt": {
       "direction": "helped",
       "tier": "hint",
       "outcomes": [
-        "hrv_ms"
+        "hrv_ms",
+        "resting_hr"
       ]
     }
   },
   "showcase": {
     "day": "2026-11-02",
     "daily": [
+      "artist_brian_eno",
       "back_to_back_days",
+      "big_listening",
       "busy_days",
       "busy_how_i_met_your_mother",
       "meeting_hr_1_1_with_johan",
+      "more_coffee",
       "pair_brian_eno_during_deep_work",
       "series_1_1_with_johan"
     ],
@@ -510,35 +521,39 @@
       "2026-11-01"
     ],
     "weekly": {
-      "meeting_hr_kettle_labs_sync": 1,
-      "meeting_hr_northwind_bank_weekly": 1,
       "meeting_hr_leadership_presentation": 1,
-      "series_leadership_presentation": 1,
       "pair_brian_eno_during_deep_work": 1,
-      "meeting_hr_1_1_with_johan": 1,
-      "workout_days": 4,
-      "series_product_workshop": 1,
-      "cardio_days": 2,
-      "early_starts": 2,
-      "short_night": 3,
-      "artist_metallica": 3,
-      "series_family_call": 1,
-      "late_meetings": 2,
+      "meeting_hr_northwind_bank_weekly": 1,
+      "meeting_hr_kettle_labs_sync": 1,
+      "back_to_back_days": 1,
+      "series_leadership_presentation": 1,
       "busy_how_i_met_your_mother": 1,
-      "late_streaming": 2,
+      "late_meetings": 2,
       "series_padel": 1,
-      "gym_days": 3,
+      "social_evenings": 2,
       "series_1_1_with_johan": 1,
-      "meeting_hr_lumen_retail_check_in": 1,
-      "many_pickups": 2,
-      "busy_days": 3,
-      "active_days": 2
+      "series_product_workshop": 1,
+      "series_family_call": 1,
+      "short_night": 2,
+      "cardio_days": 2,
+      "workout_days": 2,
+      "busy_days": 2,
+      "early_starts": 1,
+      "artist_brian_eno": 1,
+      "meeting_hr_1_1_with_johan": 1,
+      "big_listening": 1,
+      "alcohol": 1,
+      "late_streaming": 1,
+      "more_coffee": 5,
+      "meeting_hr_product_workshop": 1,
+      "heavy_screen": 1,
+      "late_screen": 4
     },
     "missing": []
   },
   "config": {
     "days": 90,
-    "seed": 7,
+    "seed": 32,
     "date": "2026-11-03",
     "name": "Demo",
     "time_zone": "Europe/Stockholm",
@@ -971,8 +986,8 @@
       ]
     },
     "himym_effects": {
-      "bed_delay_min": -10,
-      "onset_min": -10,
+      "deep_share": 0.06,
+      "awake_min": -10,
       "hrv": 0.12,
       "resting_hr": -1.5
     },

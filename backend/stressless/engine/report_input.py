@@ -112,7 +112,7 @@ def _links(lifestyle: List[LifestylePattern], happened: Dict[str, int], skip: Se
 
 
 def _subject(title: str) -> str:
-    """What a link is about: "Days with 1:1 with Johan" and "Heart rate in 1:1 with Johan" are both about the 1:1."""
+    """What a link is about: "Days with Team review" and "Heart rate in Team review" are both about the review."""
     for prefix in ("Days with ", "Heart rate in "):
         if title.startswith(prefix):
             return title[len(prefix):]

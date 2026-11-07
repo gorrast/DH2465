@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 
 export const metadata: Metadata = { title: 'The team' };
 
-const TEAM = ['Hugo Wigh', 'Knut Ovesjö', 'Marcus Pramborg', 'Nima Tehranchi', 'Gustaf Salenius', 'Hugo Ankarcrona'];
+const TEAM = ['Hugo Wigh', 'Nima Tehranchi', 'Knut Ovesjö', 'Marcus Pramborg', 'Gustaf Salenius', 'Hugo Ankarcrona'];
 
 export default function TeamPage() {
   return (
@@ -10,7 +10,16 @@ export default function TeamPage() {
       <span className="eyebrow">The team</span>
       <h1>The people behind StressLess</h1>
       <p className="site-lede">StressLess is our project in DH2465 at KTH Royal Institute of Technology.</p>
-      <p className="site-byline">By {TEAM.slice(0, -1).join(', ')} and {TEAM[TEAM.length - 1]}.</p>
+      <ul className="site-team" aria-label="Team members">
+        {TEAM.map((name) => (
+          <li key={name} className="site-member">
+            <span className="site-member-avatar" aria-hidden="true">
+              {name.split(' ').map((part) => part[0]).join('')}
+            </span>
+            <span className="site-member-name">{name}</span>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

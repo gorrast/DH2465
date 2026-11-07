@@ -1,4 +1,5 @@
 """Report generation: inputs from the engine, rule and Claude writers (fake client), and the claim-once flow."""
+import json
 import os
 import unittest
 from datetime import timedelta
@@ -6,8 +7,9 @@ from types import SimpleNamespace
 from unittest import mock
 
 from stressless.engine.pipeline import Engine
-from stressless.engine.report_input import daily_input, weekly_input
-from stressless.engine.report_writer import ClaudeReportWriter, build_request, write_rules
+from stressless.engine.report_input import daily_input, told_links, weekly_input
+from stressless.engine.report_input import OBVIOUS
+from stressless.engine.report_writer import ClaudeReportWriter, ReportWriterError, build_request, write_rules
 from stressless.reports import CONTENT_MODELS, DailyContent, unknown_evidence
 from stressless.server.reports import ReportBusy, current_periods, generate
 from stressless.store import MemoryStore
@@ -19,9 +21,10 @@ MONDAY = ANCHOR - timedelta(days=ANCHOR.weekday() + 7)
 class FakeClient:
     """Stands in for anthropic.Anthropic: records requests and answers with a canned parsed report."""
 
-    def __init__(self, stop_reason="end_turn", evidence=("sleep.score",), fail=False):
+    def __init__(self, stop_reason="end_turn", evidence=None, fail=False):
+        """``evidence``: the keys the finding cites; by default the input's first link and the sleep score."""
         self.calls = []
-        self.stop_reason, self.evidence, self.fail = stop_reason, list(evidence), fail
+        self.stop_reason, self.evidence, self.fail = stop_reason, evidence, fail
         self.messages = SimpleNamespace(parse=self._parse)
         self.beta = SimpleNamespace(messages=SimpleNamespace(parse=self._parse))
 
@@ -29,9 +32,13 @@ class FakeClient:
         self.calls.append(req)
         if self.fail:
             raise RuntimeError("network down")
+        evidence = self.evidence
+        if evidence is None:
+            sent = json.loads(req["messages"][0]["content"].split("\n\n", 1)[1])
+            evidence = [p["key"] for p in sent["patterns"][:1]] + ["sleep.score"]
         fields = dict(headline="A short night", summary="Your score was 64.", fun_fact=None, caveats=[],
                       findings=[{"title": "Late meeting", "body": "Likely a factor.", "tone": "watch", "confidence": "high",
-                                 "evidence": self.evidence}])
+                                 "evidence": evidence}])
         if req["output_format"].__name__ == "DailyContent":
             fields.update(suggestion=None)
         else:
@@ -91,9 +98,22 @@ class WriterTests(unittest.TestCase):
             self.assertNotIn("fallbacks", req)
 
     def test_unknown_evidence_is_dropped(self):
-        written = ClaudeReportWriter(FakeClient(evidence=["sleep.score", "made.up"])).write(self.inp)
-        self.assertEqual(written.content.findings[0].evidence, ["sleep.score"])
+        link = self.inp.patterns[0].key
+        written = ClaudeReportWriter(FakeClient(evidence=[link, "sleep.score", "made.up"])).write(self.inp)
+        self.assertEqual(written.content.findings[0].evidence, [link, "sleep.score"])
         self.assertEqual(written.usage, {"input_tokens": 1200, "output_tokens": 400})
+
+    def test_a_finding_on_a_metric_alone_is_not_kept(self):
+        """The pages show HRV and the sleep score already; a report with only such findings falls back to rules."""
+        with self.assertRaises(ReportWriterError):
+            ClaudeReportWriter(FakeClient(evidence=["hrv.overnight"])).write(self.inp)
+
+    def test_the_daily_input_is_about_yesterday_and_leaves_out_what_the_page_shows(self):
+        self.assertTrue(self.inp.patterns)
+        self.assertTrue(all(p.sources and p.happened for p in self.inp.patterns))      # links that happened, only
+        self.assertFalse(OBVIOUS & {p.key[len("pattern."):] for p in self.inp.patterns})
+        self.assertTrue(all(not f.evidence or f.evidence[0].startswith("pattern.")
+                            for f in write_rules(self.inp).content.findings))
 
 
 @mock.patch.dict(os.environ, {"STRESSLESS_REASONER": "claude"})
@@ -136,6 +156,19 @@ class GenerateTests(unittest.TestCase):
         self.store._reports[("daily", ANCHOR)]["created_at"] = "2026-01-01T00:00:00+00:00"
         report = generate(self.engine, self.store, "daily", ANCHOR, ClaudeReportWriter(client))
         self.assertEqual((report.mode, len(client.calls)), ("rules", 0))
+
+    def test_the_weekly_report_does_not_repeat_the_daily_one(self):
+        """Generated after today's daily report, the weekly one leaves out the links the daily told (and other links
+        about the same thing)."""
+        today = self.engine.ds.today
+        daily = generate(self.engine, self.store, "daily", today, ClaudeReportWriter(FakeClient()))
+        told = told_links(daily)
+        cited = {k[len("pattern."):] for f in daily.content.findings for k in f.evidence if k.startswith("pattern.")}
+        self.assertTrue(cited and cited <= told)
+        weekly = generate(self.engine, self.store, "weekly", current_periods(today)["weekly"], ClaudeReportWriter(FakeClient()))
+        after = {p.key[len("pattern."):] for p in weekly.input.patterns}
+        self.assertTrue(after)                                     # the freed places go to other links
+        self.assertFalse(after & cited)
 
     def test_current_periods(self):
         periods = current_periods(ANCHOR)                         # ANCHOR is a Sunday

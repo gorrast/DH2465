@@ -1,5 +1,5 @@
 "use client";
-/* The app frame: rail, top bar, global keyboard shortcuts, persona switching and the overlay hosts. */
+/* The app frame: rail, top bar (who is signed in), global keyboard shortcuts and the overlay hosts. */
 import Link from "next/link";
 import { motion, useReducedMotion } from "motion/react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -12,6 +12,7 @@ import {
   type ReactNode,
 } from "react";
 import { api, logClient } from "@/lib/api";
+import { isDemoEmail } from "@/lib/demo";
 import { dates, fmt } from "@/lib/format";
 import { NAV, defaultHref, parsePath } from "@/lib/nav";
 import { getSupabase } from "@/lib/supabase/client";
@@ -22,7 +23,6 @@ import {
   ModalHost,
   ToastHost,
   TooltipHost,
-  busy,
   toast,
 } from "../ui/overlays";
 import { useTour } from "../tour/Tour";
@@ -119,43 +119,11 @@ export function Shell({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const switchPersona = useCallback(
-    async (key: string, seed?: number) => {
-      const m = meta || FALLBACK_META;
-      const name = (m.personas || []).find((p) => p.key === key)?.name || key;
-      busy({
-        title: "Simulating 70 days of " + name + "'s life",
-        steps: [
-          "Booking the calendar",
-          "Tracing locations with Maps",
-          "Simulating heart rate and sleep",
-          "Fitting the personal model",
-        ],
-      });
-      try {
-        await api.post("/api/persona", {
-          persona: key,
-          seed: seed === undefined ? m.seed : seed,
-        });
-        const fresh = await refreshMeta();
-        setHistoryDays(null);
-        busy(null);
-        router.push("/daily/" + fresh.today);
-        toast("Now showing " + name, { kind: "success" });
-      } catch (e: any) {
-        busy(null);
-        logClient("error", "Persona switch failed: " + (e && e.message), e);
-        toast("Could not switch persona: " + (e && e.message), {
-          kind: "error",
-        });
-      }
-    },
-    [meta, refreshMeta, router],
-  );
-
+  // Everyone shares the demo account: leave this browser's session only (a global sign-out would end every
+  // visitor's), and go back to the project site.
   const signOut = useCallback(async () => {
-    await getSupabase().auth.signOut();
-    router.replace("/login");
+    await getSupabase().auth.signOut({ scope: "local" });
+    router.replace("/project");
     router.refresh();
   }, [router]);
 
@@ -170,14 +138,6 @@ export function Shell({ children }: { children: ReactNode }) {
     const dismiss = (event: PointerEvent | KeyboardEvent) => {
       const escape = event instanceof KeyboardEvent && event.key === "Escape";
       if (event instanceof KeyboardEvent && !escape) return;
-      document
-        .querySelectorAll<HTMLDetailsElement>(".persona-wrap[open]")
-        .forEach((menu) => {
-          if (escape || !menu.contains(event.target as Node)) {
-            menu.open = false;
-            if (escape) menu.querySelector("summary")?.focus();
-          }
-        });
       if (
         escape ||
         !(
@@ -272,7 +232,6 @@ export function Shell({ children }: { children: ReactNode }) {
         setHistoryDays,
         theme,
         toggleTheme,
-        switchPersona,
         replay,
         tour,
         go,
@@ -285,7 +244,6 @@ export function Shell({ children }: { children: ReactNode }) {
       historyDays,
       theme,
       toggleTheme,
-      switchPersona,
       tour,
       go,
       userEmail,
@@ -294,6 +252,8 @@ export function Shell({ children }: { children: ReactNode }) {
   );
 
   const m = meta || FALLBACK_META;
+  // Who is signed in: "Demo" for the shared demo account, else the email.
+  const account = isDemoEmail(userEmail) ? "Demo" : userEmail || "Signed in";
   return (
     <>
       <a className="skip-link" href="#view">
@@ -408,77 +368,29 @@ export function Shell({ children }: { children: ReactNode }) {
                 className="btn btn-sm btn-ghost rail-signout"
                 type="button"
                 onClick={signOut}
-                title="Sign out"
+                title="Leave the demo"
               >
                 <Icon name="logout" size={16} />
-                <span className="rail-label">Sign out</span>
+                <span className="rail-label">Leave the demo</span>
               </button>
             </div>
           </motion.aside>
         </div>
         <header className="topbar">
-          <details className="persona-wrap" key={pathname}>
-            <summary className="persona-chip" data-tour="persona">
+          <div className="persona-wrap">
+            <div
+              className="persona-chip"
+              data-tour="persona"
+              title={userEmail || undefined}
+            >
               <span className="avatar">
-                {(m.persona?.name || "A").slice(0, 1)}
+                {account.slice(0, 1).toUpperCase()}
               </span>
-              <span className="persona-name">
-                {m.persona ? m.persona.name : "Demo"}
-              </span>
-              <span className="persona-tag">
-                {m.source === "demo"
-                  ? m.anchor_mode
-                    ? "Demo date " + fmt.day(m.today)
-                    : "Demo data"
-                  : "Imported data"}
-              </span>
-              <Icon name="chevron-right" size={14} className="chev" />
-            </summary>
-            <div className="persona-menu">
-              <div className="persona-menu-title">
-                Demo persona
-                <span className="muted tiny">
-                  {" · seed " + (m.seed === undefined ? "–" : m.seed)}
-                </span>
-              </div>
-              {(m.personas || []).map((p) => {
-                const isCurrent = m.persona && m.persona.key === p.key;
-                return (
-                  <button
-                    key={p.key}
-                    className={"persona-item" + (isCurrent ? " current" : "")}
-                    type="button"
-                    data-persona={p.key}
-                    onClick={(e) => {
-                      e.currentTarget
-                        .closest("details")
-                        ?.removeAttribute("open");
-                      if (!isCurrent) switchPersona(p.key);
-                    }}
-                  >
-                    <span className="avatar">
-                      {(p.name || "?").slice(0, 1)}
-                    </span>
-                    <span className="persona-item-body">
-                      <span className="persona-item-name">{p.name}</span>
-                      <span className="persona-item-tag">
-                        {p.tagline || ""}
-                      </span>
-                    </span>
-                    {isCurrent ? (
-                      <Icon name="check" size={16} />
-                    ) : p.ready === false ? (
-                      <span className="badge badge-low">preparing</span>
-                    ) : null}
-                  </button>
-                );
-              })}
-              <div className="persona-menu-foot muted tiny">
-                Same engine, different person. Import options live under Connect
-                Your Data.
-              </div>
+              <span className="persona-name">{account}</span>
+              {/* "today" as the app sees it (fixed by STRESSLESS_ANCHOR on the demo) */}
+              <span className="persona-tag">{fmt.day(m.today)}</span>
             </div>
-          </details>
+          </div>
           <div
             className="reasoner-chip"
             data-tour="reasoner"

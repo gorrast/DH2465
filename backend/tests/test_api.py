@@ -50,6 +50,22 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(r.status_code, expect, "%s -> %s %s" % (path, r.status_code, r.text[:200]))
         return r
 
+    def test_read_only_demo_refuses_changes_but_serves_reports(self):
+        from unittest import mock
+        with mock.patch.dict(os.environ, {"STRESSLESS_READ_ONLY": "true"}):
+            for path in ("/api/reset", "/api/persona", "/api/checkins/" + ANCHOR.isoformat(), "/api/media/import",
+                         "/api/media/lastfm/disconnect", "/api/sync", "/api/reports/consent",
+                         "/api/reports/daily/%s?regenerate=true" % ANCHOR.isoformat()):
+                r = self.client.post(path, json={})
+                self.assertEqual(r.status_code, 403, path)
+                self.assertIn("read-only demo", r.json()["error"])
+            self.assertTrue(self.jget("/api/meta")["read_only"])
+            self.assertTrue(self.jget("/api/reports")["read_only"])
+            self.assertNotEqual(self.client.post("/api/reports/daily/" + ANCHOR.isoformat()).status_code, 403)
+            self.assertNotEqual(self.client.post("/api/whatif", json={"date": ANCHOR.isoformat()}).status_code, 403)
+        self.assertFalse(self.jget("/api/meta")["read_only"])
+        self.assertNotEqual(self.client.post("/api/reports/consent").status_code, 403)
+
     def post(self, path, payload, expect=200):
         r = self.client.post(path, json=payload)
         self.assertEqual(r.status_code, expect, "%s -> %s %s" % (path, r.status_code, r.text[:200]))

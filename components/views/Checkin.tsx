@@ -7,6 +7,7 @@ import { dates, fmt } from "@/lib/format";
 import { Icon } from "../ui/Icon";
 import { toast } from "../ui/overlays";
 import { useLoad } from "./common";
+import { useApp } from "../shell/AppContext";
 
 interface CheckinDay {
   day: string;
@@ -63,6 +64,7 @@ export function CheckinCard({
   locked?: boolean;
 }) {
   const load = useLoad(() => api.get<Checkins>("/api/checkins"), []);
+  const readOnly = !!useApp().meta.read_only; // the demo: look, but nothing is saved
   const [day, setDay] = useState<string | null>(null);
   const [draft, setDraft] = useState<Record<Field, number | null>>({
     coffee_cups: null,
@@ -231,6 +233,7 @@ export function CheckinCard({
           <button
             className="btn btn-primary btn-sm"
             type="button"
+            hidden={readOnly}
             disabled={locked || saving || !changed}
             onClick={save}
           >

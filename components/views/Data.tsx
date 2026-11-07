@@ -37,12 +37,7 @@ const CLASSES = [
     "to compare each night with your own baseline",
     DEMO,
   ],
-  [
-    "Steps",
-    "one total per day",
-    "to see how active each day was",
-    SYNCED,
-  ],
+  ["Steps", "one total per day", "to see how active each day was", SYNCED],
   [
     "Screen time",
     "which apps were open and when, screen unlocks (Android app)",
@@ -212,8 +207,8 @@ export function DataView() {
               available when configured.
             </p>
             <p className="small secondary">
-              Health and calendar exports cannot currently be uploaded
-              through the web app. Each supported source includes its own setup
+              Health and calendar exports cannot currently be uploaded through
+              the web app. Each supported source includes its own setup
               instructions and file requirements.
             </p>
             <Link className="btn btn-primary" href="/connect">
@@ -251,25 +246,27 @@ export function DataView() {
                 </p>
               ) : null}
             </div>
-            <div className="card">
-              <div className="card-title">
-                <h3>Delete everything</h3>
+            {meta.read_only ? null : (
+              <div className="card">
+                <div className="card-title">
+                  <h3>Delete everything</h3>
+                </div>
+                <p className="small secondary">
+                  Removes everything stored in your account, including synced
+                  and imported data and your connections, then regenerates the
+                  default demo.
+                </p>
+                <button
+                  className="btn btn-danger"
+                  type="button"
+                  disabled={deleting}
+                  onClick={deleteAll}
+                >
+                  <Icon name="trash" size={16} />
+                  Delete all data
+                </button>
               </div>
-              <p className="small secondary">
-                Removes everything stored in your account, including synced
-                and imported data and your connections, then regenerates the
-                default demo.
-              </p>
-              <button
-                className="btn btn-danger"
-                type="button"
-                disabled={deleting}
-                onClick={deleteAll}
-              >
-                <Icon name="trash" size={16} />
-                Delete all data
-              </button>
-            </div>
+            )}
           </div>
         </div>
       </div>

@@ -27,7 +27,6 @@ export function SiteNav() {
         ))}
       </nav>
       <div className="site-actions">
-        <Link className="btn btn-ghost btn-sm" href="/login">Sign in</Link>
         <DemoButton className="btn btn-primary btn-sm" />
       </div>
     </header>

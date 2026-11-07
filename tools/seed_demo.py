@@ -148,6 +148,55 @@ CONFIG: Dict[str, Any] = {
     "checkin_logged": 0.85,                 # share of days with a coffee/alcohol check-in
 }
 
+# Real song titles for the plays: a play's title is TRACK_TITLES[artist][n - 1] for the random n the script draws
+# (cycling if the list is shorter), so the same n is always the same song. Artists not listed get "<artist> track n".
+TRACK_TITLES: Dict[str, List[str]] = {
+    'Metallica': ['Enter Sandman', 'Master of Puppets', 'Nothing Else Matters', 'One', 'Fade to Black', 'For Whom the Bell Tolls', 'Seek & Destroy', 'The Unforgiven', 'Sad but True', 'Battery', 'Wherever I May Roam', 'Creeping Death'],
+    'Bon Iver': ['Holocene', 'Skinny Love', 'Re: Stacks', 'Flume', 'Blood Bank', 'Perth', 'Towers', 'Calgary', '22 (OVER S∞∞N)', 'Hey, Ma', 'Michicant', 'Beth/Rest'],
+    'Brian Eno': ['1/1', '2/1', '1/2', '2/2', 'An Ending (Ascent)', 'Deep Blue Day', 'Thursday Afternoon', 'Discreet Music', 'Weightless', 'Always Returning', 'Stars', 'Under Stars', 'Signals', 'The Big Ship', 'By This River'],
+    'Arctic Monkeys': ['Do I Wanna Know?', 'R U Mine?', "Why'd You Only Call Me When You're High?", 'Fluorescent Adolescent', '505', 'I Bet You Look Good on the Dancefloor', 'Arabella', 'Mardy Bum', 'Crying Lightning', 'Cornerstone', 'Snap Out of It', 'Brianstorm'],
+    'Avicii': ['Wake Me Up', 'Levels', 'Hey Brother', 'The Nights', 'Waiting for Love', 'Without You', 'Lonely Together', 'Addicted to You', 'Silhouettes', 'SOS', 'You Make Me', 'I Could Be the One'],
+    'Beyoncé': ['Halo', 'Crazy in Love', 'Single Ladies (Put a Ring on It)', 'Formation', 'Love On Top', 'Drunk in Love', 'XO', 'Run the World (Girls)', 'Irreplaceable', 'Cuff It', 'Break My Soul', 'Freedom'],
+    'Bonobo': ['Kerala', 'Cirrus', 'Kiara', 'Black Sands', 'Linked', 'Know You', 'Eyesdown', 'Bambro Koyo Ganda', 'Break Apart', 'Prelude', 'First Fires', 'Days to Come'],
+    'Caribou': ["Can't Do Without You", 'Odessa', 'Sun', 'Home', 'Never Come Back', 'Our Love', 'You and I', 'Bowls', 'Melody Day', 'Silver', 'All I Ever Need', 'Back Home'],
+    'Daft Punk': ['Get Lucky', 'One More Time', 'Harder, Better, Faster, Stronger', 'Around the World', 'Digital Love', 'Instant Crush', 'Something About Us', 'Lose Yourself to Dance', 'Da Funk', 'Veridis Quo', 'Giorgio by Moroder', 'Aerodynamic'],
+    'First Aid Kit': ['Emmylou', 'My Silver Lining', "The Lion's Roar", 'King of the World', 'Stay Gold', 'Wolf', 'Ghost Town', 'Rebel Heart', 'Fireworks', "It's a Shame", 'Master Pretender', 'Waitress Song'],
+    'Fleet Foxes': ['White Winter Hymnal', 'Mykonos', 'Helplessness Blues', 'Blue Ridge Mountains', 'Ragged Wood', 'Montezuma', 'Sun It Rises', 'Can I Believe You', 'Third of May / Ōdaigahara', 'Tiger Mountain Peasant Song', 'Grown Ocean', 'Your Protector'],
+    'Fleetwood Mac': ['Dreams', 'The Chain', 'Go Your Own Way', 'Landslide', 'Everywhere', 'Rhiannon', 'Little Lies', "Don't Stop", 'Never Going Back Again', 'Gypsy', 'Songbird', 'Sara'],
+    'Haim': ['The Wire', 'Want You Back', 'Forever', 'Falling', 'Summer Girl', 'The Steps', "Don't Save Me", "Now I'm in It", 'Gasoline', 'Little of Your Love', 'Days Are Gone', 'Relationships'],
+    'Håkan Hellström': ['Känn ingen sorg för mig Göteborg', 'Det är så jag säger det', 'Kom igen Lena!', 'Nu kan du få mig så lätt', 'Klubbland', 'Tro och tvivel', 'Mitt Gullbergs kaj paradis', "Zigenarliv dreamin'", 'En vän med en bil', 'Det kommer aldrig va över för mig', 'Brännö serenad', 'Hurricane Gilbert'],
+    'José González': ['Heartbeats', 'Crosses', 'Stay Alive', 'Teardrop', 'Down the Line', 'Killing for Love', 'Every Age', 'Leaf Off / The Cave', 'Hand on Your Heart', 'Step Out', 'Open Book', 'Cycling Trivialities'],
+    'Jungle': ["Busy Earnin'", 'Back On 74', 'Keep Moving', 'Casio', 'Happy Man', 'Time', 'Heavy, California', 'Platoon', 'The Heat', 'Julia', 'Candle Flame', 'Beat 54 (All Good Now)'],
+    'Kendrick Lamar': ['HUMBLE.', 'DNA.', 'Alright', 'Swimming Pools (Drank)', 'Not Like Us', 'Money Trees', 'King Kunta', 'LOVE.', "Bitch, Don't Kill My Vibe", 'N95', 'm.A.A.d city', 'Poetic Justice'],
+    'Kent': ['Mannen i den vita hatten', 'Dom andra', 'Max 500', 'Ingenting', '747', 'VinterNoll2', 'Kärleken väntar', 'Musik non stop', 'Sverige', 'FF', 'Pojken med hålet i handen', 'Gravitation'],
+    'Khruangbin': ['Maria También', 'Time (You and I)', 'White Gloves', 'People Everywhere (Still Alive)', 'August 10', 'Evan Finds the Third Room', "So We Won't Forget", 'Two Fish and an Elephant', 'Friday Morning', 'Pelota', 'Dern Kala', 'Mr. White'],
+    'Little Dragon': ['Twice', 'Ritual Union', 'Constant Surprises', 'Feather', 'Sunshine', 'Klapp Klapp', 'Paris', 'Let Go', 'Lover Chanting', 'Hold On', 'High', 'Shuffle a Dream'],
+    'Lorde': ['Royals', 'Ribs', 'Green Light', 'Liability', 'Team', 'Tennis Court', 'Supercut', 'Solar Power', 'Perfect Places', 'Buzzcut Season', 'Homemade Dynamite', 'Writer in the Dark'],
+    'Massive Attack': ['Teardrop', 'Unfinished Sympathy', 'Angel', 'Protection', 'Karmacoma', 'Paradise Circus', 'Safe from Harm', 'Inertia Creeps', 'Risingson', 'Butterfly Caught', 'Dissolved Girl', 'Group Four'],
+    'Portishead': ['Glory Box', 'Roads', 'Sour Times', 'Wandering Star', 'Machine Gun', 'The Rip', 'Only You', 'All Mine', 'It Could Be Sweet', 'Numb', 'Biscuit', 'Over'],
+    'Radiohead': ['Weird Fishes/Arpeggi', 'Karma Police', 'No Surprises', 'Reckoner', 'Everything in Its Right Place', 'Paranoid Android', 'Creep', 'Nude', 'Exit Music (For a Film)', 'Fake Plastic Trees', 'Idioteque', '15 Step'],
+    'Robyn': ['Dancing On My Own', 'Call Your Girlfriend', 'With Every Heartbeat', 'Hang with Me', 'Be Mine!', 'Indestructible', 'Missing U', 'Honey', 'Show Me Love', 'Konichiwa Bitches', 'Handle Me', 'Ever Again'],
+    'Tame Impala': ['The Less I Know the Better', 'Let It Happen', 'Feels Like We Only Go Backwards', 'Borderline', 'Eventually', 'Elephant', 'New Person, Same Old Mistakes', 'Lost in Yesterday', 'Apocalypse Dreams', 'Mind Mischief', 'Breathe Deeper', "Yes I'm Changing"],
+    'Taylor Swift': ['Cruel Summer', 'Anti-Hero', 'Love Story', 'Blank Space', 'Shake It Off', 'All Too Well', 'Style', 'cardigan', 'Lover', 'Delicate', 'august', 'Enchanted'],
+    'The Cure': ['Just Like Heaven', "Friday I'm in Love", 'Lovesong', "Boys Don't Cry", 'Pictures of You', 'A Forest', 'Close to Me', 'In Between Days', 'Lullaby', 'Charlotte Sometimes', 'Disintegration', 'Plainsong'],
+    'The Knife': ['Heartbeats', 'Silent Shout', 'Pass This On', "We Share Our Mother's Health", 'Like a Pen', 'Marble House', 'Neverland', 'Full of Fire', 'You Take My Breath Away', 'Kino', 'Got 2 Let U', 'Forest Families'],
+    'The National': ['Bloodbuzz Ohio', 'Fake Empire', 'I Need My Girl', 'Light Years', 'Sorrow', 'Slow Show', 'Mr. November', 'Graceless', 'This Is the Last Time', 'Carin at the Liquor Store', 'Day I Die', 'Terrible Love'],
+    'The xx': ['Intro', 'Crystalised', 'VCR', 'Islands', 'Angels', 'On Hold', 'Shelter', 'Basic Space', 'Chained', 'Fiction', 'I Dare You', 'Say Something Loving'],
+    'Veronica Maggio': ['Jag kommer', 'Sergels torg', 'Satan i gatan', 'Hela huset', 'Mitt hjärta blöder', 'Måndagsbarn', 'Välkommen in', 'Dumpa mig', 'Snälla bli min', 'Hornstull', 'Det kommer bli bra', 'Jag har inte alls planerat för det här'],
+    'Zara Larsson': ['Lush Life', 'Never Forget You', "Ain't My Fault", 'Symphony', 'Uncover', 'Ruin My Life', 'WOW', 'Words', "Can't Tame Her", 'Talk About Love', 'I Would Like', 'So Good'],
+    'Phoebe Bridgers': ['Motion Sickness', 'Kyoto', 'Garden Song', 'Funeral', 'Scott Street', 'Savior Complex', 'Smoke Signals', 'I Know the End', 'Moon Song', 'Chinese Satellite', 'Punisher', 'Killer'],
+    'Lykke Li': ['I Follow Rivers', 'Little Bit', 'No Rest for the Wicked', 'Sadness Is a Blessing', 'Dance, Dance, Dance', 'Get Some', 'Unrequited Love', "I'm Good, I'm Gone", 'Never Gonna Love Again', 'Possibility', 'Gunshot', 'Youth Knows No Pain'],
+    'Fever Ray': ['If I Had a Heart', 'When I Grow Up', 'Keep the Streets Empty for Me', 'Seven', 'Triangle Walks', "Now's the Only Time I Know", 'To the Moon and Back', "Mustn't Hurry", 'Concrete Walls', "I'm Not Done", 'Kandy', 'What They Call Us'],
+    'ABBA': ['Dancing Queen', 'Mamma Mia', 'The Winner Takes It All', 'Gimme! Gimme! Gimme! (A Man After Midnight)', 'Waterloo', 'Take a Chance on Me', 'Knowing Me, Knowing You', 'SOS', 'Super Trouper', 'Fernando', 'Chiquitita', 'Lay All Your Love on Me'],
+    'Miriam Bryant': ['Finders Keepers', 'Push Play', 'Black Car', 'Passa dig'],
+    'Nick Drake': ['Pink Moon', 'Northern Sky', 'River Man', 'Place to Be', 'Things Behind the Sun', 'Hazey Jane II', 'Fruit Tree', 'Way to Blue', 'Cello Song', 'From the Morning', 'One of These Things First', 'Road'],
+    'Frank Ocean': ['Pink + White', 'Thinkin Bout You', 'Ivy', 'Nights', 'Self Control', 'Lost', 'Super Rich Kids', 'Pyramids', 'Solo', 'Chanel', 'Nikes', 'Godspeed'],
+    'SZA': ['Kill Bill', 'Good Days', 'Snooze', 'The Weekend', 'Love Galore', 'Broken Clocks', 'Saturn', 'Supermodel', 'Drew Barrymore', 'Nobody Gets Me', 'Low', 'Shirt'],
+    'Joni Mitchell': ['Both Sides Now', 'A Case of You', 'Big Yellow Taxi', 'River', 'California', 'Blue', 'Help Me', 'Free Man in Paris', 'Woodstock', 'Coyote', 'The Circle Game', 'Chelsea Morning'],
+    'Sufjan Stevens': ['Mystery of Love', 'Chicago', 'Should Have Known Better', 'Fourth of July', 'Casimir Pulaski Day', 'John Wayne Gacy, Jr.', 'Death with Dignity', 'Visions of Gideon', 'Futile Devices', 'Carrie & Lowell', 'The Predatory Wasp of the Palisades Is Out to Get Us!', 'Impossible Soul'],
+}
+
+
 # The answer key: cause key in engine/lifestyle.py -> what we planted. "strength": strong = should be found with
 # confidence; weak = may be found, but never the other way round; none = planted *without* an effect (a control: an
 # early hint is fine, the engine gives one to about half of all causes without an effect; a strong link is not).
@@ -300,6 +349,12 @@ def persona_for(cal: Dict[str, Any]) -> Persona:
 # --------------------------------------------------------------------------- #
 # Generation
 # --------------------------------------------------------------------------- #
+def track_title(artist: str, n: int) -> str:
+    """Track ``n`` of ``artist``: a real song from TRACK_TITLES, or "<artist> track n" for an artist without a list."""
+    titles = TRACK_TITLES.get(artist)
+    return titles[(n - 1) % len(titles)] if titles else "%s track %d" % (artist, n)
+
+
 def _slug(text: str) -> str:
     return "-".join("".join(ch if ch.isalnum() else " " for ch in text.lower()).split())
 
@@ -556,7 +611,7 @@ def generate(cal: Dict[str, Any], today: date) -> Dict[str, Any]:
             while left > 0:
                 m = min(left, rng.uniform(2.8, 4.5))
                 clock += timedelta(minutes=m)
-                play("spotify", clock, "%s track %d" % (artist, rng.randint(1, 12)), artist, m, "music")
+                play("spotify", clock, track_title(artist, rng.randint(1, 12)), artist, m, "music")
                 left -= m
             clock += timedelta(minutes=rng.uniform(60, 240))
         # focus music: the focus artist through the deep-work block, a calmer heart rate during it
@@ -566,7 +621,7 @@ def generate(cal: Dict[str, Any], today: date) -> Dict[str, Any]:
             while t < until:
                 m = rng.uniform(3.0, 6.5)
                 t += timedelta(minutes=m)
-                play("spotify", t, "%s track %d" % (focus_name, rng.randint(1, 15)), focus_name, m, "music")
+                play("spotify", t, track_title(focus_name, rng.randint(1, 15)), focus_name, m, "music")
                 media[-1]["source"]["genre"] = genre
             if h is not None:
                 s0 = ev.start.hour * 60 + ev.start.minute

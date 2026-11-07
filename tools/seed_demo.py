@@ -19,6 +19,8 @@ The data is built around one "today", CONFIG["date"] (or ``--date D``). Run the 
 to the same date, so every report sees the same "today", the same last night and the same links (the anchor applies
 to every user on that server).
 
+``--write`` keeps the stored reports, ``--remove`` deletes them with the rest.
+
 ``--write`` and ``--remove`` replace or delete the demo user's data rows, so they refuse to run on an account that has
 data from anywhere but this script (a real phone sync or Google Calendar), unless ``--force`` is given. In
 source_records they only touch this script's rows: rows added there by hand (heart rate and app usage for the weekly
@@ -54,7 +56,7 @@ CONFIG: Dict[str, Any] = {
     "days": 90,
     "seed": 32,                             # the dry run with --sweep 40 ranks seeds; the best depends on the date
                                             # and the calibration (32 for 2026-11-03 without --calibrate: both reports
-                                            # get their links, see _personal/plans/final-demo-plan.md)
+                                            # get their links)
     # the demo's "today" (run the server with STRESSLESS_ANCHOR set to it). A Tuesday: the daily report explains the
     # Monday before it (a workday) and the weekly report the Monday-Sunday week that ended two days before
     "date": "2026-11-03",
@@ -116,8 +118,9 @@ CONFIG: Dict[str, Any] = {
     # the wind-down: an episode or two of a sitcom on this share of busy evenings (and of other evenings, where it
     # does nothing), starting between these hours and over before about 22:15, so it is not late streaming
     "himym": {"show": "How I Met Your Mother", "episode_min": 22, "busy": 0.55, "other": 0.15, "start": (20.75, 21.5)},
-    # on a busy evening the episode replaces late scrolling (no late phone use) and they go to bed earlier
-    "himym_effects": {"bed_delay_min": -10, "onset_min": -10, "hrv": 0.12, "resting_hr": -1.5},
+    # on a busy evening the episode winds them down: a deeper, calmer night (more deep sleep, less time awake, a
+    # higher HRV), not an earlier one
+    "himym_effects": {"deep_share": 0.06, "awake_min": -10, "hrv": 0.12, "resting_hr": -1.5},
     # tired -> phone: the day after a night in the bottom third by time asleep, more pickups and screen time
     "tired_phone": {"pickups": 1.3, "screen_minutes": 45},
     "socials": [("Dinner with friends", 4, 19.0, 23.0, 0.5), ("Dinner party", 5, 19.5, 23.75, 0.5)],
@@ -157,7 +160,8 @@ PLANTED: Dict[str, Dict[str, str]] = {
                                      "HRV -15 %, resting HR +2"},
     "meeting_hr_1_1_with_johan": {"direction": "hurt", "strength": "strong", "how": "+9 during it"},
     "busy_how_i_met_your_mother": {"direction": "helped", "strength": "strong",
-                                   "how": "the wind-down after a busy day: 15 min faster to sleep, HRV +10 %"},
+                                   "how": "the wind-down after a busy day: deep sleep share +6 points, 10 min less "
+                                          "awake, HRV +12 %"},
     "series_padel": {"direction": "helped", "strength": "strong",
                      "how": "the hobby: 12 min faster to sleep, HRV +8 %, resting HR -1.5"},
     "short_night": {"direction": "hurt", "strength": "strong",
@@ -197,7 +201,7 @@ PLANTED: Dict[str, Dict[str, str]] = {
     "artist_sommar_i_p1": {"direction": "none", "strength": "none", "how": "control: the podcast as its own cause"},
 }
 
-# What the two stored reports are meant to tell (docs: _personal/plans/final-demo-plan.md): links whose cause happened
+# What the two stored reports are meant to tell: links whose cause happened
 # on the daily report's day, and in the weekly report's week. The dry run checks them and the sweep ranks seeds by them.
 SHOWCASE: Dict[str, List[str]] = {
     "daily": ["series_1_1_with_johan", "meeting_hr_1_1_with_johan", "busy_how_i_met_your_mother",
@@ -456,8 +460,7 @@ def plan_days(start: date, end: date, rng: random.Random, events: List[CalendarE
         late_tv = netflix and rng.random() < CONFIG["netflix_late"]
         plan[d] = {"netflix": netflix, "late_tv": late_tv,
                    "himym": himym, "himym_start": sit_start, "himym_eps": sit_eps, "busy": d in busy,
-                   "late_phone": not late_tv and rng.random() < CONFIG["late_screen"] and not shown
-                   and not (himym and d in busy),
+                   "late_phone": not late_tv and rng.random() < CONFIG["late_screen"] and not shown,
                    "coffee_heavy": d.weekday() < 5 and rng.random() < CONFIG["coffee_heavy"] and not shown,
                    "artists": [a for a, share, _ in CONFIG["artists"] if rng.random() < share],
                    "tail": [rng.choice(CONFIG["tail"])] if rng.random() < 0.6 else [],
@@ -499,9 +502,11 @@ def generate(cal: Dict[str, Any], today: date) -> Dict[str, Any]:
         hidden["screens_late"] = p["late_tv"] or p["late_phone"]
         if hidden["screens_late"]:
             hidden["extra_bed_delay_min"] = rng.uniform(*CONFIG["late_screen_delay"])
-        bed = sum(e.get("bed_delay_min", 0) for e in night_effects(d))
-        if bed:
-            hidden["extra_bed_delay_min"] = hidden.get("extra_bed_delay_min", 0) + bed
+        for key, knob in (("bed_delay_min", "extra_bed_delay_min"), ("deep_share", "extra_deep_share"),
+                          ("awake_min", "extra_awake_min")):
+            v = sum(e.get(key, 0) for e in night_effects(d))
+            if v:
+                hidden[knob] = hidden.get(knob, 0) + v
         hidden["caffeine_late"] = p["coffee_heavy"]
 
     ds = generate_dataset("demo", seed=CONFIG["seed"], days=days, anchor=today, showcase=False,
@@ -691,14 +696,19 @@ def to_rows(gen: Dict[str, Any], hrv_key: str) -> Dict[str, List[Dict[str, Any]]
 # --------------------------------------------------------------------------- #
 # Check against the answer key
 # --------------------------------------------------------------------------- #
-def check(rows: Dict[str, List[Dict[str, Any]]], today: date) -> Dict[str, Any]:
-    """Load the rows the way the app does and run the links engine on them."""
+def load_rows(rows: Dict[str, List[Dict[str, Any]]], today: date) -> Dataset:
+    """The dataset the app would load from these rows (in memory, as the server reads Supabase)."""
     store = MemoryStore()
     store.tz = CONFIG["time_zone"]
     store.tables = {k: [dict(r, id=r.get("provider_event_id") or r.get("source_record_id") or r.get("id") or str(i))
                         for i, r in enumerate(v)]
                     for k, v in rows.items()}
-    ds = load_dataset(store, today)
+    return load_dataset(store, today)
+
+
+def check(rows: Dict[str, List[Dict[str, Any]]], today: date) -> Dict[str, Any]:
+    """Load the rows the way the app does and run the links engine on them."""
+    ds = load_rows(rows, today)
     found = {p.key: p for p in lifestyle_patterns(ds, today) if p.reportable}
     result = {"planted": {}, "unplanted": {}, "derived": {}}
     for key, want in PLANTED.items():
@@ -859,6 +869,7 @@ def main() -> None:
     if args.remove:
         guard(args.user, args.force)
         remove(args.user)
+        db("DELETE", "reports", params={"user_id": "eq." + args.user})
         return
     today = date.fromisoformat(args.date or CONFIG["date"])
     cal = calibrate(args.calibrate, today)

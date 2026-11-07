@@ -162,6 +162,7 @@ def get_reports(p: Principal = Depends(current_principal)):
             "consented": e.ds.source == "demo" or p.store.consented(),
             "ai": claude_enabled(),
             "dev": is_dev(),
+            "read_only": session.read_only(),
         })
 
 

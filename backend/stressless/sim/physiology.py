@@ -89,7 +89,8 @@ def compute_sleep(persona: Persona, ratios: Dict[str, float], reg: Dict[str, flo
                 + float(hidden.get("extra_onset_min") or 0))                # set only by tools/seed_demo.py
     lam = max(0.2, 1.0 + 0.3 * alc + 0.3 * m3 + 0.5 * trv + 0.8 * ill - 0.3 * wm - 0.4 * prot)
     interrupt = poisson_invcdf(lam, noise["interrupt_u"])
-    awake = max(0.0, 8 + 10 * interrupt - 4 * wm - 4 * prot - 0.03 * debt + 4 * noise["awake"])
+    awake = max(0.0, 8 + 10 * interrupt - 4 * wm - 4 * prot - 0.03 * debt + 4 * noise["awake"]
+                + float(hidden.get("extra_awake_min") or 0))                # set only by tools/seed_demo.py
     wake = to_night_min(persona.usual_wake) - 45 * es + 8 * noise["wake"] + 8 * noise["life"]
     if weekend:
         wake += shift + min(120.0, 0.5 * max(0.0, bed_delay))
@@ -102,7 +103,8 @@ def compute_sleep(persona: Persona, ratios: Dict[str, float], reg: Dict[str, flo
     resp = persona.resp_rate + 0.7 * (1 if alc > 0 else 0) + 1.5 * ill + 0.3 * noise["resp"]
     temp = 0.25 * (1 if alc > 0 else 0) + 0.5 * ill + 0.15 * trv + 0.12 * noise["temp"]
     spo2 = max(92.0, min(100.0, 97.5 - 0.4 * (1 if alc > 0 else 0) - 0.3 * ill + 0.4 * noise["spo2"]))
-    deep_share = 0.20 * (1 - 0.05 * (1 if alc > 0 else 0) - 0.15 * wl_flag)
+    deep_share = (0.20 * (1 - 0.05 * (1 if alc > 0 else 0) - 0.15 * wl_flag)
+                  + float(hidden.get("extra_deep_share") or 0))             # set only by tools/seed_demo.py
     rem_share = 0.22 * (1 - min(0.35, 0.10 * alc))
 
     score, parts = compute_score({"duration_min": duration, "bedtime_min": bedtime, "interruptions": interrupt,

@@ -133,8 +133,14 @@ OUTCOMES: Dict[str, OutcomeDef] = {o.key: o for o in (
                _metric("screen.pickups"), False, "phone"),
     OutcomeDef("day_hr", "Daytime heart rate", "bpm", "down", 2, "daytime heart rate %s higher",
                "daytime heart rate %s lower", daytime_hr, False, "heart", True),
+    OutcomeDef("deep_min", "Deep sleep", "min", "up", 8, "%s more deep sleep", "%s less deep sleep",
+               _night("deep_min"), True),
+    OutcomeDef("awake_min", "Time awake in the night", "min", "down", 5, "%s more time awake in the night",
+               "%s less time awake in the night", _night("awake_min"), True),
 )}
 NIGHT = ("score", "duration_min", "onset_min", "hrv_ms", "resting_hr")
+# a wind-down (a show after a busy day) is told by how restful the night is, not only how long or how early
+RESTFUL_NIGHT = NIGHT + ("deep_min", "awake_min")
 NIGHT_AND_DAY = NIGHT + ("day_hr",)
 
 
@@ -505,7 +511,7 @@ def busy_evening_causes(ds: Dataset, days: Sequence[date]) -> List[CauseDef]:
         video = any(_media_name(m) == name and m.kind == "video" for m in ds.media)
         out.append(CauseDef("busy_" + _slug(name), "%s after busy days" % name, value(name), "high", _fixed(1.0),
                             "count", "busy days you %s %s in the evening" % ("watched" if video else "listened to", name),
-                            "On the nights after the %d %s", NIGHT, 2 * MIN_GROUP,
+                            "On the nights after the %d %s", RESTFUL_NIGHT, 2 * MIN_GROUP,
                             source="streaming" if video else "music", others="busy days", hints=False))
     return out
 

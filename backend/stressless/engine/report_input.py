@@ -23,7 +23,7 @@ from .features import day_features, describe_features
 from .lifestyle import LifestylePattern, _has_calendar, active_on, day_tags, daytime_hr
 
 HISTORY = 28                                   # nights or days behind a "usual" value
-MAX_LIFESTYLE = {"daily": 6, "weekly": 9}       # links whose cause happened in the period (a week has more)
+MAX_LIFESTYLE = {"daily": 8, "weekly": 10}       # links whose cause happened in the period (a week has more)
 MAX_BACKGROUND = 2                             # strongest other links, for context (weekly only: a daily is about yesterday)
 # Links too obvious to be worth a report (late phone use, alcohol and coffee hurt sleep; a night off rhythm or after
 # sleep debt is worse; steps; a late night out, an early start or a late meeting means less sleep), and big listening days, which are the days of whatever the person plays most (a link
@@ -43,6 +43,7 @@ RECOVERY_KEYS = {"hrv_ms": "hrv.overnight", "resting_hr": "hr.resting", "wrist_t
                  "resp_rate": "resp.rate", "spo2": "spo2.overnight"}
 # Per-night sleep values: engine key, report key, label, unit, good direction
 SLEEP_DEFS = (("duration_min", "sleep.duration", "Time asleep", "min", "up"),
+              ("deep_min", "sleep.deep", "Deep sleep", "min", "up"),
               ("awake_min", "sleep.awake", "Time awake in the night", "min", "down"),
               ("interruptions", "sleep.interruptions", "Times woken", "count", "down"))
 WEEK_NIGHT_DEFS = (("score", "sleep.score", "Sleep score", "points", "up"),) + SLEEP_DEFS + (

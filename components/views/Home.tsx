@@ -31,6 +31,21 @@ export interface Overview {
   consented: boolean;
   ai: boolean;
   dev: boolean; // dev: a test server, where reports can be generated again
+  read_only?: boolean; // the deployed demo: a stored report is shown as if written on request
+}
+
+/** How long the read-only demo shows "Writing your report…" before the stored report appears. */
+export const DEMO_WRITING_MS = 6000;
+
+/** The read-only demo's stored report, after at least DEMO_WRITING_MS, stamped as written now. */
+export async function asIfWritten(
+  request: Promise<{ report: Report }>,
+): Promise<Report> {
+  const [result] = await Promise.all([
+    request,
+    new Promise((resolve) => setTimeout(resolve, DEMO_WRITING_MS)),
+  ]);
+  return { ...result.report, generated_at: new Date().toISOString() };
 }
 interface Metric {
   key: string;
@@ -415,12 +430,16 @@ export function ReportCard({
   const c = report.content;
   const weekly = report.kind === "weekly";
   const hideWeeklyNote = (text: string) =>
-    /These are links in your own history, not proof of cause|Alcohol was logged on \d+ evenings this week, which was more than usual/i.test(text);
+    /These are links in your own history, not proof of cause|Alcohol was logged on \d+ evenings this week, which was more than usual/i.test(
+      text,
+    );
   const caveats = weekly
     ? c.caveats.filter((text) => !hideWeeklyNote(text))
     : c.caveats.filter(
         (text) =>
-          !/^(?:On your (?:\d+ )?days with|Based on \d+ nights|The app explains about)/i.test(text.trim()),
+          !/^(?:On your (?:\d+ )?days with|Based on \d+ nights|The app explains about)/i.test(
+            text.trim(),
+          ),
       );
 
   // Dev servers only: throw the stored report away and write it again.

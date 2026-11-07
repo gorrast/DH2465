@@ -83,6 +83,7 @@ def meta_payload(engine) -> Dict[str, Any]:
         "persona": {"key": ds.persona.key, "name": ds.persona.name, "tagline": ds.persona.tagline, "description": ds.persona.description, "tz": ds.persona.tz},
         "personas": personas, "seed": ds.seed, "days": (ds.end - ds.start).days + 1, "source": ds.source,
         "start": ds.start, "end": ds.end, "today": ds.today, "anchor_mode": session.anchor_override() is not None,
+        "read_only": session.read_only(),
         "n_nights": sum(1 for n in ds.nights if n.worn and n.score is not None), "reasoning_mode": reasoning_mode(),
         "version": __version__, "history_days_options": [7, 14, 28, None], "generated_at": ds.generated_at, "showcase": ds.showcase,
     }

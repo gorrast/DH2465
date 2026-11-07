@@ -1,0 +1,6 @@
+# This is a separate deployment project, not the main app's Supabase folder.
+# Do NOT run `supabase db push`; only deploy the named function after review.
+project_id = "apple-data-import"
+
+[functions.apple-import]
+verify_jwt = true

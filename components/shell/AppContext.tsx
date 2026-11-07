@@ -49,7 +49,6 @@ export interface AppState {
   setHistoryDays: (n: number | null) => void;
   theme: "dark" | "light";
   toggleTheme: () => void;
-  switchPersona: (key: string, seed?: number) => Promise<void>;
   replay: MutableRefObject<ReplayControls | null>;
   tour: TourControls;
   go: (href: string) => void;

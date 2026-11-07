@@ -8,11 +8,11 @@ interface Step { title: string; text: string; href: string; anchor: string; onEn
 function buildSteps(today: string, replay: MutableRefObject<ReplayControls | null>): Step[] {
   return [
     { title: 'Your daily brief', text: 'Start with last night’s sleep score, then explore how your day may have shaped your night.', href: '/daily/' + today, anchor: 'watch-card' },
-    { title: 'Connect the dots', text: 'Explore patterns from your calendar, location and heart rate. These are associations from your history, never certainties.', href: '/daily/' + today, anchor: 'causes' },
-    { title: 'Confirm your activities', text: 'When the signals disagree, confirm or deny an activity. Your answers update the patterns behind your report.', href: '/daily/' + today + '#reality-check', anchor: 'inbox' },
+    { title: 'Connect the dots', text: 'Explore patterns from your calendar, music, phone and heart rate. These are associations from your history, never certainties.', href: '/daily/' + today, anchor: 'causes' },
+    { title: 'Confirm your activities', text: 'When the signals disagree, StressLess asks you to confirm or deny an activity, and your answers update the patterns behind your report. Answers are not saved in this demo.', href: '/daily/' + today + '#reality-check', anchor: 'inbox' },
     { title: 'Your weekly patterns', text: 'Weekly brings your statistics and sleep patterns together. Explore meeting load, recent nights and recurring activities.', href: '/weekly', anchor: 'buckets' },
-    { title: 'Connect your world', text: 'Import your media exports or use optional sync. Each source has its own setup guide and works independently.', href: '/connect', anchor: 'connections' },
-    { title: 'Your data, your choice', text: 'See what StressLess reads, why it is used, and how to delete your data. Account and appearance controls live in My Account.', href: '/data', anchor: 'privacy' },
+    { title: 'Connect your world', text: 'The music, shows and games behind your links. In your own account you would import or sync them here; the demo account comes with its collection filled in.', href: '/connect', anchor: 'connections' },
+    { title: 'Your data, your choice', text: 'See what StressLess reads and why it is used. Appearance controls live in My Account.', href: '/data', anchor: 'privacy' },
   ];
 }
 

@@ -52,7 +52,8 @@ MAX_ARTISTS = 6                                # most-played artists and podcast
 MAX_PAIRS = 4                                  # activity x media pairs ("Einaudi during Study session") tested
 AFTER_HOURS = 4                                # media starting this long after an activity ended counts as "after" it
 AFTER_FROM_HOUR = 18                           # ... if it starts in the evening: "after" pairs are told against the night
-MAX_SERIES = 4                                 # most frequent recurring calendar series tested as their own cause
+MAX_SERIES = 5                                 # most frequent recurring calendar series tested as their own cause
+EVENING_FROM_HOUR = 19                         # media from this hour on a busy day counts as winding down after it
 ACTIVITY_HR_MIN_MINUTES = 30                   # worn minutes of an activity needed for a heart rate during it
 MEETING_HR_MIN_MINUTES = 15                    # worn minutes of a meeting needed to compare its heart rate
 MAX_MEETING_HR = 8                             # recurring meetings compared with the day's other meetings
@@ -462,6 +463,59 @@ def pair_causes(ds: Dataset, days: Sequence[date]) -> List[CauseDef]:
     return out
 
 
+def _evening_minutes(ds: Dataset, d: date) -> Dict[str, float]:
+    """{media name: minutes} played from EVENING_FROM_HOUR on day ``d``."""
+    out: Dict[str, float] = {}
+    for m in ds.media_on(d):
+        name = _media_name(m)
+        if name and m.start.hour >= EVENING_FROM_HOUR:
+            out[name] = out.get(name, 0.0) + m.minutes
+    return out
+
+
+def busy_evening_causes(ds: Dataset, days: Sequence[date]) -> List[CauseDef]:
+    """A show or artist in the evening of a busy day, against busy days without it: "How I Met Your Mother after busy
+    days" (against the night after). Only busy days (the ``busy_days`` split) are compared, so the busy day itself is
+    not what differs. Picked from several candidates, so only strong links count."""
+    span = _media_days(ds)
+    if span is None or not _has_calendar(ds):
+        return []
+    busy_def = CAUSES_BY_KEY["busy_days"]
+    vals = [v for v in (busy_def.value(ds, d) for d in days) if v is not None]
+    if len(vals) < busy_def.min_days:
+        return []
+    t = _round_threshold(busy_def, busy_def.threshold(vals))
+    busy = [d for d in days if span[0] <= d <= span[1] and is_active(busy_def, busy_def.value(ds, d), t)]
+    n_days: Dict[str, int] = {}
+    for d in busy:
+        for name, minutes in _evening_minutes(ds, d).items():
+            if minutes >= MIN_ARTIST_MIN:
+                n_days[name] = n_days.get(name, 0) + 1
+    top = sorted((c for c, n in n_days.items() if n >= MIN_GROUP and len(busy) - n >= MIN_GROUP),
+                 key=lambda c: -n_days[c])[:MAX_PAIRS]
+
+    def value(name: str) -> Callable[[Dataset, date], Optional[float]]:
+        def f(ds: Dataset, d: date) -> Optional[float]:
+            if not (span[0] <= d <= span[1]) or not is_active(busy_def, busy_def.value(ds, d), t):
+                return None
+            return float(_evening_minutes(ds, d).get(name, 0.0) >= MIN_ARTIST_MIN)
+        return f
+    out = []
+    for name in top:
+        video = any(_media_name(m) == name and m.kind == "video" for m in ds.media)
+        out.append(CauseDef("busy_" + _slug(name), "%s after busy days" % name, value(name), "high", _fixed(1.0),
+                            "count", "busy days you %s %s in the evening" % ("watched" if video else "listened to", name),
+                            "On the nights after the %d %s", NIGHT, 2 * MIN_GROUP,
+                            source="streaming" if video else "music", others="busy days", hints=False))
+    return out
+
+
+def _own_workout_cause(e) -> bool:
+    """A gym session or a run, ride or swim: the gym and cardio causes already tell those."""
+    text = " ".join(filter(None, (e.title, e.location_hint))).lower()
+    return e.type == "workout" and any(w in text for w in GYM_WORDS + CARDIO_WORDS)
+
+
 def _comparable(on: set, days: Sequence[date]) -> int:
     """Days without the activity that it can be compared with: in the same part of the week (workdays or weekend)
     as days with it. A daily standup has none, so it cannot be a cause of its own."""
@@ -478,7 +532,7 @@ def series_causes(ds: Dataset, days: Sequence[date]) -> List[CauseDef]:
     titles: Dict[str, Dict[str, int]] = {}
     for d in days:
         for e in ds.events_on(d):
-            if e.recurring_key and e.type != "workout":   # workouts have causes of their own
+            if e.recurring_key and not _own_workout_cause(e):   # gym and cardio have causes of their own; padel does not
                 n_days.setdefault(e.recurring_key, set()).add(d)
                 t = titles.setdefault(e.recurring_key, {})
                 t[e.title] = t.get(e.title, 0) + 1
@@ -821,7 +875,8 @@ def lifestyle_patterns(ds: Dataset, upto: date, history_days: Optional[int] = No
     days = [start + timedelta(days=k) for k in range((upto - start).days)]
     rng = random.Random(seed)
     out: List[LifestylePattern] = []
-    for c in CAUSES + tuple(artist_causes(ds, days) + pair_causes(ds, days) + series_causes(ds, days)):
+    for c in CAUSES + tuple(artist_causes(ds, days) + pair_causes(ds, days) + busy_evening_causes(ds, days)
+                            + series_causes(ds, days)):
         values = {d: c.value(ds, d) for d in days}
         known = [v for v in values.values() if v is not None]
         if len(known) < c.min_days:

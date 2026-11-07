@@ -10,14 +10,19 @@ simulator (stressless.sim) makes the body and the calendar; ``--calibrate`` only
 shape (usual bedtime and wake, sleep need, resting heart rate, HRV, steps, screen time), never its rows.
 
 The links in PLANTED are the answer key: the dry run builds the dataset from the planned rows, runs the links engine
-on it and prints which planted links it found, which it missed and which it found that we did not plant. Write the
-key with ``--key FILE`` to check a report against it later.
+on it and prints which planted links it found, which it missed and which it found that we did not plant. It also
+prints the showcase: the strong links whose cause happened on the daily report's day and in the weekly report's week
+(SHOWCASE lists the ones the stored reports should tell). ``--sweep N`` ranks seeds by both. Write the key with
+``--key FILE`` to check a report against it later.
 
-Generate once and keep it current: write with ``--date D`` and run the server with ``STRESSLESS_ANCHOR=D``, so every
-report sees the same "today", the same last night and the same links (the anchor applies to every user on that server).
+The data is built around one "today", CONFIG["date"] (or ``--date D``). Run the server with ``STRESSLESS_ANCHOR`` set
+to the same date, so every report sees the same "today", the same last night and the same links (the anchor applies
+to every user on that server).
 
-``--write`` and ``--remove`` replace or delete *all* of the demo user's data rows, so they refuse to run on an account
-that has data from anywhere but this script (a real phone sync or Google Calendar), unless ``--force`` is given. Uses SUPABASE_SERVICE_ROLE_KEY.
+``--write`` and ``--remove`` replace or delete the demo user's data rows, so they refuse to run on an account that has
+data from anywhere but this script (a real phone sync or Google Calendar), unless ``--force`` is given. In
+source_records they only touch this script's rows: rows added there by hand (heart rate and app usage for the weekly
+cards) are kept. Uses SUPABASE_SERVICE_ROLE_KEY.
 """
 from __future__ import annotations
 
@@ -35,7 +40,7 @@ import httpx
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "backend"))
 
 from stressless.connectors.real_data import load_dataset  # noqa: E402
-from stressless.engine.lifestyle import lifestyle_patterns  # noqa: E402
+from stressless.engine.lifestyle import active_on, lifestyle_patterns  # noqa: E402
 from stressless.models import CalendarEvent, Dataset, DayFeatures, Persona  # noqa: E402
 from stressless.sim import generate_dataset, get_persona  # noqa: E402
 from stressless.store.base import UserStore  # noqa: E402
@@ -47,7 +52,11 @@ from stressless.timeutil import at, tz  # noqa: E402
 # --------------------------------------------------------------------------- #
 CONFIG: Dict[str, Any] = {
     "days": 90,
-    "seed": 12,                             # the dry run with --sweep 40 ranks seeds; the best depends on the date
+    "seed": 2,                              # the dry run with --sweep 40 ranks seeds; the best depends on the date
+                                            # and the calibration (2 is best for 2026-11-03 without --calibrate)
+    # the demo's "today" (run the server with STRESSLESS_ANCHOR set to it). A Tuesday: the daily report explains the
+    # Monday before it (a workday) and the weekly report the Monday-Sunday week that ended two days before
+    "date": "2026-11-03",
     "name": "Demo",
     "time_zone": "Europe/Stockholm",
     "behaviour": "alex",                    # simulator persona whose weekend rhythm and sensitivities are the base
@@ -61,27 +70,30 @@ CONFIG: Dict[str, Any] = {
     "week": [("Team standup", [(wd, 8.5, 8.75) for wd in range(5)], "meeting", "Google Meet", 7, None),
              ("Lunch", [(wd, 12.0, 13.0) for wd in range(5)], "personal", None, 0, None),
              ("Coffee break", [(wd, 15.25, 15.5) for wd in range(5)], "personal", None, 0, None),
+             ("1:1 with Johan", [(0, 16.0, 16.5)], "meeting", "Room 3", 2, "tense"),
              ("Leadership presentation", [(1, 10.0, 11.5)], "meeting", "Board room", 9, "stress"),
-             ("Customer demo", [(3, 14.0, 15.0)], "meeting", "Zoom", 6, "stress"),
-             ("Product workshop", [(0, 13.0, 15.0), (4, 10.0, 12.0)], "meeting", "Workshop room", 8, "enjoy"),
+             ("Product workshop", [(3, 13.0, 15.0), (4, 10.0, 12.0)], "meeting", "Workshop room", 8, "enjoy"),
              ("Family call", [(6, 17.0, 17.75)], "personal", None, 2, "calm"),
              # customer day: three accounts that matter differently to the company, seen in the heart rate during the call
              ("Northwind Bank weekly", [(2, 9.5, 10.25)], "meeting", "Zoom", 5, "key_account"),
              ("Lumen Retail check-in", [(2, 11.0, 11.75)], "meeting", "Google Meet", 4, "mid_account"),
              ("Kettle Labs sync", [(2, 14.0, 14.75)], "meeting", "Google Meet", 3, "small_account")],
     # during_hr: heart rate during the meeting itself. The others are per day: daytime heart rate 08:00-22:00 (the
-    # whole day, so the day's other meetings share it), minutes to fall asleep, overnight HRV and resting HR.
-    # Presenting is the stressful kind of meeting, the workshop the kind they enjoy.
+    # whole day, so the day's other meetings share it), after_hr from the meeting's end until 22:00 (it stays with
+    # them), minutes to fall asleep, overnight HRV and resting HR.
+    # Presenting is the stressful kind of meeting, the workshop the kind they enjoy, the 1:1 with Johan the one that
+    # follows them home.
     "series_effects": {"stress": {"during_hr": 10, "day_hr": 6, "onset_min": 30, "hrv": -0.20, "resting_hr": 3},
+                       "tense": {"during_hr": 9, "after_hr": 8, "onset_min": 25, "hrv": -0.20, "resting_hr": 2},
                        "enjoy": {"during_hr": -2, "day_hr": -3, "onset_min": -8, "hrv": 0.06, "resting_hr": -1},
                        "calm": {"day_hr": -2, "onset_min": -10, "hrv": 0.05, "resting_hr": -1},
                        "key_account": {"during_hr": 12}, "mid_account": {"during_hr": 5},
                        "small_account": {"during_hr": -3}},
-    # the rest of a workday: more meetings between 9 and 17 (most on the presentation days, so those are the busy
-    # days), and calls outside office hours on random workdays (random, so they share no days with the series above)
-    "meetings": {"pool": ["Pipeline sync", "Customer call", "1:1", "Marketing sync", "Partner call", "Hiring interview",
+    # the rest of a workday: more meetings between 9 and 17 (most on Mondays and the presentation days, so those are
+    # the busy days), and calls outside office hours on random workdays (random, so they share no days with the series)
+    "meetings": {"pool": ["Pipeline sync", "Customer call", "Marketing sync", "Partner call", "Hiring interview",
                           "Forecast review", "Campaign planning", "Sales enablement", "Analyst briefing"],
-                 "per_day": {0: (1, 2), 1: (3, 4), 2: (0, 1), 3: (3, 4), 4: (1, 2)}, "hours": (9.0, 17.0)},
+                 "per_day": {0: (3, 4), 1: (3, 4), 2: (0, 1), 3: (1, 2), 4: (1, 2)}, "hours": (9.0, 17.0)},
     "late_call": ("Call with US team", 18.5, 19.5, 0.25),
     "early_call": ("Call with APAC team", 7.0, 7.75, 0.25),
     "after_work": ("After-work", 17.5, 21.0, 0.15),      # social, on random workdays too
@@ -95,7 +107,18 @@ CONFIG: Dict[str, Any] = {
     # on days without a series effect, so the meeting links and the workout links stay apart
     "workouts": [("Morning run", "Djurgården", [(2, 6.75, 7.5, 0.95), (5, 9.0, 9.75, 0.8)]),
                  ("Gym", "SATS Odenplan", [(2, 18.0, 19.0, 0.7), (6, 10.0, 11.0, 0.7)])],
-    "late_gym": 0.3,                        # share of gym sessions moved to 20:00-21:00
+    "late_gym": ("Gym", "SATS Odenplan", 0.12),   # 20:00-21:00 on this share of Monday-Thursday evenings
+    # the hobby that calms them: padel on one Wednesday or Thursday evening a week (a recurring booking, so the engine
+    # names it), on this share of weeks; it ends before 20:00, so it is not a late workout
+    "padel": ("Padel", "Padel Center Södermalm", (2, 3), 18.5, 19.75, 0.85),
+    "padel_effects": {"onset_min": -12, "hrv": 0.08, "resting_hr": -1.5},
+    # the wind-down: an episode or two of a sitcom on this share of busy evenings (and of other evenings, where it
+    # does nothing), starting between these hours and over before about 22:15, so it is not late streaming
+    "himym": {"show": "How I Met Your Mother", "episode_min": 22, "busy": 0.55, "other": 0.15, "start": (20.75, 21.5)},
+    # on a busy evening the episode replaces late scrolling (no late phone use) and they go to bed earlier
+    "himym_effects": {"bed_delay_min": -20, "onset_min": -18, "hrv": 0.15, "resting_hr": -1.5},
+    # tired -> phone: the day after a night in the bottom third by time asleep, more pickups and screen time
+    "tired_phone": {"pickups": 1.3, "screen_minutes": 45},
     "socials": [("Dinner with friends", 4, 19.0, 23.0, 0.5), ("Dinner party", 5, 19.5, 23.75, 0.5)],
     "one_offs": [("Grocery shopping", 5, 11.0, 12.0, 0.6, "personal", None, 0)],
     # music: the artists the engine tests, as (artist, share of days, minutes per day), and a long tail of others
@@ -128,7 +151,16 @@ CONFIG: Dict[str, Any] = {
 PLANTED: Dict[str, Dict[str, str]] = {
     "series_leadership_presentation": {"direction": "hurt", "strength": "strong",
                                        "how": "presenting: daytime HR +6, 30 min slower to sleep, HRV -20 %"},
-    "series_customer_demo": {"direction": "hurt", "strength": "strong", "how": "presenting, as above"},
+    "series_1_1_with_johan": {"direction": "hurt", "strength": "strong",
+                              "how": "it follows them home: HR +7 from its end until 22:00, 20 min slower to sleep, "
+                                     "HRV -15 %, resting HR +2"},
+    "meeting_hr_1_1_with_johan": {"direction": "hurt", "strength": "strong", "how": "+9 during it"},
+    "busy_how_i_met_your_mother": {"direction": "helped", "strength": "strong",
+                                   "how": "the wind-down after a busy day: 15 min faster to sleep, HRV +10 %"},
+    "series_padel": {"direction": "helped", "strength": "strong",
+                     "how": "the hobby: 12 min faster to sleep, HRV +8 %, resting HR -1.5"},
+    "short_night": {"direction": "hurt", "strength": "strong",
+                    "how": "tired -> phone: the day after, 30 % more pickups and 45 min more screen time"},
     "series_product_workshop": {"direction": "helped", "strength": "strong",
                                 "how": "the meeting they enjoy: daytime HR -3, 8 min faster to sleep, HRV +6 %"},
     "meeting_hr_northwind_bank_weekly": {"direction": "hurt", "strength": "strong",
@@ -136,7 +168,6 @@ PLANTED: Dict[str, Dict[str, str]] = {
     "meeting_hr_lumen_retail_check_in": {"direction": "hurt", "strength": "weak", "how": "mid account: +5 during the call"},
     "meeting_hr_kettle_labs_sync": {"direction": "helped", "strength": "weak", "how": "small, friendly account: -3"},
     "meeting_hr_leadership_presentation": {"direction": "hurt", "strength": "strong", "how": "presenting: +10 during it"},
-    "meeting_hr_customer_demo": {"direction": "hurt", "strength": "strong", "how": "presenting: +10 during it"},
     "meeting_hr_product_workshop": {"direction": "helped", "strength": "weak", "how": "the meeting they enjoy: -2"},
     "series_family_call": {"direction": "helped", "strength": "strong",
                            "how": "a calmer Sunday evening, 10 min faster to sleep (and Sundays have no meetings)"},
@@ -151,7 +182,8 @@ PLANTED: Dict[str, Dict[str, str]] = {
     "social_evenings":    {"direction": "hurt", "strength": "strong", "how": "~90 min later bedtime, often drinks (simulator)"},
     "cardio_days":        {"direction": "helped", "strength": "strong", "how": "morning runs: faster onset, less waking, higher HRV (simulator)"},
     "early_starts":       {"direction": "hurt", "strength": "strong", "how": "APAC calls at 07:00: wake 45 min earlier (simulator)"},
-    "late_workouts":      {"direction": "hurt", "strength": "weak", "how": "late gym: later bedtime, less deep sleep (simulator)"},
+    "late_workouts":      {"direction": "hurt", "strength": "weak",
+                           "how": "late gym on random Mon-Thu evenings: later bedtime (simulator); few evenings, and never after-work ones, so it can come out either way by chance"},
     "active_days":        {"direction": "helped", "strength": "weak", "how": "follows from the runs (5 000 extra steps)"},
     "workout_days":       {"direction": "helped", "strength": "weak", "how": "follows from the runs"},
     "late_streaming":     {"direction": "hurt", "strength": "strong", "how": "Netflix past 22:00 pushes bedtime ~20 min"},
@@ -162,6 +194,15 @@ PLANTED: Dict[str, Dict[str, str]] = {
     "artist_bon_iver":    {"direction": "none", "strength": "none", "how": "control: played often, no effect"},
     "podcast_days":       {"direction": "none", "strength": "none", "how": "control: no effect"},
     "artist_sommar_i_p1": {"direction": "none", "strength": "none", "how": "control: the podcast as its own cause"},
+}
+
+# What the two stored reports are meant to tell (docs: _personal/plans/final-demo-plan.md): links whose cause happened
+# on the daily report's day, and in the weekly report's week. The dry run checks them and the sweep ranks seeds by them.
+SHOWCASE: Dict[str, List[str]] = {
+    "daily": ["series_1_1_with_johan", "meeting_hr_1_1_with_johan", "busy_how_i_met_your_mother",
+              "pair_brian_eno_during_deep_work"],
+    "weekly": ["series_padel", "series_family_call", "short_night", "meeting_hr_northwind_bank_weekly",
+               "series_leadership_presentation"],
 }
 
 SEED = "seed-demo"                          # data_origin / provider_account_id / id prefix of every seeded row
@@ -258,10 +299,20 @@ def _slug(text: str) -> str:
     return "-".join("".join(ch if ch.isalnum() else " " for ch in text.lower()).split())
 
 
-def planned_week(start: date, end: date, rng: random.Random) -> List[CalendarEvent]:
-    """CONFIG's week, the other meetings, calls, deep work, workouts, socials and one-offs for ``start..end``."""
+def showcase(today: date) -> Tuple[date, List[date]]:
+    """The days the stored reports are about: the daily report's day (yesterday) and the weekly report's week (the
+    last full Monday-Sunday before today, as ``server/reports.py: current_periods`` picks it)."""
+    monday = today - timedelta(days=today.weekday() + 7)
+    return today - timedelta(days=1), [monday + timedelta(days=k) for k in range(7)]
+
+
+def planned_week(start: date, end: date, rng: random.Random, today: date) -> List[CalendarEvent]:
+    """CONFIG's week, padel, the other meetings, calls, deep work, workouts, socials and one-offs for ``start..end``.
+    The showcase day is a busy workday with deep work and a free evening; the showcase week has a padel evening."""
     zone = CONFIG["time_zone"]
     events: List[CalendarEvent] = []
+    show_day, show_week = showcase(today)
+    padel_weeks: Dict[Tuple[int, int], Optional[int]] = {}
 
     def add(d: date, title: str, s: float, e: float, kind: str, place: Optional[str], guests: int = 0,
             series: bool = False) -> None:
@@ -277,31 +328,45 @@ def planned_week(start: date, end: date, rng: random.Random) -> List[CalendarEve
     d = start
     while d <= end:
         dow = d.weekday()
+        shown = d == show_day
         for title, slots, kind, place, guests, _ in CONFIG["week"]:
             for wd, s, e in slots:
                 if wd == dow:
                     add(d, title, s, e, kind, place, guests, series=True)
+        # padel before the other workouts, so the Wednesday gym gives way to it
+        title, place, padel_days, s, e, share = CONFIG["padel"]
+        week = d.isocalendar()[:2]
+        if week not in padel_weeks:
+            forced = show_week[0].isocalendar()[:2] == week
+            padel_weeks[week] = rng.choice(padel_days) if (forced or rng.random() < share) else None
+        if padel_weeks[week] == dow and not shown and free(d, s, e):
+            add(d, title, s, e, "workout", place, 4, series=True)
         for title, place, slots in CONFIG["workouts"]:
             for wd, s, e, share in slots:
-                if wd == dow and rng.random() < share:
-                    late = title == "Gym" and rng.random() < CONFIG["late_gym"]
-                    if free(d, 20.0 if late else s, 21.0 if late else e):
-                        add(d, title, 20.0 if late else s, 21.0 if late else e, "workout", place)
+                if wd == dow and rng.random() < share and free(d, s, e):
+                    add(d, title, s, e, "workout", place)
+        # a late gym session on a random Monday-Thursday evening, so it shares no days with a series or the runs
+        title, place, share = CONFIG["late_gym"]
+        if dow < 4 and rng.random() < share and not shown and free(d, 20.0, 21.0):
+            add(d, title, 20.0, 21.0, "workout", place)
         if dow < 5:
+            # the showcase day keeps its evening free (no late call, no after-work), so the night is the wind-down's
             for title, s, e, share in (CONFIG["early_call"], CONFIG["late_call"]):
-                if rng.random() < share and free(d, s, e):
+                if rng.random() < share and not shown and free(d, s, e):
                     add(d, title, s, e, "meeting", "Zoom", rng.randint(3, 8))
             title, s, e, share = CONFIG["after_work"]
-            if dow < 4 and rng.random() < share and free(d, s, e):
+            if dow < 4 and rng.random() < share and not shown and free(d, s, e):
                 add(d, title, s, e, "social", None, rng.randint(3, 10))
             fc = CONFIG["focus"]
-            if rng.random() < fc["share"]["weekday"]:
+            if rng.random() < fc["share"]["weekday"] or shown:
                 for s, e in fc["slots"]["weekday"]:
                     if free(d, s, e):
                         add(d, fc["title"], s, e, "focus", None)
                         break
             m = CONFIG["meetings"]
             want, tries = rng.randint(*m["per_day"][dow]), 0
+            if shown:                       # a busy day for sure: as many meetings as the busiest days get
+                want = max(m["per_day"][dow][1], want) + 1
             while want and tries < 40:
                 tries += 1
                 s = rng.choice([h / 2.0 for h in range(int(m["hours"][0] * 2), int(m["hours"][1] * 2))])
@@ -318,7 +383,7 @@ def planned_week(start: date, end: date, rng: random.Random) -> List[CalendarEve
                         add(d, fc["title"], s, e, "focus", None)
                         break
         for title, wd, s, e, share in CONFIG["socials"]:
-            if wd == dow and rng.random() < share and free(d, s, e):
+            if wd == dow and rng.random() < share and not shown and free(d, s, e):
                 add(d, title, s, e, "social", None, rng.randint(2, 6))
         for title, wd, s, e, share, kind, place, guests in CONFIG["one_offs"]:
             if wd == dow and rng.random() < share and free(d, s, e):
@@ -327,14 +392,39 @@ def planned_week(start: date, end: date, rng: random.Random) -> List[CalendarEve
     return sorted(events, key=lambda ev: ev.start)
 
 
-def series_effect(events: List[CalendarEvent], d: date) -> Optional[Tuple[Dict[str, float], datetime]]:
-    """The day-wide effect of day ``d``'s series and when it started, if a series with one was that day."""
+DAY_EFFECTS = ("day_hr", "after_hr", "onset_min", "hrv", "resting_hr")
+
+
+def series_effect(events: List[CalendarEvent], d: date) -> Optional[Tuple[Dict[str, float], CalendarEvent]]:
+    """The day-wide effect of day ``d``'s series and its event, if a series with one was that day."""
     by_title = {w[0]: w[5] for w in CONFIG["week"]}
     for ev in events:
         eff = CONFIG["series_effects"].get(by_title.get(ev.title) or "")
-        if ev.start.date() == d and eff and "day_hr" in eff:
-            return eff, ev.start
+        if ev.start.date() == d and eff and any(k in eff for k in DAY_EFFECTS):
+            return eff, ev
     return None
+
+
+def meeting_minutes(events: List[CalendarEvent]) -> Dict[date, float]:
+    out: Dict[date, float] = {}
+    for ev in events:
+        if ev.type == "meeting":
+            out[ev.start.date()] = out.get(ev.start.date(), 0.0) + ev.duration_min
+    return out
+
+
+def busy_days(events: List[CalendarEvent], start: date, end: date) -> set:
+    """The days the links engine counts as busy: minutes in meetings in the person's top third, at least 2 h
+    (``busy_days`` in engine/lifestyle.py)."""
+    mins = meeting_minutes(events)
+    days = [start + timedelta(days=k) for k in range((end - start).days)]
+    vals = sorted(mins.get(d, 0.0) for d in days)
+    t = max(120.0, vals[min(len(vals) - 1, int(2 / 3 * len(vals)))])
+    return {d for d in days if mins.get(d, 0.0) >= t}
+
+
+def padel_on(events: List[CalendarEvent], d: date) -> bool:
+    return any(ev.title == CONFIG["padel"][0] and ev.start.date() == d for ev in events)
 
 
 def during_effects(events: List[CalendarEvent], d: date) -> List[Tuple[CalendarEvent, float]]:
@@ -345,17 +435,29 @@ def during_effects(events: List[CalendarEvent], d: date) -> List[Tuple[CalendarE
     return [(ev, bpm) for ev, bpm in effs if bpm]
 
 
-def plan_days(start: date, end: date, rng: random.Random) -> Dict[date, Dict[str, Any]]:
-    """What happens each day besides the calendar, decided before the body is simulated."""
+def plan_days(start: date, end: date, rng: random.Random, events: List[CalendarEvent], busy: set,
+              show_day: date) -> Dict[date, Dict[str, Any]]:
+    """What happens each day besides the calendar, decided before the body is simulated. The showcase day ends with
+    one episode of the sitcom and no late phone or extra coffee, so its night tells the wind-down."""
+    zone, hm = CONFIG["time_zone"], CONFIG["himym"]
     plan = {}
     d = start
     while d <= end:
         weekend = d.weekday() >= 4                       # Fri and Sat evenings
-        netflix = rng.random() < CONFIG["netflix_days"] * (1.3 if weekend else 1.0)
+        shown = d == show_day
+        # the sitcom, when nothing in the calendar overlaps it
+        sit_start = 21.0 if shown else rng.uniform(*hm["start"])
+        sit_eps = 1 if shown else rng.choice([1, 1, 2])
+        a, b = at(d, sit_start, tzname=zone), at(d, sit_start + sit_eps * hm["episode_min"] / 60.0, tzname=zone)
+        clash = any(ev.start < b and ev.end > a for ev in events if ev.start.date() == d)
+        himym = not clash and (shown or rng.random() < hm["busy" if d in busy else "other"])
+        netflix = not himym and rng.random() < CONFIG["netflix_days"] * (1.3 if weekend else 1.0)
         late_tv = netflix and rng.random() < CONFIG["netflix_late"]
         plan[d] = {"netflix": netflix, "late_tv": late_tv,
-                   "late_phone": not late_tv and rng.random() < CONFIG["late_screen"],
-                   "coffee_heavy": d.weekday() < 5 and rng.random() < CONFIG["coffee_heavy"],
+                   "himym": himym, "himym_start": sit_start, "himym_eps": sit_eps, "busy": d in busy,
+                   "late_phone": not late_tv and rng.random() < CONFIG["late_screen"] and not shown
+                   and not (himym and d in busy),
+                   "coffee_heavy": d.weekday() < 5 and rng.random() < CONFIG["coffee_heavy"] and not shown,
                    "artists": [a for a, share, _ in CONFIG["artists"] if rng.random() < share],
                    "tail": [rng.choice(CONFIG["tail"])] if rng.random() < 0.6 else [],
                    "podcast": rng.random() < CONFIG["podcast"][1],
@@ -368,22 +470,37 @@ def generate(cal: Dict[str, Any], today: date) -> Dict[str, Any]:
     rng = random.Random("seed-demo-%d" % CONFIG["seed"])
     days = CONFIG["days"]
     start = today - timedelta(days=days)
-    plan = plan_days(start, today + timedelta(days=7), rng)
-
-    events = planned_week(start, today + timedelta(days=7), random.Random("seed-demo-week-%d" % CONFIG["seed"]))
+    show_day, _ = showcase(today)
+    events = planned_week(start, today + timedelta(days=7), random.Random("seed-demo-week-%d" % CONFIG["seed"]), today)
+    plan = plan_days(start, today + timedelta(days=7), rng, events, busy_days(events, start, today), show_day)
 
     def calendar(persona, cal_start, cal_end, cal_today, cal_rng):
         day_kind = {ev.start.date(): "office" for ev in events if ev.start.weekday() < 5}
         return [ev for ev in events if cal_start <= ev.start.date() <= cal_end], [], day_kind
 
-    def hook(d: date, f: DayFeatures, hidden: Dict[str, Any]) -> None:
-        p = plan[d]
+    def night_effects(d: date) -> List[Dict[str, float]]:
+        """The planted effects on night ``d``: the day's series, padel, the sitcom after a busy day."""
+        p, effs = plan[d], []
         eff = series_effect(events, d)
         if eff:
-            hidden["extra_onset_min"] = eff[0]["onset_min"]
+            effs.append(eff[0])
+        if padel_on(events, d):
+            effs.append(CONFIG["padel_effects"])
+        if p["himym"] and p["busy"]:
+            effs.append(CONFIG["himym_effects"])
+        return effs
+
+    def hook(d: date, f: DayFeatures, hidden: Dict[str, Any]) -> None:
+        p = plan[d]
+        onset = sum(e.get("onset_min", 0) for e in night_effects(d))
+        if onset:
+            hidden["extra_onset_min"] = onset
         hidden["screens_late"] = p["late_tv"] or p["late_phone"]
         if hidden["screens_late"]:
             hidden["extra_bed_delay_min"] = rng.uniform(*CONFIG["late_screen_delay"])
+        bed = sum(e.get("bed_delay_min", 0) for e in night_effects(d))
+        if bed:
+            hidden["extra_bed_delay_min"] = hidden.get("extra_bed_delay_min", 0) + bed
         hidden["caffeine_late"] = p["coffee_heavy"]
 
     ds = generate_dataset("demo", seed=CONFIG["seed"], days=days, anchor=today, showcase=False,
@@ -406,13 +523,19 @@ def generate(cal: Dict[str, Any], today: date) -> Dict[str, Any]:
         a.steps = int((cal["steps"] or 7000) * rng.lognormvariate(0, 0.3) * (0.85 if a.date.weekday() >= 5 else 1.0)
                       + runs * CONFIG["run_steps"])
     focus_name, genre, focus_share = CONFIG["focus_artist"]
+    # tired -> phone: nights in the bottom third by time asleep, as the engine's short_night cause splits them
+    asleep = sorted(n.duration_min for n in ds.nights if n.worn and n.duration_min is not None and start <= n.date < today)
+    short = asleep[int(len(asleep) / 3)] if asleep else None
     for d in sorted(p for p in plan if start <= p < today):
         p = plan[d]
         weekend = d.weekday() >= 5
         h = ds.hr(d)
         today_events = [ev for ev in events if ev.start.date() == d]
         focus = [ev for ev in today_events if ev.type == "focus"]
-        focus_day = bool(focus) and rng.random() < focus_share
+        focus_day = bool(focus) and (d == show_day or rng.random() < focus_share)
+        last = ds.night(d - timedelta(days=1))
+        tired = short is not None and last is not None and last.worn and last.duration_min is not None \
+            and last.duration_min <= short
         # music: blocks through the day, a track every ~3.5 minutes, in the gaps between calendar events
         clock = datetime.combine(d, time(10 if weekend else 7, 40), z)
         blocks = [a for a in CONFIG["artists"] if a[0] in p["artists"]] + [(a, 0, CONFIG["tail_minutes"]) for a in p["tail"]]
@@ -444,20 +567,34 @@ def generate(cal: Dict[str, Any], today: date) -> Dict[str, Any]:
                 for m in range(s0, min(1440, s0 + ev.duration_min)):
                     if h.bpm[m] is not None:
                         h.bpm[m] += CONFIG["focus_effects"]["hr"]
-        # series days: daytime heart rate 08:00-22:00, and that night's HRV and resting heart rate; and the heart rate
-        # during the meetings that have an effect of their own (the customers, the presentations)
+        # series days: daytime heart rate 08:00-22:00 (or from the meeting's end, for one that follows them home); and
+        # the heart rate during the meetings that have an effect of their own (the customers, the presentations, Johan)
         eff = series_effect(events, d)
         if eff and h is not None:
-            h.bpm = [b if b is None or not (8 * 60 <= m < 22 * 60) else b + eff[0]["day_hr"] for m, b in enumerate(h.bpm)]
+            ev = eff[1]
+            after = ev.end.hour * 60 + ev.end.minute
+            day, aft = eff[0].get("day_hr", 0), eff[0].get("after_hr", 0)
+            h.bpm = [b if b is None or not (8 * 60 <= m < 22 * 60) else b + day + (aft if m >= after else 0)
+                     for m, b in enumerate(h.bpm)]
         for ev, bpm in during_effects(events, d) if h is not None else []:
             s0 = ev.start.hour * 60 + ev.start.minute
             for m in range(s0, min(1440, s0 + ev.duration_min)):
                 if h.bpm[m] is not None:
                     h.bpm[m] += bpm
+        # that night's HRV and resting heart rate: the series, padel, the sitcom after a busy day
         n = ds.night(d)
-        if eff and n is not None and n.worn and n.hrv_ms is not None:
-            n.hrv_ms = round(n.hrv_ms * (1 + eff[0]["hrv"]), 1)
-            n.resting_hr = n.resting_hr + eff[0]["resting_hr"] if n.resting_hr is not None else None
+        if n is not None and n.worn and n.hrv_ms is not None:
+            for e in night_effects(d):
+                n.hrv_ms = round(n.hrv_ms * (1 + e.get("hrv", 0)), 1)
+                n.resting_hr = n.resting_hr + e.get("resting_hr", 0) if n.resting_hr is not None else None
+            if n.resting_hr is not None:                     # a whole number in sleep_nights (smallint)
+                n.resting_hr = int(round(n.resting_hr))
+        if p["himym"]:
+            hm = CONFIG["himym"]
+            t = datetime.combine(d, time(0, 0), z) + timedelta(hours=p["himym_start"])
+            for _ in range(p["himym_eps"]):
+                t += timedelta(minutes=hm["episode_min"])
+                play("netflix", t, "%s: Episode %d" % (hm["show"], rng.randint(1, 22)), None, hm["episode_min"], "video")
         if p["podcast"]:
             name, _, (lo, hi) = CONFIG["podcast"]
             play("spotify", datetime.combine(d, time(17, 30), z) + timedelta(minutes=rng.uniform(0, 40)),
@@ -476,12 +613,15 @@ def generate(cal: Dict[str, Any], today: date) -> Dict[str, Any]:
         sc = lambda k, default: cal["screen"].get((k, weekend)) or default  # noqa: E731
         late = sc("late_minutes", 25.0) * (rng.uniform(2.5, 4.0) if p["late_phone"] else rng.uniform(0.3, 1.1))
         fe = CONFIG["focus_effects"]
-        minutes = sc("minutes", 210.0) * rng.lognormvariate(0, 0.25) + late * 0.5 + (fe["screen_minutes"] if focus_day else 0)
+        tp = CONFIG["tired_phone"]
+        minutes = (sc("minutes", 210.0) * rng.lognormvariate(0, 0.25) + late * 0.5 + (fe["screen_minutes"] if focus_day else 0)
+                   + (tp["screen_minutes"] if tired else 0))
         # unlocks spread over the waking day; a focus block keeps only fe["pickups"] of those inside it, and the
         # day's total is what is left, as the phone sync counts it (their own rng, so the other draws stay as they were)
         lo, hi = CONFIG["waking"]["weekend" if weekend else "weekday"]
         times = sorted(datetime.combine(d, time(0, 0), z) + timedelta(hours=urng.uniform(lo, hi))
-                       for _ in range(int(round(sc("pickups", 70.0) * rng.lognormvariate(0, 0.2)))))
+                       for _ in range(int(round(sc("pickups", 70.0) * rng.lognormvariate(0, 0.2)
+                                                * (tp["pickups"] if tired else 1.0)))))
         if focus_day:
             times = [t for t in times if not (focus[0].start <= t < focus[0].end) or urng.random() < fe["pickups"]]
         for t in times:
@@ -574,6 +714,18 @@ def check(rows: Dict[str, List[Dict[str, Any]]], today: date) -> Dict[str, Any]:
         if key not in PLANTED:
             result["derived" if p.cause_def.source == "sleep" else "unplanted"][key] = {"direction": p.direction, "tier": p.primary.tier,
                                         "outcomes": [o.key for o in p.reportable]}
+    # the strong cross-source links whose cause happened on the daily report's day and in the weekly report's week
+    # (a short night is tested against the day after it, as in engine/report_input.py)
+    show_day, week = showcase(today)
+    strong = {k: p for k, p in found.items() if p.cross_source and p.primary.tier == "strong"}
+
+    def happened(p, d: date) -> bool:
+        return active_on(ds, p, d + timedelta(days=1) if p.key == "short_night" else d)
+    daily = sorted(k for k, p in strong.items() if happened(p, show_day))
+    weekly = {k: n for k, p in strong.items() for n in [sum(happened(p, d) for d in week)] if n}
+    result["showcase"] = {"day": show_day.isoformat(), "daily": daily, "week": [week[0].isoformat(), week[-1].isoformat()],
+                          "weekly": weekly, "missing": [k for k in SHOWCASE["daily"] if k not in daily]
+                          + [k for k in SHOWCASE["weekly"] if k not in weekly]}
     return result
 
 
@@ -592,19 +744,26 @@ def print_summary(cal: Dict[str, Any], rows: Dict[str, List[Dict[str, Any]]], re
         print("\n" + title)
         for key, got in result[part].items() or [("(none)", None)]:
             print("  %-22s %s" % (key, "%s, %s via %s" % (got["direction"], got["tier"], "/".join(got["outcomes"])) if got else ""))
+    s = result["showcase"]
+    print("\nShowcase: strong cross-source links whose cause happened (the reports' material)")
+    print("  daily, %s:  %s" % (s["day"], ", ".join(s["daily"]) or "(none)"))
+    print("  weekly, %s to %s:  %s" % (s["week"][0], s["week"][1],
+                                       ", ".join("%s (%d)" % kv for kv in sorted(s["weekly"].items())) or "(none)"))
+    print("  wanted but missing: %s" % (", ".join(s["missing"]) or "-"))
 
 
 def sweep(cal: Dict[str, Any], today: date, n: int) -> None:
-    """The seeds where most planted links are found and fewest false ones, best first."""
+    """The seeds where most planted links are found, the reports have their showcase links and there are fewest false
+    links, best first."""
     ranked = []
     for seed in range(1, n + 1):
         CONFIG["seed"] = seed
         result = check(to_rows(generate(cal, today), cal["hrv_key"]), today)
-        misses = [k for k, r in result["planted"].items() if not r["ok"]]
+        misses = [k for k, r in result["planted"].items() if not r["ok"]] + ["show:" + k for k in result["showcase"]["missing"]]
         ranked.append((len(misses), len(result["unplanted"]), seed, misses, sorted(result["unplanted"])))
-    print("seed  missed  false links")
+    print("seed  missed (show: = a report's showcase link that did not happen)  |  false links")
     for n_miss, n_false, seed, misses, false in sorted(ranked)[:8]:
-        print("%4d  %-40s %d: %s" % (seed, ", ".join(misses) or "-", n_false, ", ".join(false)))
+        print("%4d  %s  |  %d: %s" % (seed, ", ".join(misses) or "-", n_false, ", ".join(false)))
 
 
 # --------------------------------------------------------------------------- #
@@ -624,11 +783,12 @@ def guard(user_id: str, force: bool = False) -> None:
     db("GET", "admin/users/" + user_id, api="auth/v1")   # exits on 404: sign the demo account up in the app first
     if force:
         return
+    # source_records is not checked: rows added there by hand (heart rate and app usage for the weekly cards) are
+    # expected on the demo account, and remove() keeps them
     checks = [("provider_connections", "provider_account_id", "not.like.%s*" % SEED),
               ("sleep_nights", "data_origin", "not.eq." + SEED),
               ("calendar_events", "provider_event_id", "not.like.%s*" % SEED),
-              ("media_events", "id", "not.like.%s*" % SEED),
-              ("source_records", "source_record_id", "not.like.%s*" % SEED)]
+              ("media_events", "id", "not.like.%s*" % SEED)]
     for table, col, cond in checks:
         rows = db("GET", table, params=dict(uid, select=col, limit="1", **{col: cond})) or []
         if rows:
@@ -638,8 +798,11 @@ def guard(user_id: str, force: bool = False) -> None:
 
 def remove(user_id: str) -> None:
     for table in TABLES + ("media_documents", "connection_streams", "provider_connections"):
-        db("DELETE", table, params={"user_id": "eq." + user_id})
-    print("Removed the demo data of %s." % user_id)
+        params = {"user_id": "eq." + user_id}
+        if table == "source_records":       # only this script's rows: hand-added ones (weekly cards) stay
+            params["source_record_id"] = "like.%s*" % SEED
+        db("DELETE", table, params=params)
+    print("Removed the demo data of %s (source_records not written by this script are kept)." % user_id)
 
 
 def write(user_id: str, rows: Dict[str, List[Dict[str, Any]]], today: date) -> None:
@@ -676,7 +839,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--user", help="the demo account's user id (required for --write and --remove)")
     ap.add_argument("--calibrate", help="a real account's user id to copy the shape from (read only)")
-    ap.add_argument("--date", help="today (default: today)")
+    ap.add_argument("--date", help="today, the demo's anchor (default: CONFIG['date'], %s)" % CONFIG["date"])
     ap.add_argument("--key", help="write the answer key and what the engine found to this JSON file")
     ap.add_argument("--seed", type=int, help="override CONFIG['seed']")
     ap.add_argument("--sweep", type=int, metavar="N", help="try seeds 1..N and rank them (nothing is written)")
@@ -696,7 +859,7 @@ def main() -> None:
         guard(args.user, args.force)
         remove(args.user)
         return
-    today = date.fromisoformat(args.date) if args.date else date.today()
+    today = date.fromisoformat(args.date or CONFIG["date"])
     cal = calibrate(args.calibrate, today)
     if args.sweep:
         sweep(cal, today, args.sweep)

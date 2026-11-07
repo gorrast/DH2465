@@ -52,8 +52,9 @@ from stressless.timeutil import at, tz  # noqa: E402
 # --------------------------------------------------------------------------- #
 CONFIG: Dict[str, Any] = {
     "days": 90,
-    "seed": 2,                              # the dry run with --sweep 40 ranks seeds; the best depends on the date
-                                            # and the calibration (2 is best for 2026-11-03 without --calibrate)
+    "seed": 32,                             # the dry run with --sweep 40 ranks seeds; the best depends on the date
+                                            # and the calibration (32 for 2026-11-03 without --calibrate: both reports
+                                            # get their links, see _personal/plans/final-demo-plan.md)
     # the demo's "today" (run the server with STRESSLESS_ANCHOR set to it). A Tuesday: the daily report explains the
     # Monday before it (a workday) and the weekly report the Monday-Sunday week that ended two days before
     "date": "2026-11-03",
@@ -72,7 +73,7 @@ CONFIG: Dict[str, Any] = {
              ("Coffee break", [(wd, 15.25, 15.5) for wd in range(5)], "personal", None, 0, None),
              ("1:1 with Johan", [(0, 16.0, 16.5)], "meeting", "Room 3", 2, "tense"),
              ("Leadership presentation", [(1, 10.0, 11.5)], "meeting", "Board room", 9, "stress"),
-             ("Product workshop", [(3, 13.0, 15.0), (4, 10.0, 12.0)], "meeting", "Workshop room", 8, "enjoy"),
+             ("Product workshop", [(3, 13.0, 15.0)], "meeting", "Workshop room", 8, "enjoy"),   # not Fridays: the dinners
              ("Family call", [(6, 17.0, 17.75)], "personal", None, 2, "calm"),
              # customer day: three accounts that matter differently to the company, seen in the heart rate during the call
              ("Northwind Bank weekly", [(2, 9.5, 10.25)], "meeting", "Zoom", 5, "key_account"),
@@ -84,7 +85,7 @@ CONFIG: Dict[str, Any] = {
     # Presenting is the stressful kind of meeting, the workshop the kind they enjoy, the 1:1 with Johan the one that
     # follows them home.
     "series_effects": {"stress": {"during_hr": 10, "day_hr": 6, "onset_min": 30, "hrv": -0.20, "resting_hr": 3},
-                       "tense": {"during_hr": 9, "after_hr": 8, "onset_min": 25, "hrv": -0.20, "resting_hr": 2},
+                       "tense": {"during_hr": 9, "after_hr": 8, "onset_min": 15, "hrv": -0.15, "resting_hr": 2},
                        "enjoy": {"during_hr": -2, "day_hr": -3, "onset_min": -8, "hrv": 0.06, "resting_hr": -1},
                        "calm": {"day_hr": -2, "onset_min": -10, "hrv": 0.05, "resting_hr": -1},
                        "key_account": {"during_hr": 12}, "mid_account": {"during_hr": 5},
@@ -116,7 +117,7 @@ CONFIG: Dict[str, Any] = {
     # does nothing), starting between these hours and over before about 22:15, so it is not late streaming
     "himym": {"show": "How I Met Your Mother", "episode_min": 22, "busy": 0.55, "other": 0.15, "start": (20.75, 21.5)},
     # on a busy evening the episode replaces late scrolling (no late phone use) and they go to bed earlier
-    "himym_effects": {"bed_delay_min": -20, "onset_min": -18, "hrv": 0.15, "resting_hr": -1.5},
+    "himym_effects": {"bed_delay_min": -10, "onset_min": -10, "hrv": 0.12, "resting_hr": -1.5},
     # tired -> phone: the day after a night in the bottom third by time asleep, more pickups and screen time
     "tired_phone": {"pickups": 1.3, "screen_minutes": 45},
     "socials": [("Dinner with friends", 4, 19.0, 23.0, 0.5), ("Dinner party", 5, 19.5, 23.75, 0.5)],

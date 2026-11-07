@@ -28,14 +28,15 @@ days" or "you sleep better after a run, but not after the gym".
 
 You get one JSON object computed by the app. The app has done all the maths; you choose what is worth telling and \
 put it into words.
-- patterns: the links. A pattern with sources (cause first, then what it affects) is a link found in the person's \
-own history: detail says it in one sentence with the numbers, effect is its strongest part, n and n_without are the \
-days compared, confidence says how sure the app is, and happened is how many days of this report's period the cause \
-occurred (0 means it is background: true in their history, but it did not happen this time). A pattern without \
-sources is one of the app's likely causes behind last night's sleep. against_research is true when the link goes the \
-other way than sleep research expects (more late phone use going with better sleep).
+- patterns: the links, each found in the person's own history. sources names the data it connects (cause first, \
+then what it affects), detail says it in one sentence with the numbers, effect is its strongest part, n and \
+n_without are the days compared, confidence says how sure the app is, and happened is how many days of this \
+report's period the cause occurred (0 means it is background: true in their history, but it did not happen this \
+time). against_research is true when the link goes the other way than sleep research expects (more late phone use \
+going with better sleep).
 - days: the day before (daily) or each day of the week (weekly), with tags describing what happened.
-- metrics: measured values next to the person's usual (baseline). Context only.
+- metrics: measured values next to the person's usual (baseline). Context only: the app's pages already show them \
+(sleep score, HRV, resting heart rate and the rest), so a metric is never a finding of its own.
 - suggestions: ready-made suggestions, best first.
 - notes: gaps and caveats that must be respected.
 
@@ -43,7 +44,8 @@ Choosing what to tell:
 - Build the report on two to four links. Prefer links that connect two different sources, that happened in this \
 period (tie them to the day: "yesterday you had four meetings in a row, and on days like that..."), that are \
 surprising, fun or something the person can act on, and whose effect is big enough to notice.
-- Leave out links that are obvious (a short night is followed by a tired day), that stay within one source, that \
+- Leave out links that are obvious (late phone use goes with later sleep, alcohol with a worse night), that stay \
+within one source, that \
 repeat another link (the same days seen twice, such as podcast days and one podcast; keep the more specific or \
 fun one), and early hints, unless an early hint is genuinely fun; then call it an early hint. Leaving most links \
 out is normal. Use background links only when they make a better story than what happened.
@@ -64,6 +66,13 @@ fewer phone pickups when Ludovico Einaudi is playing", not "Einaudi days".
 higher heart rate means the meeting asks more of them: often because it matters more (an important customer, a \
 presentation), not because it is bad. Several such links together show which meetings, or customers, weigh the \
 most; say it that way, without calling it stress or a health concern.
+- A "Days with <meeting>" link whose evenings or nights are worse (a higher heart rate after it, falling asleep \
+later, a lower HRV) shows a meeting that stays with the person after it ends. That may be told plainly and kindly: \
+"you seem more stressed after your 1:1s with Johan: your heart rate stays up into the evening and you fall asleep \
+later". Name the person or meeting the title names. It is still a pattern, not a verdict on anyone.
+- A "<show or artist> after busy days" link compares only busy days: busy days with it in the evening against busy \
+days without it. Tell it as a way of winding down after a long day ("after a day full of meetings, you sleep better \
+on the evenings you watch an episode of How I Met Your Mother").
 - Each event once: when two links are the same days seen twice (a recurring evening shift and late meetings; a \
 podcast and podcast days), tell the more specific one and leave the other out.
 - Never argue with a link from a handful of days. Two good days with Metallica say nothing against a link measured \
@@ -83,7 +92,8 @@ Rules:
 - Use only numbers that appear in the JSON, rounded the way a person would say them. Never compute new figures.
 - These are correlations in one person's data. Say "likely", "tends to" or "goes with", never "caused".
 - No medical advice, no diagnoses, and no alarm. If something looks off, say it is worth keeping an eye on.
-- Every finding must list the pattern (and metric) keys it rests on, exactly as they appear in the JSON.
+- Every finding rests on a link: list that pattern's key first, then any metric keys it uses, exactly as they \
+appear in the JSON. A finding without a pattern key is dropped.
 - If notes say data is missing or history is short, make that clear in caveats and keep claims modest.
 - Write in English, friendly and plain, without jargon. Spell out what HRV is the first time you use it."""
 
@@ -169,6 +179,14 @@ class ClaudeReportWriter:
             log.warning("model cited unknown evidence keys %s; dropping them", bad)
             for f in content.findings:
                 f.evidence = [k for k in f.evidence if k not in bad]
+        # a finding must rest on a link: metrics alone (HRV, the sleep score) are on the pages already
+        links = {p.key for p in report_input.patterns}
+        kept = [f for f in content.findings if any(k in links for k in f.evidence)]
+        if len(kept) < len(content.findings):
+            log.warning("dropping %d finding(s) that rest on no link", len(content.findings) - len(kept))
+            if not kept and links:
+                raise ReportWriterError("no finding rests on a link")
+            content.findings = kept
         u = getattr(response, "usage", None)
         usage = {k: getattr(u, k) for k in ("input_tokens", "output_tokens", "cache_read_input_tokens")
                  if u is not None and isinstance(getattr(u, k, None), int)}
@@ -192,20 +210,13 @@ def _fmt(v: Optional[float], unit: str) -> str:
 
 
 def _findings(inp: ReportInput) -> List[Finding]:
-    out: List[Finding] = []
-    # cross-source links that happened first; links against research are not told as a rule of thumb
+    """Links only (metrics are on the pages already): cross-source links that happened first; links against research
+    are not told as a rule of thumb."""
     links_first = sorted((p for p in inp.patterns if not p.against_research), key=lambda p: not (p.sources and p.happened))
-    for p in links_first[:3]:
-        out.append(Finding(title=p.title, body="%s. %s" % (p.detail.rstrip("."), "Worth keeping an eye on."
-                                                           if p.direction == "hurt" else "This tends to help."),
-                           tone="watch" if p.direction == "hurt" else "good", confidence=p.confidence, evidence=[p.key]))
-    for m in inp.metrics:
-        if len(out) >= 4:
-            break
-        if m.status in ("good", "watch") and m.key != "sleep.score" and m.baseline is not None:
-            out.append(Finding(title=m.label, body="%s, against your usual %s." % (_fmt(m.value, m.unit), _fmt(m.baseline, m.unit)),
-                               tone=m.status, confidence="medium", evidence=[m.key]))
-    return out
+    return [Finding(title=p.title, body="%s. %s" % (p.detail.rstrip("."), "Worth keeping an eye on."
+                                                    if p.direction == "hurt" else "This tends to help."),
+                    tone="watch" if p.direction == "hurt" else "good", confidence=p.confidence, evidence=[p.key])
+            for p in links_first[:3]]
 
 
 def rule_content(inp: ReportInput) -> ReportContent:

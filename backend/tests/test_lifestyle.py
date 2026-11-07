@@ -79,21 +79,20 @@ class LifestyleTests(unittest.TestCase):
         after = [(p.key, p.threshold, [(o.key, o.effect, o.n_with) for o in p.outcomes]) for p in lifestyle_patterns(ds, upto)]
         self.assertEqual(before, after)
 
-    def test_patterns_reach_the_report_input(self):
+    def test_obvious_links_are_found_but_stay_out_of_the_reports(self):
+        """Few steps and late phone use going with worse nights is real, but too obvious to tell."""
+        self.assertEqual(self.patterns["low_steps"].direction, "hurt")
         engine = Engine(self.ds)
         daily = daily_input(engine, ANCHOR)
-        keys = {p.key for p in daily.patterns}
-        self.assertIn("pattern.low_steps", keys)
-        p = next(p for p in daily.patterns if p.key == "pattern.low_steps")
-        self.assertEqual(p.direction, "hurt")
-        self.assertIsNotNone(p.outcome)
-        self.assertLessEqual(p.effect_low, p.effect)
-        self.assertGreaterEqual(p.effect_high, p.effect)
+        weekly = weekly_input(engine, MONDAY)
+        for inp in (daily, weekly):
+            self.assertFalse({"pattern.low_steps", "pattern.late_screen"} & {p.key for p in inp.patterns})
+            for p in inp.patterns:
+                self.assertIsNotNone(p.outcome)
+                self.assertLessEqual(p.effect_low, p.effect)
+                self.assertGreaterEqual(p.effect_high, p.effect)
         self.assertIn("screen.late_minutes", daily.keys())
         self.assertEqual(len(daily.keys()), len(daily.metrics) + len(daily.patterns))
-
-        weekly = weekly_input(engine, MONDAY)
-        self.assertTrue({"pattern.low_steps", "pattern.late_screen"} & {p.key for p in weekly.patterns})
         self.assertIn("screen.minutes", weekly.keys())
         self.assertTrue(any("low-step day" in t for d in weekly.days for t in d.tags))
         for inp in (daily, weekly):
@@ -130,10 +129,7 @@ class LifestyleTests(unittest.TestCase):
         self.assertTrue(p.against_research)
         self.assertFalse(self.patterns["late_screen"].against_research)
         links = {q.key: q for q in daily_input(Engine(ds), ANCHOR).patterns}
-        if p.hint:
-            self.assertNotIn("pattern.late_screen", links)
-        else:
-            self.assertTrue(links["pattern.late_screen"].against_research)
+        self.assertNotIn("pattern.late_screen", links)                  # obvious, and a hint against research too
 
     def test_no_calendar_no_meeting_counts(self):
         ds = fresh_dataset()

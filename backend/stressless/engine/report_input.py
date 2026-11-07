@@ -1,6 +1,8 @@
 """Build the ``ReportInput`` a generated report is written from (see ``stressless.reports``).
 
 Everything here is computed by the engine; the model only puts it into words and picks which links are worth telling.
+What the pages already show (the recovery markers, the "similar day" causes behind last night) is context at most, and
+obvious links (``OBVIOUS``) are left out, so the report is about what only StressLess can see.
 Only numbers, code-written labels, dates, music names (artists, podcasts, shows) and the titles of recurring calendar
 activities that became a link (a series, or a title used on many days: "Statistics lecture", "Study session") go in: no
 other event titles, places, people, ids or clock times, because the input is sent to the model as is.
@@ -15,18 +17,21 @@ import statistics
 from datetime import date, timedelta
 from typing import Dict, List, Optional, Set
 
-from ..models import FACTOR_LABELS
 from ..reports import Metric, Pattern, DayPoint, ReportInput
 from . import baselines as bl
 from .features import day_features, describe_features
 from .lifestyle import LifestylePattern, _has_calendar, active_on, day_tags, daytime_hr
 
 HISTORY = 28                                   # nights or days behind a "usual" value
-MAX_LIFESTYLE = 6                              # links whose cause happened in the period
-MAX_BACKGROUND = 2                             # strongest other links, for context
-# Lifestyle links that say the same as one of the daily model's causes (that one is kept: it explains last night)
-SAME_AS_CAUSE = {"busy_days": "meetings_over_3", "back_to_back_days": "b2b_over_2", "late_meetings": "late_meeting_hours",
-                 "social_evenings": "evening_social", "early_starts": "early_start", "late_workouts": "workout_late"}
+MAX_LIFESTYLE = {"daily": 6, "weekly": 9}       # links whose cause happened in the period (a week has more)
+MAX_BACKGROUND = 2                             # strongest other links, for context (weekly only: a daily is about yesterday)
+# Links too obvious to be worth a report (late phone use, alcohol and coffee hurt sleep; a night off rhythm or after
+# sleep debt is worse; steps; a late night out, an early start or a late meeting means less sleep), and big listening days, which are the days of whatever the person plays most (a link
+# of its own, or the same days as one) and so say nothing new. The engine still finds them; they only stay out of the
+# reports.
+OBVIOUS = frozenset({"late_screen", "heavy_screen", "many_pickups", "late_streaming", "alcohol", "more_coffee",
+                     "off_rhythm", "sleep_debt", "low_steps", "active_days", "big_listening", "social_evenings",
+                     "early_starts", "late_meetings"})
 # Phone-sync screen time (daily_metrics): key, label, unit; lower is better for all three
 SCREEN_DEFS = (("screen.minutes", "Screen time", "min"), ("screen.late_minutes", "Screen time after 22:00", "min"),
                ("screen.pickups", "Phone pickups", "count"))
@@ -92,14 +97,41 @@ def _lifestyle_pattern(p: LifestylePattern, happened: int) -> Pattern:
                    against_research=p.against_research)
 
 
-def _links(lifestyle: List[LifestylePattern], happened: Dict[str, int], skip: Set[str]) -> List[Pattern]:
-    """Links for a report: those that happened in the period, then the strongest others; cross-source ones first.
-    An early hint that goes against sleep research is most likely noise, so it is left out."""
-    usable = [p for p in lifestyle if p.primary is not None and p.key not in skip and not (p.hint and p.against_research)]
+def _links(lifestyle: List[LifestylePattern], happened: Dict[str, int], skip: Set[str], kind: str) -> List[Pattern]:
+    """Links for a report: those that happened in the period, then (weekly only) the strongest others;
+    cross-source ones first. Obvious links and those in ``skip`` are left out, and so is an early hint that goes
+    against sleep research (most likely noise)."""
+    usable = [p for p in lifestyle if p.primary is not None and p.key not in skip and p.key not in OBVIOUS
+              and not (p.hint and p.against_research)]
     order = lambda p: (not p.cross_source, -p.rank_score)
-    now = sorted((p for p in usable if happened.get(p.key)), key=order)[:MAX_LIFESTYLE]
-    rest = sorted((p for p in usable if not happened.get(p.key) and p.cross_source and not p.hint), key=order)[:MAX_BACKGROUND]
+    now = sorted((p for p in usable if happened.get(p.key)), key=order)[:MAX_LIFESTYLE[kind]]
+    background = MAX_BACKGROUND if kind == "weekly" else 0
+    rest = sorted((p for p in usable if not happened.get(p.key) and p.cross_source and not p.hint), key=order)[:background]
     return [_lifestyle_pattern(p, happened.get(p.key, 0)) for p in now + rest]
+
+
+def _subject(title: str) -> str:
+    """What a link is about: "Days with 1:1 with Johan" and "Heart rate in 1:1 with Johan" are both about the 1:1."""
+    for prefix in ("Days with ", "Heart rate in "):
+        if title.startswith(prefix):
+            return title[len(prefix):]
+    return title
+
+
+def told_links(report) -> Set[str]:
+    """Lifestyle keys a stored report already told: the links its findings rest on, and other links about the same
+    thing (the same meeting, the same artist), so a later report on the same day does not tell it again."""
+    if report is None:
+        return set()
+    cited = {k for f in report.content.findings for k in f.evidence}
+    subjects = {_subject(p.title) for p in report.input.patterns if p.key in cited and p.sources}
+    return {k[len("pattern."):] for k in cited if k.startswith("pattern.")} | {"subject:" + s for s in subjects}
+
+
+def _skip(lifestyle: List[LifestylePattern], told: Set[str]) -> Set[str]:
+    subjects = {k[len("subject:"):] for k in told if k.startswith("subject:")}
+    return {p.key for p in lifestyle if p.key in told
+            or any(s in _subject(p.title) or _subject(p.title) in s for s in subjects)}
 
 
 def _music_minutes(ds, d: date) -> Optional[float]:
@@ -171,19 +203,11 @@ def daily_input(engine, morning: date) -> ReportInput:
                                float(f.meeting_minutes), [float(day_features(ds, d).meeting_minutes) for d in weekday_before], "down"))
 
     titles = [ev.title for d in (night_date, morning) for ev in ds.events_on(d, include_unattended=True)]
-    patterns: List[Pattern] = []
-    for c in r.causes + r.helpers:
-        key = "pattern." + c.factor
-        if any(p.key == key for p in patterns):
-            continue
-        patterns.append(Pattern(key=key, title=FACTOR_LABELS.get(c.factor, c.factor), detail=_scrub(c.detail, titles), direction=c.direction, effect=_r(c.points),
-                                unit="points", n=c.n_similar, confidence=c.confidence))
-
-    # Links whose cause happened yesterday (or, for a short night, last night), then the strongest others.
+    # Only links whose cause happened yesterday (or, for a short night, last night). The daily model's likely causes
+    # behind last night are not sent: the Daily page shows them already ("Similar day patterns").
     lifestyle = engine.lifestyle(morning)
     happened = {p.key: int(active_on(ds, p, _cause_day(p, night_date))) for p in lifestyle if p.primary is not None}
-    causes = {c.factor for c in r.causes + r.helpers}
-    patterns += _links(lifestyle, happened, {k for k, f in SAME_AS_CAUSE.items() if f in causes})
+    patterns = _links(lifestyle, happened, set(), "daily")
 
     notes = [_scrub(n, titles) for n in (r.missing_data, r.unexplained_note, r.confidence_note) if n]
     if not logged and any(_day_metric(ds, d, k) is not None for d in before for k, _, _, _ in CHECKIN_DEFS):
@@ -194,8 +218,9 @@ def daily_input(engine, morning: date) -> ReportInput:
                        suggestions=[_scrub(s.title, titles) for s in r.suggestions], notes=notes)
 
 
-def weekly_input(engine, monday: date) -> ReportInput:
-    """Monday to Sunday: each day and the night after it, against the 28 nights before the week."""
+def weekly_input(engine, monday: date, told: Optional[Set[str]] = None) -> ReportInput:
+    """Monday to Sunday: each day and the night after it, against the 28 nights before the week. ``told``
+    (``told_links`` of the daily report stored the same day) leaves out the links that one already told."""
     ds = engine.ds
     days = [monday + timedelta(days=k) for k in range(7)]
     nights = [ds.night(d) for d in days]
@@ -231,7 +256,7 @@ def weekly_input(engine, monday: date) -> ReportInput:
     # Links whose cause happened at least once this week, then the strongest others.
     lifestyle = engine.lifestyle(monday + timedelta(days=7))
     happened = {p.key: sum(1 for d in days if active_on(ds, p, _cause_day(p, d))) for p in lifestyle if p.primary is not None}
-    patterns = _links(lifestyle, happened, set())
+    patterns = _links(lifestyle, happened, _skip(lifestyle, told or set()), "weekly")
 
     points = [DayPoint(day=d, score=(n.score if (n is not None and n.worn) else None),
                        tags=_chips(ds, f) + day_tags(ds, d, lifestyle))

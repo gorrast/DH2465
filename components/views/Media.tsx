@@ -15,6 +15,7 @@ import { Icon } from "../ui/Icon";
 import { ActionButton, RevealHeading, RevealSection } from "../ui/Motion";
 import { toast } from "../ui/overlays";
 import { useLoad } from "./common";
+import { useApp } from "../shell/AppContext";
 
 type Provider = "spotify" | "netflix" | "steam" | "youtube";
 type MediaEvent = {
@@ -1326,6 +1327,8 @@ function SpotifyDocuments({ documents }: { documents: MediaDocument[] }) {
 const emptyHistory: MediaEvent[] = [];
 export function MediaView() {
   const media = useLoad(() => api.get<MediaPayload>("/api/media"), []);
+  // The shared demo account cannot import or sync: its data is the demo.
+  const readOnly = !!useApp().meta.read_only;
   const paused = !!useReducedMotion();
   const [gameSearch, setGameSearch] = useState("");
   const [gameSort, setGameSort] = useState("minutes");
@@ -1476,7 +1479,9 @@ export function MediaView() {
           The games you come back to. Import or sync them here.
         </p>
         <span className="media-optional-note">
-          Start with one source, or just explore. Every connection is optional.
+          {readOnly
+            ? "This is the demo account, so imports and syncing are switched off. Explore its collection below."
+            : "Start with one source, or just explore. Every connection is optional."}
         </span>
         <nav className="media-jump-links" aria-label="Media sections">
           {(["spotify", "netflix", "youtube", "steam"] as const).map(
@@ -1556,7 +1561,9 @@ export function MediaView() {
             </p>
           </div>
         </div>
-        <ImportMedia provider="spotify" onImported={media.setData} />
+        {readOnly ? null : (
+          <ImportMedia provider="spotify" onImported={media.setData} />
+        )}
         {!!music?.items && (
           <History
             provider="spotify"
@@ -1579,11 +1586,13 @@ export function MediaView() {
           </CollectionPlaceholder>
         )}
         <SpotifyDocuments documents={data?.documents || []} />
-        <LastfmPanel
-          data={data}
-          disabled={media.loading || !!media.error}
-          onSynced={media.setData}
-        />
+        {readOnly ? null : (
+          <LastfmPanel
+            data={data}
+            disabled={media.loading || !!media.error}
+            onSynced={media.setData}
+          />
+        )}
       </RevealSection>
       <RevealSection
         id="media-netflix"
@@ -1646,7 +1655,7 @@ export function MediaView() {
                   : "Titles, dates and imports work without posters. If artwork is unavailable, a simple icon takes its place."}
             </p>
           </div>
-          {posters.data?.configured && (
+          {posters.data?.configured && !readOnly && (
             <ActionButton
               className="btn"
               disabled={
@@ -1686,13 +1695,15 @@ export function MediaView() {
             </button>
           </p>
         )}
-        <ImportMedia
-          provider="netflix"
-          onImported={acceptMedia}
-          disabled={posterBusy}
-          onBusyChange={setNetflixImportBusy}
-          afterImport={fetchPosters}
-        />
+        {readOnly ? null : (
+          <ImportMedia
+            provider="netflix"
+            onImported={acceptMedia}
+            disabled={posterBusy}
+            onBusyChange={setNetflixImportBusy}
+            afterImport={fetchPosters}
+          />
+        )}
         {!!viewing?.items && (
           <History
             provider="netflix"
@@ -1780,7 +1791,9 @@ export function MediaView() {
             </p>
           </div>
         </div>
-        <ImportMedia provider="youtube" onImported={media.setData} />
+        {readOnly ? null : (
+          <ImportMedia provider="youtube" onImported={media.setData} />
+        )}
         {!!youtube?.items && (
           <History
             provider="youtube"
@@ -1866,18 +1879,22 @@ export function MediaView() {
             </p>
           </div>
         </div>
-        <SteamSync
-          busy={steamBusy}
-          setBusy={setSteamBusy}
-          disabled={media.loading || !!media.error}
-          onSynced={media.setData}
-        />
-        <ImportMedia
-          provider="steam"
-          onImported={media.setData}
-          disabled={steamBusy}
-          onBusyChange={setSteamBusy}
-        />
+        {readOnly ? null : (
+          <>
+            <SteamSync
+              busy={steamBusy}
+              setBusy={setSteamBusy}
+              disabled={media.loading || !!media.error}
+              onSynced={media.setData}
+            />
+            <ImportMedia
+              provider="steam"
+              onImported={media.setData}
+              disabled={steamBusy}
+              onBusyChange={setSteamBusy}
+            />
+          </>
+        )}
         {games.length > 0 ? (
           <div className="media-game-library">
             <div className="media-library-tools">

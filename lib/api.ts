@@ -30,7 +30,7 @@ async function send(method: string, path: string, body?: unknown): Promise<Respo
       /* not JSON */
     }
     if (res.status === 401 && typeof window !== 'undefined') {
-      window.location.href = '/login?next=' + encodeURIComponent(location.pathname + location.search);
+      window.location.href = '/auth/demo?next=' + encodeURIComponent(location.pathname + location.search);
     }
     throw new ApiError(msg, res.status);
   }

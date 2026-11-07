@@ -153,9 +153,11 @@ export function Shell({ children }: { children: ReactNode }) {
     [meta, refreshMeta, router],
   );
 
+  // Everyone shares the demo account: leave this browser's session only (a global sign-out would end every
+  // visitor's), and go back to the project site.
   const signOut = useCallback(async () => {
-    await getSupabase().auth.signOut();
-    router.replace("/login");
+    await getSupabase().auth.signOut({ scope: "local" });
+    router.replace("/project");
     router.refresh();
   }, [router]);
 
@@ -408,77 +410,96 @@ export function Shell({ children }: { children: ReactNode }) {
                 className="btn btn-sm btn-ghost rail-signout"
                 type="button"
                 onClick={signOut}
-                title="Sign out"
+                title="Leave the demo"
               >
                 <Icon name="logout" size={16} />
-                <span className="rail-label">Sign out</span>
+                <span className="rail-label">Leave the demo</span>
               </button>
             </div>
           </motion.aside>
         </div>
         <header className="topbar">
-          <details className="persona-wrap" key={pathname}>
-            <summary className="persona-chip" data-tour="persona">
-              <span className="avatar">
-                {(m.persona?.name || "A").slice(0, 1)}
-              </span>
-              <span className="persona-name">
-                {m.persona ? m.persona.name : "Demo"}
-              </span>
-              <span className="persona-tag">
-                {m.source === "demo"
-                  ? m.anchor_mode
+          {m.read_only ? (
+            // The deployed demo: one account, no switching (switching clears its data).
+            <div className="persona-wrap">
+              <div className="persona-chip" data-tour="persona">
+                <span className="avatar">
+                  {(m.persona?.name || "D").slice(0, 1)}
+                </span>
+                <span className="persona-name">
+                  {m.persona ? m.persona.name : "Demo"}
+                </span>
+                <span className="persona-tag">
+                  {m.anchor_mode
                     ? "Demo date " + fmt.day(m.today)
-                    : "Demo data"
-                  : "Imported data"}
-              </span>
-              <Icon name="chevron-right" size={14} className="chev" />
-            </summary>
-            <div className="persona-menu">
-              <div className="persona-menu-title">
-                Demo persona
-                <span className="muted tiny">
-                  {" · seed " + (m.seed === undefined ? "–" : m.seed)}
+                    : "Demo data"}
                 </span>
               </div>
-              {(m.personas || []).map((p) => {
-                const isCurrent = m.persona && m.persona.key === p.key;
-                return (
-                  <button
-                    key={p.key}
-                    className={"persona-item" + (isCurrent ? " current" : "")}
-                    type="button"
-                    data-persona={p.key}
-                    onClick={(e) => {
-                      e.currentTarget
-                        .closest("details")
-                        ?.removeAttribute("open");
-                      if (!isCurrent) switchPersona(p.key);
-                    }}
-                  >
-                    <span className="avatar">
-                      {(p.name || "?").slice(0, 1)}
-                    </span>
-                    <span className="persona-item-body">
-                      <span className="persona-item-name">{p.name}</span>
-                      <span className="persona-item-tag">
-                        {p.tagline || ""}
-                      </span>
-                    </span>
-                    {isCurrent ? (
-                      <Icon name="check" size={16} />
-                    ) : p.ready === false ? (
-                      <span className="badge badge-low">preparing</span>
-                    ) : null}
-                  </button>
-                );
-              })}
-              <div className="persona-menu-foot muted tiny">
-                Same engine, different person. Import options live under Connect
-                Your Data.
-              </div>
             </div>
-          </details>
+          ) : (
+            <details className="persona-wrap" key={pathname}>
+              <summary className="persona-chip" data-tour="persona">
+                <span className="avatar">
+                  {(m.persona?.name || "A").slice(0, 1)}
+                </span>
+                <span className="persona-name">
+                  {m.persona ? m.persona.name : "Demo"}
+                </span>
+                <span className="persona-tag">
+                  {m.source === "demo"
+                    ? m.anchor_mode
+                      ? "Demo date " + fmt.day(m.today)
+                      : "Demo data"
+                    : "Imported data"}
+                </span>
+                <Icon name="chevron-right" size={14} className="chev" />
+              </summary>
+              <div className="persona-menu">
+                <div className="persona-menu-title">
+                  Demo persona
+                  <span className="muted tiny">
+                    {" · seed " + (m.seed === undefined ? "–" : m.seed)}
+                  </span>
+                </div>
+                {(m.personas || []).map((p) => {
+                  const isCurrent = m.persona && m.persona.key === p.key;
+                  return (
+                    <button
+                      key={p.key}
+                      className={"persona-item" + (isCurrent ? " current" : "")}
+                      type="button"
+                      data-persona={p.key}
+                      onClick={(e) => {
+                        e.currentTarget
+                          .closest("details")
+                          ?.removeAttribute("open");
+                        if (!isCurrent) switchPersona(p.key);
+                      }}
+                    >
+                      <span className="avatar">
+                        {(p.name || "?").slice(0, 1)}
+                      </span>
+                      <span className="persona-item-body">
+                        <span className="persona-item-name">{p.name}</span>
+                        <span className="persona-item-tag">
+                          {p.tagline || ""}
+                        </span>
+                      </span>
+                      {isCurrent ? (
+                        <Icon name="check" size={16} />
+                      ) : p.ready === false ? (
+                        <span className="badge badge-low">preparing</span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+                <div className="persona-menu-foot muted tiny">
+                  Same engine, different person. Import options live under
+                  Connect Your Data.
+                </div>
+              </div>
+            </details>
+          )}
           <div
             className="reasoner-chip"
             data-tour="reasoner"

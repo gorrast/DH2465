@@ -19,6 +19,7 @@ export interface Meta {
   end?: string;
   today: string;
   anchor_mode?: boolean;
+  read_only?: boolean; // the deployed demo: a shared account nobody can change
   n_nights?: number;
   reasoning_mode?: string;
   version?: string;

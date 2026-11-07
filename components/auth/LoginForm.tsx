@@ -5,13 +5,16 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { motion, useMotionValue, useSpring, useReducedMotion } from 'motion/react';
 import { ActionButton, RevealHeading } from '../ui/Motion';
+import Link from 'next/link';
 import { getSupabase } from '@/lib/supabase/client';
+import { DemoButton } from './DemoButton';
+import { isDemoEmail } from '@/lib/demo';
 
 type Mode = 'signin' | 'signup' | 'forgot';
 
 /** Only allow same-site relative redirects after sign-in. */
 function safeNext(next: string | null): string {
-  return next && next.startsWith('/') && !next.startsWith('//') ? next : '/';
+  return next && next.startsWith('/') && !next.startsWith('//') ? next : '/daily';
 }
 
 export function LoginForm() {
@@ -78,6 +81,7 @@ export function LoginForm() {
     const supabase = getSupabase();
     try {
       if (mode === 'forgot') {
+        if (isDemoEmail(email)) throw new Error('The demo account\'s password cannot be reset. Use "Try the demo" to sign in.');
         const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
           redirectTo: location.origin + '/auth/confirm?next=' + encodeURIComponent('/reset-password'),
         });
@@ -177,6 +181,12 @@ export function LoginForm() {
             {mode === 'signin' ? 'Sign in' : mode === 'signup' ? 'Create account' : 'Send reset link'}
           </ActionButton>
         </form>
+        {mode !== 'forgot' ? (
+          <div className="login-demo">
+            <span className="login-or tiny muted">or</span>
+            <DemoButton className="btn login-submit" label="Try the demo without an account" next={next} />
+          </div>
+        ) : null}
         {mode === 'forgot' ? (
           <button type="button" className="login-link small login-back" onClick={() => switchMode('signin')}>Back to sign in</button>
         ) : (
@@ -184,6 +194,7 @@ export function LoginForm() {
             {mode === 'signin' ? 'Sign in to see your reports.' : 'You will get an email to confirm your address before your first sign-in.'}
           </p>
         )}
+        <Link className="tiny login-project-link" href="/project">About the project: process, product and team</Link>
       </div>
     </div>
   );

@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { getSupabase } from '@/lib/supabase/client';
+import { isDemoEmail } from '@/lib/demo';
 
 export function ResetPasswordForm() {
   const router = useRouter();
@@ -20,14 +21,22 @@ export function ResetPasswordForm() {
       return;
     }
     setPending(true);
-    const { error: err } = await getSupabase().auth.updateUser({ password });
+    const supabase = getSupabase();
+    // The demo account is shared, so its password cannot be changed.
+    const { data } = await supabase.auth.getUser();
+    if (isDemoEmail(data.user?.email)) {
+      setError('The demo account\'s password cannot be changed.');
+      setPending(false);
+      return;
+    }
+    const { error: err } = await supabase.auth.updateUser({ password });
     if (err) {
       setError(err.message);
       setPending(false);
       return;
     }
     setDone(true);
-    setTimeout(() => { router.replace('/'); router.refresh(); }, 1500);
+    setTimeout(() => { router.replace('/daily'); router.refresh(); }, 1500);
   }
 
   return (

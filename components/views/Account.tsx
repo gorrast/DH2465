@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useApp } from "../shell/AppContext";
 import { Icon } from "../ui/Icon";
 import { ViewHead } from "./common";
+import { isDemoEmail } from "@/lib/demo";
 
 export function AccountView() {
   const { userEmail, theme, toggleTheme, signOut } = useApp();
@@ -18,9 +19,11 @@ export function AccountView() {
             <p>{userEmail || "Email unavailable"}</p>
           </div>
           <div className="row">
-            <Link className="btn" href="/reset-password">
-              Change password
-            </Link>
+            {isDemoEmail(userEmail) ? null : (
+              <Link className="btn" href="/reset-password">
+                Change password
+              </Link>
+            )}
             <button className="btn" type="button" onClick={signOut}>
               <Icon name="logout" size={16} />
               Sign out

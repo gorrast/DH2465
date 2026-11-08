@@ -13,6 +13,7 @@ const KIND_ICON: Record<string, string> = {
   calendar: "calendar",
   location: "map",
   hr: "watch",
+  workout: "watch",
 };
 
 function HabitLine({ a }: { a: any }) {

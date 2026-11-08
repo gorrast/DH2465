@@ -1,4 +1,8 @@
-"""Reality checks: ask only when calendar, location and body disagree (SPEC §7.4)."""
+"""Reality checks: ask only when calendar, location and body disagree (SPEC §7.4).
+
+Phone data has no location visits, so a booked workout is checked against the phone's own records instead
+(``_booked_workout_real``): a logged session overlapping the booking, or a heart rate clearly above the person's usual
+during it, confirms it; otherwise we ask. A session logged at another time never stands in for the booking."""
 from __future__ import annotations
 
 import logging
@@ -6,8 +10,9 @@ from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..models import CalendarEvent, Dataset, Evidence, LocationVisit, RealityCheck, new_id
-from ..timeutil import at, day_range, fmt_day, fmt_hm, parse_dt
-from .matching import visits_during, workout_signature
+from ..timeutil import at, day_range, fmt_day, fmt_hm, overlap_minutes, parse_dt
+from .lifestyle import daytime_hr
+from .matching import hr_slice, visits_during, workout_signature
 
 log = logging.getLogger("stressless.engine.reality")
 
@@ -16,6 +21,9 @@ EXPECTED = {
     "social": ("restaurant", "bar"),
     "travel": ("airport", "transit", "away", "hotel"),
 }
+# real data: a logged session confirms a booking when it overlaps it this much (minutes, or share of the booking)
+CONFIRM_OVERLAP_MIN, CONFIRM_OVERLAP_FRAC = 10, 0.3
+HR_RISE_CONFIRMS = 30          # bpm above the day's usual waking heart rate, like the walk rule in device_sync
 PLACE_WORDS = {"home": "at home", "office": "at the office", "gym": "at the gym", "restaurant": "at a restaurant",
                "bar": "at a bar", "transit": "in transit", "airport": "at the airport", "hotel": "at the hotel",
                "away": "away", "outdoors": "outdoors", "other": "elsewhere"}
@@ -47,7 +55,45 @@ def _hr_chip(sig: Dict[str, Any]) -> Optional[Evidence]:
     return Evidence(kind="hr", text="Heart rate stayed at %d–%d bpm" % (int(sig["min"]), int(sig["max"])), value=sig["mean"], unit="bpm")
 
 
+def _workout_label(ev: CalendarEvent) -> str:
+    return "the gym" if "gym" in (ev.location_hint or "gym").lower() or ev.title.lower() == "gym" else ev.title.lower()
+
+
+def _booked_workout_real(ds: Dataset, ev: CalendarEvent, d: date) -> Optional[RealityCheck]:
+    """A booked workout for a real user: confirmed by a logged session overlapping it or by a clearly raised heart rate,
+    else asked about. Sessions at other times are shown as evidence but never confirm or replace the booking."""
+    dur = max(1, ev.duration_min)
+    acts = [ds.activity_on(day) for day in sorted({ev.start.date(), ev.end.date()})]
+    logged = [w for a in acts if a for w in a.workouts]
+    need = min(CONFIRM_OVERLAP_MIN, CONFIRM_OVERLAP_FRAC * dur)
+    if any(overlap_minutes(w.start, w.end, ev.start, ev.end) >= need for w in logged):
+        return None
+    vals = [b for b in hr_slice(ds, ev.start, ev.end) if b is not None]
+    usual = daytime_hr(ds, d)
+    threshold = usual + HR_RISE_CONFIRMS if usual is not None else None
+    raised = sum(1 for b in vals if threshold is not None and b >= threshold)
+    if raised >= 0.4 * dur:
+        return None
+    evidence = [Evidence(kind="calendar", text="Booked: %s %s" % (ev.title, _hm_range(ev.start, ev.end))),
+                Evidence(kind="workout", text="Nothing logged by your watch or phone at that time")]
+    if not vals:
+        evidence.append(Evidence(kind="hr", text="No heart-rate data in that window (watch not worn)"))
+    elif threshold is None:
+        evidence.append(Evidence(kind="hr", text="Heart rate %d bpm on average" % round(sum(vals) / len(vals)), value=round(sum(vals) / len(vals), 1), unit="bpm"))
+    else:
+        evidence.append(Evidence(kind="hr", text="Heart rate %d–%d bpm, %d min clearly above your usual %d bpm" % (min(vals), max(vals), raised, round(usual)),
+                                 value=round(sum(vals) / len(vals), 1), baseline=round(usual, 1), unit="bpm"))
+    for w in logged:
+        if w.start.date() == d:
+            evidence.append(Evidence(kind="workout", text="Logged %s %s" % (w.kind, _hm_range(w.start, w.end))))
+    return RealityCheck(id="rc-%s" % ev.id, date=d, kind="booked_not_seen", status="open", event_id=ev.id, evidence=evidence,
+                        question="Did you make it to %s on %s, %s?" % (_workout_label(ev), fmt_day(d), fmt_hm(ev.start)),
+                        consequence="If no, this workout leaves your patterns.")
+
+
 def _booked_check(ds: Dataset, ev: CalendarEvent, d: date, visits: List[LocationVisit]) -> Optional[RealityCheck]:
+    if ds.phone_rules and ev.type == "workout":
+        return _booked_workout_real(ds, ev, d)
     expected = EXPECTED[ev.type]
     dur = max(1, ev.duration_min)
     during = visits_during(ds, ev.start, ev.end)
@@ -57,7 +103,7 @@ def _booked_check(ds: Dataset, ev: CalendarEvent, d: date, visits: List[Location
                   (ev.type == "social" and sig.get("mean") is not None and sig["mean"] >= ds.persona.resting_hr + 20)
     if exp_ov >= 0.5 * dur or hr_confirms:
         return None
-    label = {"workout": "the gym" if "gym" in (ev.location_hint or "gym").lower() or ev.title.lower() == "gym" else ev.title.lower(),
+    label = {"workout": _workout_label(ev),
              "social": ev.title.lower(), "travel": "the trip"}[ev.type]
     evidence = [Evidence(kind="calendar", text="Booked: %s %s" % (ev.title, _hm_range(ev.start, ev.end)))]
     if other_ov >= 0.5 * dur and (ev.type != "workout" or sig["minutes_over_120"] < 5):

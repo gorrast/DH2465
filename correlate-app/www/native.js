@@ -11,8 +11,13 @@ const S = (window.__app = {
   pings: [],
   steps: [], // [{ ms, value }] one per day
   workouts: [],
+  workoutWindow: null, // { from, to } in ms of the last successful workout read; null = do not touch stored workouts
   sleep: [],
   sleepSessions: [], // full sessions with stages, normalised for POST /api/sync
+  heartRate: [], // Health Connect heart-rate records, averaged to one sample per minute, for POST /api/sync
+  hrv: [], // the watch's own HRV (RMSSD) readings, for POST /api/sync
+  restingHr: [], // the watch's own resting heart rate readings (about one a day), for POST /api/sync
+  hcPermissions: {}, // API data type -> granted
   appUsage: [],
   usageDays: [],
   usageSelected: null,
@@ -424,9 +429,36 @@ function renderWorkouts() {
     .join("");
 }
 
+// Heart rate minutes and HRV readings from the last read, or why there are none
+function heartHtml() {
+  const minutes = S.heartRate.reduce((n, r) => n + r.samples.length, 0);
+  const lastHrv = S.hrv[S.hrv.length - 1];
+  const lastRhr = S.restingHr[S.restingHr.length - 1];
+  const line = (label, granted, text, none) =>
+    `<div class="row"><span>${label}</span><span class="sub">${esc(granted === false ? "not allowed" : text || none)}</span></div>`;
+  return (
+    `<div class="day-head" style="margin-top:16px">Heart</div>` +
+    line("Heart rate", S.hcPermissions.heart_rate, minutes ? `${fmtNum(minutes)} minutes` : "", "none found") +
+    line(
+      "HRV (RMSSD)",
+      S.hcPermissions.hrv_rmssd,
+      lastHrv ? `${S.hrv.length} readings, latest ${Math.round(lastHrv.rmssdMs)} ms` : "",
+      "none found: not every watch app shares HRV"
+    ) +
+    line(
+      "Resting heart rate",
+      S.hcPermissions.resting_heart_rate,
+      lastRhr ? `${S.restingHr.length} readings, latest ${Math.round(lastRhr.bpm)} bpm` : "",
+      "none from the watch: computed from your heart rate while asleep"
+    )
+  );
+}
+
 function renderSleep() {
   if (!S.sleep.length) {
-    $("sleep-body").innerHTML = `<div class="empty">No sleep sessions found in the last 30 days (or none loaded yet).</div>`;
+    $("sleep-body").innerHTML =
+      `<div class="empty">No sleep sessions found in the last 30 days (or none loaded yet).</div>` +
+      (S.heartRate.length || S.hrv.length || Object.keys(S.hcPermissions).length ? heartHtml() : "");
     return;
   }
   const nights = S.sleep;
@@ -450,7 +482,8 @@ function renderSleep() {
           `<div class="ev"><div class="t">${esc(fmtDay(n.startMs))}</div><div class="b"><div class="title">${esc(fmtTime(n.startMs))} → ${esc(fmtTime(n.endMs))}</div>` +
           `<div class="meta">${esc(fmtDur(n.endMs - n.startMs))}</div></div></div>`
       )
-      .join("");
+      .join("") +
+    heartHtml();
 }
 
 function renderAll() {
@@ -589,13 +622,19 @@ function parseWorkouts(res) {
       const startMs = toMs(w.startDate ?? w.start);
       const endMs = toMs(w.endDate ?? w.end);
       const hrRaw = w.heartRate || w.heartRates || [];
+      const rawType = String(w.workoutType ?? w.type ?? "OTHER");
       return {
-        type: String(w.workoutType ?? w.type ?? "Workout").replace(/[_-]/g, " ").toLowerCase().replace(/^\w/, (c) => c.toUpperCase()),
+        id: w.id || null,
+        rawType,
+        title: w.title || null,
+        type: rawType.replace(/[_-]/g, " ").toLowerCase().replace(/^\w/, (c) => c.toUpperCase()),
         startMs,
+        endMs,
         durationMs: w.duration ? Number(w.duration) * 1000 : endMs - startMs,
         calories: Number(w.calories ?? w.totalEnergyBurned ?? 0) || 0,
         distance: Number(w.distance ?? w.totalDistance ?? 0) || 0,
         source: w.sourceName ?? w.source ?? "",
+        sourceBundleId: w.sourceBundleId || null,
         hr: hrRaw.map((h) => Number(h.bpm ?? h.value ?? h.heartRate)).filter((n) => Number.isFinite(n)),
       };
     })
@@ -623,12 +662,20 @@ async function connectHealth() {
       return;
     }
 
-    // capacitor-health has no sleep support and no standalone heart rate;
-    // heart rate only comes inside workout records. Sleep is read in connectSleep().
-    const permResult = await Health.requestHealthPermissions({
-      permissions: ["READ_STEPS", "READ_HEART_RATE", "READ_WORKOUTS"],
-    });
+    // capacitor-health has no sleep support and no standalone heart rate; here heart rate only comes inside
+    // workout records. Sleep, all-day heart rate and HRV are read in connectSleep(). Calories and distance are
+    // read per workout when allowed.
+    const healthPermissions = ["READ_STEPS", "READ_HEART_RATE", "READ_WORKOUTS", "READ_TOTAL_CALORIES", "READ_ACTIVE_CALORIES", "READ_DISTANCE"];
+    const permResult = await Health.requestHealthPermissions({ permissions: healthPermissions });
     log("Health permission result", permResult);
+    let workoutsAllowed = true;
+    try {
+      const perm = await Health.checkHealthPermissions({ permissions: healthPermissions });
+      log("Health permissions", perm);
+      workoutsAllowed = perm?.permissions?.READ_WORKOUTS !== false;
+    } catch (err) {
+      log("Health permission check failed; reading anyway", String(err), "error");
+    }
 
     // Steps: from 1 January this year, one query per month so no single call is huge
     const now = new Date();
@@ -665,9 +712,13 @@ async function connectHealth() {
       total: S.steps.reduce((a, s) => a + s.value, 0),
     });
 
-    // Workouts with heart rate: last 30 days (heart rate samples make these heavy)
+    // Workouts with heart rate: last 30 days (heart rate samples make these heavy). Only a successful read with the
+    // permission granted sets the window the API rewrites; anything else leaves the stored workouts alone.
     const wStart = new Date(now.getTime() - 30 * DAY);
-    try {
+    S.workoutWindow = null;
+    S.hcPermissions.exercise = workoutsAllowed;
+    if (!workoutsAllowed) log("Workouts: not allowed");
+    else try {
       const wres = await Health.queryWorkouts({
         startDate: wStart.toISOString(),
         endDate: now.toISOString(),
@@ -675,6 +726,7 @@ async function connectHealth() {
         includeSteps: false,
       });
       S.workouts = parseWorkouts(wres);
+      S.workoutWindow = { from: wStart.getTime(), to: now.getTime() };
       log(`Workouts: ${S.workouts.length} in the last 30 days`, wres?.workouts?.[0] ?? wres);
     } catch (err) {
       log("Workouts query failed", String(err), "error");
@@ -755,8 +807,20 @@ async function connectLocation() {
   }
 }
 
-// --- Sleep (separate plugin per platform) --------------------------------------
-// Android -> capacitor-health-connect (raw SleepSessionRecord). iOS is out of scope for the MVP.
+// --- Sleep & heart (Health Connect) --------------------------------------------
+// Android -> capacitor-health-connect: sleep sessions with stages, all-day heart rate and the watch's own HRV and
+// resting heart rate. Without a resting heart rate from the watch, the API computes one from the night's heart rate.
+// Each type is checked and read on its own, so one refused permission does not hide the rest.
+// HRV needs scripts/patch-health-connect.cjs (run on npm install): the plugin cannot serialise it otherwise.
+// iOS is out of scope for the MVP.
+const HC_TYPES = {
+  // plugin record type: [Health Connect permission, data type the API stores it under]
+  SleepSession: ["READ_SLEEP", "sleep_session"],
+  HeartRateSeries: ["READ_HEART_RATE", "heart_rate"],
+  HeartRateVariabilityRmssd: ["READ_HEART_RATE_VARIABILITY", "hrv_rmssd"],
+  RestingHeartRate: ["READ_RESTING_HEART_RATE", "resting_heart_rate"],
+};
+const HC_MAX_RECORDS = 50000;
 const sleepArray = (res) => res?.records || res?.resultData || res?.result || res?.data || (Array.isArray(res) ? res : []);
 const isoOrNull = (v) => {
   const ms = toMs(v);
@@ -788,6 +852,78 @@ function sleepSessionsAndroid(res) {
       };
     })
     .filter(Boolean);
+}
+
+// Every page of one record type in [start, end]
+async function readAllRecords(HealthConnect, type, start, end) {
+  const records = [];
+  let pageToken;
+  do {
+    const res = await HealthConnect.readRecords({
+      type,
+      timeRangeFilter: { type: "between", startTime: start, endTime: end },
+      pageSize: 1000,
+      ...(pageToken ? { pageToken } : {}),
+    });
+    records.push(...sleepArray(res));
+    pageToken = res?.pageToken || undefined;
+  } while (pageToken && records.length < HC_MAX_RECORDS);
+  return records;
+}
+
+const recordMeta = (r, ms, prefix) => ({
+  id: r.metadata?.id || `${prefix}:${ms}`,
+  tzOffsetMin: offsetMin(r.startZoneOffset ?? r.zoneOffset, ms),
+  source: r.metadata?.dataOrigin || null,
+  modifiedAt: isoOrNull(r.metadata?.lastModifiedTime),
+});
+
+// HeartRateRecord: a span with samples inside, averaged here to one sample per minute to keep the upload small
+function heartRateRecords(records) {
+  return records
+    .map((r) => {
+      const startMs = toMs(r.startTime), endMs = toMs(r.endTime);
+      if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return null;
+      const perMinute = new Map();
+      for (const x of r.samples || []) {
+        const t = toMs(x.time), bpm = Number(x.beatsPerMinute);
+        if (!Number.isFinite(t) || !Number.isFinite(bpm)) continue;
+        const m = Math.floor(t / 60000);
+        const acc = perMinute.get(m) || [0, 0];
+        acc[0] += bpm;
+        acc[1] += 1;
+        perMinute.set(m, acc);
+      }
+      const samples = [...perMinute.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .map(([m, [sum, n]]) => ({ t: m * 60000, bpm: Math.round(sum / n) }));
+      return { ...recordMeta(r, startMs, "hr"), start: new Date(startMs).toISOString(), end: new Date(endMs).toISOString(), samples };
+    })
+    .filter(Boolean);
+}
+
+// HeartRateVariabilityRmssdRecord: one RMSSD reading (ms) at a point in time, written by the watch's app
+function hrvRecords(records) {
+  return records
+    .map((r) => {
+      const ms = toMs(r.time), value = Number(r.heartRateVariabilityMillis);
+      if (!Number.isFinite(ms) || !Number.isFinite(value)) return null;
+      return { ...recordMeta(r, ms, "hrv"), time: new Date(ms).toISOString(), rmssdMs: value };
+    })
+    .filter(Boolean)
+    .sort((a, b) => toMs(a.time) - toMs(b.time));
+}
+
+// RestingHeartRateRecord: one reading (bpm) at a point in time, usually one a day
+function restingHrRecords(records) {
+  return records
+    .map((r) => {
+      const ms = toMs(r.time), bpm = Number(r.beatsPerMinute);
+      if (!Number.isFinite(ms) || !Number.isFinite(bpm)) return null;
+      return { ...recordMeta(r, ms, "rhr"), time: new Date(ms).toISOString(), bpm };
+    })
+    .filter(Boolean)
+    .sort((a, b) => toMs(a.time) - toMs(b.time));
 }
 
 function parseSleep(res) {
@@ -822,20 +958,49 @@ async function connectSleep() {
       const availability = await HealthConnect.checkAvailability();
       log("Health Connect availability", availability);
 
-      await HealthConnect.requestHealthPermissions({
-        read: ["SleepSession"], // confirm this literal against the plugin's typings
-        write: [],
-      });
+      const types = Object.keys(HC_TYPES);
+      try {
+        await HealthConnect.requestHealthPermissions({ read: types, write: [] });
+      } catch (err) {
+        log("Health Connect permission dialog", String(err), "error");
+      }
+      // ask again what is granted: a dismissed dialog reports nothing, even for permissions given earlier
+      let granted = null;
+      try {
+        const perm = await HealthConnect.checkHealthPermissions({ read: types, write: [] });
+        log("Health Connect permissions", perm);
+        granted = new Set((perm?.grantedPermissions || []).map((p) => String(p).split(".").pop()));
+      } catch (err) {
+        log("Health Connect permission check failed; reading anyway", String(err), "error");
+      }
 
-      const res = await HealthConnect.readRecords({
-        type: "SleepSession", // confirm this literal against the plugin's typings
-        timeRangeFilter: { type: "between", startTime: start, endTime: end },
-      });
-      log("Sleep records (raw response)", res);
-      S.sleep = parseSleep(res);
-      S.sleepSessions = sleepSessionsAndroid(res);
-      log(`Sleep: ${S.sleep.length} sessions parsed`);
-      dot("dot-sleep", "on");
+      const raw = {};
+      let failed = false;
+      for (const type of types) {
+        const [permission, dataType] = HC_TYPES[type];
+        if (granted && !granted.has(permission)) {
+          S.hcPermissions[dataType] = false;
+          log(`${type}: not allowed`);
+          continue;
+        }
+        S.hcPermissions[dataType] = true;
+        try {
+          raw[type] = await readAllRecords(HealthConnect, type, start, end);
+          log(`${type}: ${raw[type].length} records`, raw[type].slice(0, 3));
+        } catch (err) {
+          failed = true;
+          log(`${type}: read failed`, String(err), "error");
+        }
+      }
+
+      const sleep = { records: raw.SleepSession || [] };
+      S.sleep = parseSleep(sleep);
+      S.sleepSessions = sleepSessionsAndroid(sleep);
+      S.heartRate = heartRateRecords(raw.HeartRateSeries || []);
+      S.hrv = hrvRecords(raw.HeartRateVariabilityRmssd || []);
+      S.restingHr = restingHrRecords(raw.RestingHeartRate || []);
+      log(`Sleep: ${S.sleep.length} sessions, heart rate: ${S.heartRate.reduce((n, r) => n + r.samples.length, 0)} minutes, HRV: ${S.hrv.length} readings, resting heart rate: ${S.restingHr.length} readings`);
+      dot("dot-sleep", failed ? "err" : "on");
       renderAll();
     } catch (err) {
       log("Sleep (Android) call threw an error", String(err), "error");
@@ -1032,6 +1197,24 @@ function installId() {
   }
 }
 
+// One workout as POST /api/sync takes it: start, end and what the watch or phone measured during it
+function workoutForSync(w) {
+  const avg = w.hr.length ? w.hr.reduce((a, b) => a + b, 0) / w.hr.length : null;
+  return {
+    id: w.id || `ex:${w.startMs}`,
+    start: new Date(w.startMs).toISOString(),
+    end: new Date(Number.isFinite(w.endMs) ? w.endMs : w.startMs + w.durationMs).toISOString(),
+    tzOffsetMin: -new Date(w.startMs).getTimezoneOffset(),
+    source: w.sourceBundleId || w.source || null,
+    type: w.rawType,
+    title: w.title,
+    calories: w.calories || null,
+    distanceM: w.distance || null,
+    avgHr: avg == null ? null : Math.round(avg),
+    maxHr: w.hr.length ? Math.max(...w.hr) : null,
+  };
+}
+
 function syncPayload(usage) {
   return {
     device: {
@@ -1040,9 +1223,13 @@ function syncPayload(usage) {
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       tzOffsetMin: -new Date().getTimezoneOffset(),
     },
-    permissions: { app_usage: Boolean(usage) },
+    permissions: { ...S.hcPermissions, app_usage: Boolean(usage) },
     sleep: S.sleepSessions,
     steps: S.steps.map((s) => ({ date: dayKey(s.ms), steps: Math.round(s.value) })),
+    heartRate: S.heartRate,
+    hrv: S.hrv,
+    restingHeartRate: S.restingHr,
+    workouts: S.workoutWindow ? { ...S.workoutWindow, sessions: S.workouts.map(workoutForSync) } : null,
     screenTime: usage
       ? {
           from: usage.startTime,
@@ -1062,7 +1249,7 @@ async function syncToBackend() {
   try {
     if (!API_URL || API_URL.includes("your-app")) throw new Error("API_URL is not set in www/config.js");
     if (window.Capacitor?.isNativePlatform()) {
-      syncStatus("Reading sleep, steps and screen time from the phone…");
+      syncStatus("Reading sleep, heart rate, steps and screen time from the phone…");
       await connectSleep();
       await connectHealth();
       await connectUsageStats();
@@ -1074,8 +1261,8 @@ async function syncToBackend() {
       log("Usage sessions failed", String(err), "error");
     }
     const payload = syncPayload(usage);
-    if (!payload.sleep.length && !payload.steps.length && !payload.screenTime?.sessions.length) {
-      syncStatus("Nothing to sync yet: no sleep, steps or screen time could be read (check permissions above).", "err");
+    if (!payload.sleep.length && !payload.steps.length && !payload.heartRate.length && !payload.workouts && !payload.screenTime?.sessions.length) {
+      syncStatus("Nothing to sync yet: no sleep, heart rate, steps, workouts or screen time could be read (check permissions above).", "err");
       return;
     }
 
@@ -1106,7 +1293,10 @@ async function syncToBackend() {
     const n = data.stored;
     const lastNight = data.nights?.[data.nights.length - 1];
     syncStatus(
-      `Synced ${n.nights} nights, ${n.step_days} days of steps, ${n.screen_sessions} app sessions (${n.screen_days} days).` +
+      `Synced ${n.nights} nights (${n.nights_with_resting_hr} with resting heart rate), ${n.heart_rate_days} days of heart rate, ` +
+        `${n.hrv_readings} HRV readings, ` +
+        `${n.workout_sessions} activities (${n.workouts} counted as workouts), ` +
+        `${n.step_days} days of steps, ${n.screen_sessions} app sessions (${n.screen_days} days).` +
         (lastNight ? ` Sleep score ${lastNight.night}: ${lastNight.score} (${lastNight.rating}).` : ""),
       "ok"
     );

@@ -4,8 +4,15 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api } from "@/lib/api";
 import { sectionScrollTop } from "@/lib/section-scroll";
 import { useLoad } from "./common";
-import { ReportCard, sourceLine, type Overview, type Report } from "./Home";
+import {
+  asIfWritten,
+  ReportCard,
+  sourceLine,
+  type Overview,
+  type Report,
+} from "./Home";
 import { ReportInsights } from "./ReportInsights";
+import { ReportWriting } from "./ReportWriting";
 import { CheckinCard, type CheckinHandle } from "./Checkin";
 import { Icon } from "../ui/Icon";
 
@@ -28,7 +35,10 @@ export function useDailyWrittenReport(
   const [scrollVersion, setScrollVersion] = useState(0);
   const section = useRef<HTMLElement>(null);
   const busy = useRef(false);
-  const report = generated || stored.data?.report;
+  // The read-only demo keeps its stored report hidden until the visitor asks for it, in this visit.
+  const readOnly = !!overview.data?.read_only;
+  const report =
+    generated || (overview.data && !readOnly ? stored.data?.report : null);
   useEffect(() => {
     if (!scrollVersion || !report) return;
     const frame = requestAnimationFrame(() => {
@@ -63,6 +73,16 @@ export function useDailyWrittenReport(
     setWorking(true);
     setError("");
     try {
+      if (o.read_only) {
+        // nothing is saved in the demo: the check-in stays on screen, the stored report is shown
+        setGenerated(
+          await asIfWritten(
+            api.post<{ report: Report }>("/api/reports/daily/" + morning),
+          ),
+        );
+        setScrollVersion((version) => version + 1);
+        return;
+      }
       if (checkin && !(await checkin.save()))
         throw new Error("Save your check-in before generating the report.");
       if (!o.consented) await api.post("/api/reports/consent");
@@ -114,7 +134,9 @@ export function useDailyWrittenReport(
             summaryAside={sleepSummary}
             insights={<ReportInsights report={report} paused={paused} />}
           />
-          {overview.data?.dev && morning === overview.data.daily.period ? (
+          {overview.data?.dev &&
+          !overview.data.read_only &&
+          morning === overview.data.daily.period ? (
             <button
               className="btn btn-sm"
               disabled={working}
@@ -158,6 +180,7 @@ export function DailyGenerationForm({
   const o = overview.data;
   const pending =
     !report &&
+    !o?.read_only &&
     (o?.daily.status === "pending" || stored.data?.status === "pending");
   const historical = o && o.daily.period !== controller.morning;
   return (
@@ -226,9 +249,7 @@ export function DailyGenerationForm({
           {tooltip}
         </div>
       ) : null}
-      {working ? (
-        <p role="status">Writing your report. This can take up to a minute.</p>
-      ) : null}
+      {working ? <ReportWriting kind="daily" /> : null}
       {pending ? (
         <p role="status">
           Your report is being written.{" "}

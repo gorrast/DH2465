@@ -79,21 +79,20 @@ class LifestyleTests(unittest.TestCase):
         after = [(p.key, p.threshold, [(o.key, o.effect, o.n_with) for o in p.outcomes]) for p in lifestyle_patterns(ds, upto)]
         self.assertEqual(before, after)
 
-    def test_patterns_reach_the_report_input(self):
+    def test_obvious_links_are_found_but_stay_out_of_the_reports(self):
+        """Few steps and late phone use going with worse nights is real, but too obvious to tell."""
+        self.assertEqual(self.patterns["low_steps"].direction, "hurt")
         engine = Engine(self.ds)
         daily = daily_input(engine, ANCHOR)
-        keys = {p.key for p in daily.patterns}
-        self.assertIn("pattern.low_steps", keys)
-        p = next(p for p in daily.patterns if p.key == "pattern.low_steps")
-        self.assertEqual(p.direction, "hurt")
-        self.assertIsNotNone(p.outcome)
-        self.assertLessEqual(p.effect_low, p.effect)
-        self.assertGreaterEqual(p.effect_high, p.effect)
+        weekly = weekly_input(engine, MONDAY)
+        for inp in (daily, weekly):
+            self.assertFalse({"pattern.low_steps", "pattern.late_screen"} & {p.key for p in inp.patterns})
+            for p in inp.patterns:
+                self.assertIsNotNone(p.outcome)
+                self.assertLessEqual(p.effect_low, p.effect)
+                self.assertGreaterEqual(p.effect_high, p.effect)
         self.assertIn("screen.late_minutes", daily.keys())
         self.assertEqual(len(daily.keys()), len(daily.metrics) + len(daily.patterns))
-
-        weekly = weekly_input(engine, MONDAY)
-        self.assertTrue({"pattern.low_steps", "pattern.late_screen"} & {p.key for p in weekly.patterns})
         self.assertIn("screen.minutes", weekly.keys())
         self.assertTrue(any("low-step day" in t for d in weekly.days for t in d.tags))
         for inp in (daily, weekly):
@@ -130,10 +129,7 @@ class LifestyleTests(unittest.TestCase):
         self.assertTrue(p.against_research)
         self.assertFalse(self.patterns["late_screen"].against_research)
         links = {q.key: q for q in daily_input(Engine(ds), ANCHOR).patterns}
-        if p.hint:
-            self.assertNotIn("pattern.late_screen", links)
-        else:
-            self.assertTrue(links["pattern.late_screen"].against_research)
+        self.assertNotIn("pattern.late_screen", links)                  # obvious, and a hint against research too
 
     def test_no_calendar_no_meeting_counts(self):
         ds = fresh_dataset()
@@ -385,6 +381,80 @@ class SeriesAndPairTests(unittest.TestCase):
     def test_study_blocks_count_as_focus_time(self):
         for title in ("Study session", "Studying for the exam", "Plugga statistik", "Exam prep"):
             self.assertEqual(classify_event(title), "focus", title)
+
+
+def with_busy_evenings_and_padel():
+    """Demo data with only these meetings, workouts and plays:
+    * a busy workday (five hours of meetings) on two workdays in three, a quiet one (one meeting) on the third; on
+      every second busy day How I Met Your Mother follows at 21:00 and the night after has a sleep score 18 higher
+      and 50 min more sleep;
+    * the same show on some quiet days, with no effect;
+    * a recurring 'Padel' booking every fourth day, with a sleep score 15 higher and 40 min more sleep; a recurring
+      'Gym' with no effect."""
+    ds = fresh_dataset()
+    z = tz(ds.persona.tz)
+    for a in ds.activity:
+        a.workouts = []
+    ds.events = [e for e in ds.events if e.type not in ("meeting", "workout")]
+    ds.media = []
+    for d in ds.night_dates():
+        o = d.toordinal()
+        at = lambda h, m=0: datetime(d.year, d.month, d.day, h, m, tzinfo=z)  # noqa: E731
+        n = ds.night(d)
+        worn = n.worn and n.score is not None
+        busy = d.weekday() < 5 and o % 3 != 0
+        for h in ((9, 10, 11, 13, 14) if busy else (10,) if d.weekday() < 5 else ()):
+            ds.events.append(CalendarEvent(id="m-%d-%d" % (o, h), title="Customer call", start=at(h), end=at(h + 1),
+                                           type="meeting"))
+        if (busy and o % 2 == 0) or (not busy and o % 4 == 1):
+            ds.media.append(MediaPlay(start=at(21), minutes=22, title="How I Met Your Mother: Episode 3", creator=None,
+                                      kind="video"))
+            if busy and worn:
+                n.score += 18
+                n.duration_min += 50
+        if o % 4 == 2:
+            ds.events.append(CalendarEvent(id="padel-%d" % o, title="Padel", start=at(18, 30), end=at(19, 45),
+                                           type="workout", location_hint="Padel Center", recurring_key="padel"))
+            if worn:
+                n.score += 15
+                n.duration_min += 40
+        if o % 5 == 2:
+            ds.events.append(CalendarEvent(id="gym-%d" % o, title="Gym", start=at(7), end=at(8), type="workout",
+                                           recurring_key="gym"))
+    ds.reindex()
+    return ds
+
+
+class BusyEveningAndHobbyTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.ds = with_busy_evenings_and_padel()
+        cls.patterns = {p.key: p for p in lifestyle_patterns(cls.ds, ANCHOR)}
+
+    def test_a_show_after_busy_days_is_compared_with_other_busy_days(self):
+        p = self.patterns["busy_how_i_met_your_mother"]
+        self.assertEqual(p.title, "How I Met Your Mother after busy days")
+        self.assertEqual(p.direction, "helped")
+        self.assertEqual(p.sources[0], "streaming")
+        effects = {o.key: o for o in p.reportable}
+        self.assertGreater(effects["score"].effect, 8)
+        busy = [d for d in self.ds.night_dates() if d < ANCHOR and d.weekday() < 5 and d.toordinal() % 3 != 0]
+        self.assertLessEqual(p.n_with + p.n_without, len(busy))                     # only busy days are compared
+        detail = p.detail()
+        self.assertIn("busy days you watched How I Met Your Mother in the evening", detail)
+        self.assertIn("busy days.", detail)
+
+    def test_the_show_on_a_quiet_day_is_not_the_cause(self):
+        p = self.patterns["busy_how_i_met_your_mother"]
+        quiet = next(d for d in self.ds.night_dates()
+                     if d < ANCHOR and not (d.weekday() < 5 and d.toordinal() % 3 != 0) and d.toordinal() % 4 == 1)
+        self.assertFalse(active_on(self.ds, p, quiet))
+
+    def test_a_recurring_hobby_workout_is_a_series_but_gym_is_not(self):
+        p = self.patterns["series_padel"]
+        self.assertEqual(p.title, "Days with Padel")
+        self.assertEqual(p.direction, "helped")
+        self.assertNotIn("series_gym", self.patterns)                               # gym_days already tells it
 
 
 if __name__ == "__main__":

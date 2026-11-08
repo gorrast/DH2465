@@ -138,7 +138,7 @@ class ReportContent(_Content):
 class DailyContent(ReportContent):
     """Explains last night and what today looks like."""
     suggestion: Optional[str] = Field(description="One small experiment to try, built on a finding ('swap the late "
-                                                  "Metallica for something calmer and see what tomorrow says') or on "
+                                                  "playlist for something calmer and see what tomorrow says') or on "
                                                   "the first of the input's suggestions; null if neither fits.")
 
 

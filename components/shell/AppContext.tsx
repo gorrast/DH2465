@@ -19,6 +19,7 @@ export interface Meta {
   end?: string;
   today: string;
   anchor_mode?: boolean;
+  read_only?: boolean; // the deployed demo: a shared account nobody can change
   n_nights?: number;
   reasoning_mode?: string;
   version?: string;
@@ -48,7 +49,6 @@ export interface AppState {
   setHistoryDays: (n: number | null) => void;
   theme: "dark" | "light";
   toggleTheme: () => void;
-  switchPersona: (key: string, seed?: number) => Promise<void>;
   replay: MutableRefObject<ReplayControls | null>;
   tour: TourControls;
   go: (href: string) => void;

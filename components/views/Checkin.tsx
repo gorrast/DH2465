@@ -7,6 +7,7 @@ import { dates, fmt } from "@/lib/format";
 import { Icon } from "../ui/Icon";
 import { toast } from "../ui/overlays";
 import { useLoad } from "./common";
+import { useApp } from "../shell/AppContext";
 
 interface CheckinDay {
   day: string;
@@ -45,6 +46,10 @@ const FIELDS: {
   },
 ];
 const SHOWN_DAYS = 3; // today, yesterday and the day before
+const MAX_CHOICE = 6; // the last chip means "this many or more"
+const CHOICES = Array.from({ length: MAX_CHOICE + 1 }, (_, n) => n);
+const chosen = (v: number | null) =>
+  v === null ? null : Math.min(v, MAX_CHOICE);
 
 function dayLabel(day: string, today: string): string {
   const back = dates.diffDays(day, today);
@@ -63,6 +68,8 @@ export function CheckinCard({
   locked?: boolean;
 }) {
   const load = useLoad(() => api.get<Checkins>("/api/checkins"), []);
+  const readOnly = !!useApp().meta.read_only; // the demo: look, but nothing is saved
+  const standalone = !ref; // on its own it has day tabs and a Save button; in the report form it is saved on generate
   const [day, setDay] = useState<string | null>(null);
   const [draft, setDraft] = useState<Record<Field, number | null>>({
     coffee_cups: null,
@@ -105,11 +112,9 @@ export function CheckinCard({
     (d) => d.coffee_cups !== null || d.alcohol_units !== null,
   ).length;
 
-  function step(f: (typeof FIELDS)[number], by: number) {
-    setDraft((d) => ({
-      ...d,
-      [f.key]: Math.min(f.max, Math.max(0, (d[f.key] ?? 0) + by)),
-    }));
+  // one tap sets a number; tapping the chosen one again clears it (not logged)
+  function pick(f: (typeof FIELDS)[number], n: number) {
+    setDraft((d) => ({ ...d, [f.key]: chosen(d[f.key]) === n ? null : n }));
   }
 
   async function save() {
@@ -137,6 +142,64 @@ export function CheckinCard({
       setSaving(false);
     }
   }
+
+  const rows = (
+    <ul className="checkin-rows">
+      {FIELDS.map((f) => (
+        <li key={f.key} className="checkin-row">
+          <span className="checkin-icon" aria-hidden="true">
+            <Icon name={f.icon} size={18} />
+          </span>
+          <div className="checkin-label">
+            <div className="title">{f.label}</div>
+            <div className="tiny muted">{f.hint}</div>
+          </div>
+          <div
+            className="checkin-chips"
+            role="radiogroup"
+            aria-label={f.label + " (" + f.unit + ")"}
+          >
+            {CHOICES.map((n) => {
+              const on = chosen(draft[f.key]) === n;
+              return (
+                <button
+                  key={n}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  aria-label={
+                    (n === MAX_CHOICE ? n + " or more " : n + " ") + f.unit
+                  }
+                  className={"checkin-chip" + (on ? " is-selected" : "")}
+                  disabled={locked || saving}
+                  onClick={() => pick(f, n)}
+                >
+                  {n === MAX_CHOICE ? n + "+" : n}
+                </button>
+              );
+            })}
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+
+  // Inside the report form (with a ref): yesterday only, saved when the report is generated.
+  if (!standalone)
+    return (
+      <section
+        className="card v-home-checkin checkin-quick"
+        aria-label="Yesterday's coffee and alcohol"
+      >
+        <div className="checkin-quick-head">
+          <h3>Yesterday&rsquo;s coffee and alcohol</h3>
+          <span className="tiny muted">
+            One tap each. Skip it if you&rsquo;re not sure.
+          </span>
+        </div>
+        {rows}
+      </section>
+    );
 
   return (
     <section
@@ -169,41 +232,7 @@ export function CheckinCard({
         </div>
       </div>
 
-      <ul className="v-home-intake">
-        {FIELDS.map((f) => (
-          <li key={f.key}>
-            <Icon name={f.icon} size={18} />
-            <div className="v-home-intake-label">
-              <div className="title">{f.label}</div>
-              <div className="tiny muted">{f.hint}</div>
-            </div>
-            <div className="v-home-stepper">
-              <button
-                className="btn btn-sm btn-icon"
-                type="button"
-                aria-label={"Less " + f.label.toLowerCase()}
-                disabled={locked || saving || !draft[f.key]}
-                onClick={() => step(f, -1)}
-              >
-                −
-              </button>
-              <output aria-live="polite">
-                {draft[f.key] === null ? "–" : draft[f.key]}
-                <span className="tiny muted"> {f.unit}</span>
-              </output>
-              <button
-                className="btn btn-sm btn-icon"
-                type="button"
-                aria-label={"More " + f.label.toLowerCase()}
-                disabled={locked || saving || draft[f.key] === f.max}
-                onClick={() => step(f, 1)}
-              >
-                +
-              </button>
-            </div>
-          </li>
-        ))}
-      </ul>
+      {rows}
 
       <div className="row between">
         <span className="tiny muted">
@@ -231,6 +260,7 @@ export function CheckinCard({
           <button
             className="btn btn-primary btn-sm"
             type="button"
+            hidden={readOnly}
             disabled={locked || saving || !changed}
             onClick={save}
           >

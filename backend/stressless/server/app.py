@@ -8,6 +8,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import sys
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, Optional
@@ -15,7 +16,7 @@ from typing import Any, Dict, Optional
 from fastapi import Body, Depends, FastAPI, File, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .. import __version__
@@ -52,6 +53,19 @@ CORS_ORIGINS = ["https://localhost", "http://localhost"] + [
     o.strip() for o in os.environ.get("STRESSLESS_CORS_ORIGINS", "").split(",") if o.strip()]
 app.add_middleware(CORSMiddleware, allow_origins=CORS_ORIGINS, allow_methods=["GET", "POST"], allow_headers=["Authorization", "Content-Type"])
 
+# The deployed demo (STRESSLESS_READ_ONLY=true): one account shared by every visitor, so nothing may change it. Reads
+# are free; of the writes only these, which change nothing: a report request (it returns the stored report; never a
+# regeneration), the what-if planner (a calculation) and the client error log.
+READ_ONLY_ALLOWED = re.compile(r"^/api/(reports/(daily|weekly)/\d{4}-\d{2}-\d{2}|whatif|log)$")
+
+
+@app.middleware("http")
+async def read_only_guard(request: Request, call_next):
+    if (session.read_only() and request.method not in ("GET", "HEAD", "OPTIONS")
+            and not (READ_ONLY_ALLOWED.match(request.url.path) and "regenerate" not in request.query_params)):
+        return JSONResponse({"error": "This is a read-only demo, so nothing can be changed here."}, status_code=403)
+    return await call_next(request)
+
 
 # ------------------------------------------------------------------ helpers --
 def J(payload: Any, status: int = 200) -> Response:
@@ -83,6 +97,7 @@ def meta_payload(engine) -> Dict[str, Any]:
         "persona": {"key": ds.persona.key, "name": ds.persona.name, "tagline": ds.persona.tagline, "description": ds.persona.description, "tz": ds.persona.tz},
         "personas": personas, "seed": ds.seed, "days": (ds.end - ds.start).days + 1, "source": ds.source,
         "start": ds.start, "end": ds.end, "today": ds.today, "anchor_mode": session.anchor_override() is not None,
+        "read_only": session.read_only(),
         "n_nights": sum(1 for n in ds.nights if n.worn and n.score is not None), "reasoning_mode": reasoning_mode(),
         "version": __version__, "history_days_options": [7, 14, 28, None], "generated_at": ds.generated_at, "showcase": ds.showcase,
     }

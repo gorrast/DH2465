@@ -22,7 +22,7 @@ from fastapi.responses import Response
 
 from ..connectors.real_data import real_sources
 from ..engine.pipeline import EngineError, NotFound
-from ..engine.report_input import daily_input, weekly_input
+from ..engine.report_input import daily_input, told_links, weekly_input
 from ..engine.report_writer import ClaudeReportWriter, ReportWriterError, Written, claude_enabled, write_rules
 from ..models import to_jsonable
 from ..reports import Report, ReportInput, SourceStatus
@@ -123,7 +123,12 @@ def generate(engine, store, kind: str, period: date, writer: Optional[ClaudeRepo
         over_cap = True                                    # stale claim: finish it without another model call
         log.warning("finishing a stale %s report for %s with rules", kind, period)
 
-    report_input: ReportInput = daily_input(engine, period) if kind == "daily" else weekly_input(engine, period)
+    if kind == "daily":
+        report_input: ReportInput = daily_input(engine, period)
+    else:                                                  # never repeat a link today's daily report already told
+        daily = store.report_row("daily", engine.ds.today)
+        told = told_links(daily["report"] if daily and daily["status"] == "ready" else None)
+        report_input = weekly_input(engine, period, told)
     consented = engine.ds.source == "demo" or store.consented()
     written: Optional[Written] = None
     if claude_enabled() and not over_cap and consented:
@@ -157,6 +162,7 @@ def get_reports(p: Principal = Depends(current_principal)):
             "consented": e.ds.source == "demo" or p.store.consented(),
             "ai": claude_enabled(),
             "dev": is_dev(),
+            "read_only": session.read_only(),
         })
 
 

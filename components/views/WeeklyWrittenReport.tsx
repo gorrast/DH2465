@@ -4,8 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { dates, fmt } from "@/lib/format";
 import { Icon } from "../ui/Icon";
-import { ReportCard, type Overview, type Report } from "./Home";
+import { asIfWritten, ReportCard, type Overview, type Report } from "./Home";
 import { ReportInsights } from "./ReportInsights";
+import { ReportWriting } from "./ReportWriting";
 import { Skeleton, useLoad } from "./common";
 
 /** The backend reports on the last complete Monday–Sunday week. */
@@ -34,10 +35,12 @@ export function WeeklyWrittenReport({
   const section = useRef<HTMLElement>(null);
   const scrolled = useRef(0);
   const o = overview.data;
-  const report = generated || stored.data?.report;
+  // The read-only demo keeps its stored report hidden until the visitor asks for it, in this visit.
+  const report = generated || (o && !o.read_only ? stored.data?.report : null);
   const current = o?.weekly.period === period;
   const pending =
     !report &&
+    !o?.read_only &&
     (stored.data?.status === "pending" ||
       (current && o?.weekly.status === "pending"));
   const consentRequired = !!o?.ai && !o.consented;
@@ -72,6 +75,15 @@ export function WeeklyWrittenReport({
     setWorking(true);
     setError("");
     try {
+      if (o.read_only) {
+        setGenerated(
+          await asIfWritten(
+            api.post<{ report: Report }>("/api/reports/weekly/" + period),
+          ),
+        );
+        setScrollVersion((version) => version + 1);
+        return;
+      }
       if (!o.consented) await api.post("/api/reports/consent");
       const result = await api.post<{ report: Report }>(
         "/api/reports/weekly/" +
@@ -137,8 +149,8 @@ export function WeeklyWrittenReport({
             report={report}
             insights={<ReportInsights report={report} paused={paused} />}
           />
-          {o?.dev && current ? consentField : null}
-          {o?.dev && current ? (
+          {o?.dev && !o.read_only && current ? consentField : null}
+          {o?.dev && !o.read_only && current ? (
             <button
               className="btn btn-sm"
               type="button"
@@ -213,11 +225,7 @@ export function WeeklyWrittenReport({
           )}
         </div>
       )}
-      {working ? (
-        <p className="small secondary" role="status">
-          Writing your weekly report. This can take up to a minute.
-        </p>
-      ) : null}
+      {working ? <ReportWriting kind="weekly" /> : null}
       {error ? (
         <p role="alert" className="v-home-error">
           {error}

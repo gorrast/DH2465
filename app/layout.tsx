@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 import { Analytics } from "@vercel/analytics/next"
+import { SpeedInsights } from "@vercel/speed-insights/next"
 import '@/styles/base.css';
 import '@/styles/charts.css';
 import '@/styles/views/home.css';
@@ -16,6 +17,7 @@ import '@/styles/views/lab.css';
 import '@/styles/views/calendar.css';
 import '@/styles/views/tour.css';
 import '@/styles/views/login.css';
+import '@/styles/views/site.css';
 
 const ICON = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23FF6F5B'/%3E%3Cpath d='M5 17h6l3-7 5 13 3-6h5' fill='none' stroke='%231B1F3B' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E";
 
@@ -39,6 +41,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body>
         {children}
         <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );

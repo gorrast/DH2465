@@ -18,12 +18,9 @@ export function AccountView() {
             <p>{userEmail || "Email unavailable"}</p>
           </div>
           <div className="row">
-            <Link className="btn" href="/reset-password">
-              Change password
-            </Link>
             <button className="btn" type="button" onClick={signOut}>
               <Icon name="logout" size={16} />
-              Sign out
+              Leave the demo
             </button>
           </div>
         </section>

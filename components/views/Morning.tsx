@@ -33,89 +33,23 @@ import { DateNav, Skeleton, useLoad } from "./common";
 
 const MARKERS = ["hrv_ms", "resting_hr"];
 
-function DailyReportPrompt({
-  paused,
-  controller,
-}: {
-  paused: boolean;
-  controller: ReturnType<typeof useDailyWrittenReport>;
-}) {
-  const [checkinOpen, setCheckinOpen] = useState(false);
+function DailyReportPrompt({ paused, controller }: { paused: boolean; controller: ReturnType<typeof useDailyWrittenReport> }) {
   const [hintOpen, setHintOpen] = useState(false);
   const id = useId();
   const reduced = useReducedMotion();
-  const tooltip = (
-    <motion.span
-      className="ah-generate-tooltip"
-      id={id + "-tip"}
-      role="tooltip"
-      initial={false}
-      animate={{
-        opacity: hintOpen ? 1 : 0,
-        y: hintOpen ? 0 : 10,
-        scale: hintOpen ? 1 : 0.88,
-        visibility: hintOpen ? "visible" : "hidden",
-      }}
-      transition={
-        paused || reduced
-          ? { duration: 0 }
-          : { type: "spring", duration: 0.5, bounce: 0.3 }
-      }
-    >
-      Get today’s report: what last night looked like and what in your day
-      likely shaped it. You can generate it once a day, so make sure last
-      night’s data has synced first.
-    </motion.span>
-  );
-  return (
-    <section
-      className="ah-report-prompt"
-      aria-labelledby={id + "-title"}
-      onPointerOver={(event) => {
-        if (
-          event.pointerType === "mouse" &&
-          (event.target as HTMLElement).closest(".ah-generate-action")
-        )
-          setHintOpen(true);
-      }}
-      onPointerLeave={() => setHintOpen(false)}
-      onFocus={(event) =>
-        setHintOpen(
-          !!(event.target as HTMLElement).closest(".ah-generate-action"),
-        )
-      }
-      onBlur={() => setHintOpen(false)}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") setHintOpen(false);
-      }}
-      onClick={() => setHintOpen(false)}
-    >
-      <RevealHeading id={id + "-title"} paused={paused}>
-        What lies behind the score?
-      </RevealHeading>
-      {!checkinOpen && !controller.report ? (
-        <div className="ah-generate-action">
-          <button
-            className="btn btn-primary"
-            type="button"
-            aria-expanded={false}
-            aria-describedby={id + "-tip"}
-            onClick={() => setCheckinOpen(true)}
-          >
-            <Icon name="brain" size={16} />
-            Generate today’s report
-          </button>
-          {tooltip}
-        </div>
-      ) : null}
-      <DailyGenerationForm
-        controller={controller}
-        checkinOpen={checkinOpen}
-        tooltip={tooltip}
-        tooltipId={id + "-tip"}
-      />
-    </section>
-  );
+  const tooltip = <motion.span className="ah-generate-tooltip" id={id + '-tip'} role="tooltip" initial={false}
+    animate={{ opacity: hintOpen ? 1 : 0, y: hintOpen ? 0 : 10, scale: hintOpen ? 1 : 0.88, visibility: hintOpen ? 'visible' : 'hidden' }}
+    transition={paused || reduced ? { duration: 0 } : { type: 'spring', duration: 0.5, bounce: 0.3 }}>
+    Get today’s report: what last night looked like and what in your day likely shaped it. You can generate it once a day, so make sure last night’s data has synced first.
+  </motion.span>;
+  return <section className="ah-report-prompt" id="daily-report-prompt" aria-labelledby={id + '-title'}
+    onPointerOver={event => { if (event.pointerType === 'mouse' && (event.target as HTMLElement).closest('.ah-generate-action')) setHintOpen(true); }} onPointerLeave={() => setHintOpen(false)}
+    onFocus={event => setHintOpen(!!(event.target as HTMLElement).closest('.ah-generate-action'))} onBlur={() => setHintOpen(false)}
+    onKeyDown={event => { if (event.key === 'Escape') setHintOpen(false); }} onClick={() => setHintOpen(false)}>
+    <RevealHeading id={id + '-title'} paused={paused}>What lies behind the score?</RevealHeading>
+    {/* the check-in is there from the start: one click on Generate writes the report */}
+    <DailyGenerationForm controller={controller} checkinOpen tooltip={tooltip} tooltipId={id + '-tip'} />
+  </section>;
 }
 
 function SleepScore({ report }: { report: any }) {
@@ -179,123 +113,67 @@ function SleepScore({ report }: { report: any }) {
   );
 }
 
-function TonightAction({
-  suggestion: s,
-  morning,
-  paused,
-}: {
-  suggestion: any;
-  morning: string;
-  paused: boolean;
-}) {
-  const [saved, setSaved] = useState(!!s.accepted);
-  const [pending, setPending] = useState(false);
-  const [downloading, setDownloading] = useState(false);
-  const [error, setError] = useState("");
-  const errorId = useId();
-  const save = async () => {
-    if (pending || saved) return;
-    setPending(true);
-    setError("");
-    try {
-      await api.post(`/api/suggestions/${morning}/${s.id}/accept`);
-      setSaved(true);
-    } catch (e) {
-      setError(
-        e instanceof Error
-          ? e.message
-          : "We couldn't save this block. Try again.",
-      );
-    } finally {
-      setPending(false);
-    }
-  };
-  const download = async () => {
-    if (downloading) return;
-    setDownloading(true);
-    setError("");
-    try {
-      await api.download(
-        `/api/suggestions/${morning}/${s.id}.ics`,
-        `stressless-${s.id}.ics`,
-      );
-    } catch {
-      setError("We couldn't prepare the calendar file. Try again.");
-    } finally {
-      setDownloading(false);
-    }
-  };
-  return (
-    <section
-      className={"ah-tonight" + (saved ? " is-saved" : "")}
-      data-tour="suggestion"
-      aria-label="One change for tonight"
-    >
-      <div className="ah-tonight-icon">
-        <Icon name={saved ? "check" : "moon"} size={22} />
+// The day a free-text suggestion is about, counted from the app's today: a weekday it names ("next Monday", "on
+// Thursday"), tomorrow, or else tonight.
+const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+function suggestionDay(text: string, today: string): string {
+  const t = text.toLowerCase();
+  if (/\btomorrow\b/.test(t)) return dates.addDays(today, 1);
+  const named = WEEKDAYS.findIndex((d) => new RegExp('\\b' + d + '\\b').test(t));
+  if (named >= 0) {
+    const ahead = (named - dates.parse(today).getDay() + 7) % 7;
+    return dates.addDays(today, ahead === 0 ? 7 : ahead);   // "Monday" said on a Monday means next week's
+  }
+  return today;
+}
+const SUGGESTION_HOURS = [18, 21];   // an evening block: the suggestions are about how an evening goes
+
+/** A calendar file (.ics) for the suggestion, made in the browser: nothing is sent or saved, so the read-only demo
+ * can use it too. Floating local times, so it lands at 18:00 wherever it is opened. */
+function downloadSuggestion(text: string, day: string) {
+  const esc = (v: string) => v.replace(/\\/g, '\\\\').replace(/[,;]/g, (c) => '\\' + c).replace(/\n/g, '\\n');
+  const stamp = (h: number) => day.replace(/-/g, '') + 'T' + String(h).padStart(2, '0') + '0000';
+  const now = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
+  const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//StressLess//Suggestion//EN', 'BEGIN:VEVENT',
+    'UID:suggestion-' + day + '-' + Date.now() + '@stressless', 'DTSTAMP:' + now,
+    'DTSTART:' + stamp(SUGGESTION_HOURS[0]), 'DTEND:' + stamp(SUGGESTION_HOURS[1]),
+    'SUMMARY:' + esc('StressLess: ' + text), 'DESCRIPTION:' + esc(text + '\n\nFrom your StressLess daily report.'),
+    'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
+  const url = URL.createObjectURL(new Blob([ics], { type: 'text/calendar;charset=utf-8' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'stressless-suggestion-' + day + '.ics';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** The written report's suggestion, repeated where the page ends (same card style as the suggestion for tonight). */
+function ReportSuggestion({ text, today, paused }: { text: string; today: string; paused: boolean }) {
+  const day = suggestionDay(text, today);
+  const when = (day === today ? 'Tonight' : fmt.day(day)) + ', ' + SUGGESTION_HOURS.map((h) => h + ':00').join('–');
+  return <section className="ah-tonight" data-tour="suggestion" aria-label="One thing to try">
+    <div className="ah-tonight-icon"><Icon name="sparkles" size={22} /></div>
+    <div className="ah-tonight-copy"><span className="ah-eyebrow">Suggestion</span><RevealHeading as="h3" paused={paused}>{text}</RevealHeading>
+      <div className="ah-actions">
+        <button className="btn btn-primary" type="button" onClick={() => downloadSuggestion(text, day)}>Add to calendar<Icon name="download" size={16} /></button>
+        <a className="btn" href="#night-explanation">Read the report<Icon name="chevron-right" size={16} /></a>
       </div>
-      <div className="ah-tonight-copy">
-        <span className="ah-eyebrow">
-          {saved ? "A little space, protected" : "One change for tonight"}
-        </span>
-        <RevealHeading as="h3" paused={paused}>
-          {s.title}
-        </RevealHeading>
-        <p>
-          <ScoreText text={s.body.replace(/\s*Likely[^.]*points\.?$/i, "")} />
-        </p>
-        {!saved && s.gain_low != null && s.gain_high != null ? (
-          <span className="ah-estimate">
-            Estimated change <ScoreChange value={s.gain_low} digits={0} /> to{" "}
-            <ScoreChange value={s.gain_high} digits={0} /> points
-          </span>
-        ) : null}
-        <div className="ah-actions">
-          {saved ? (
-            <>
-              <span className="ah-saved" role="status">
-                Saved for tonight
-              </span>
-              <button
-                className="btn btn-sm"
-                aria-disabled={downloading}
-                aria-busy={downloading}
-                onClick={download}
-              >
-                {downloading ? "Preparing…" : "Download .ics"}
-                <Icon name="download" size={14} />
-              </button>
-            </>
-          ) : s.proposed_event ? (
-            <ActionButton
-              className="btn btn-primary"
-              aria-disabled={pending}
-              aria-busy={pending}
-              aria-describedby={error ? errorId : undefined}
-              onClick={save}
-            >
-              {pending
-                ? "Saving your evening…"
-                : error
-                  ? "Try saving again"
-                  : "Protect this time"}
-              <Icon name={pending ? "refresh" : "chevron-right"} size={16} />
-            </ActionButton>
-          ) : (
-            <a className="btn btn-primary" href="#reality-check">
-              Review your activities
-              <Icon name="chevron-right" size={16} />
-            </a>
-          )}
-        </div>
-        {error ? (
-          <p className="ah-error" id={errorId} role="alert">
-            {error}
-          </p>
-        ) : null}
-      </div>
-    </section>
-  );
+      <p className="ah-estimate">{when}</p>
+    </div>
+  </section>;
+}
+
+/** Until the written report is there, its suggestion is a promise: the page never shows one the report won't repeat. */
+function SuggestionPending({ paused }: { paused: boolean }) {
+  return <section className="ah-tonight" aria-label="Your suggestion">
+    <div className="ah-tonight-icon"><Icon name="sparkles" size={22} /></div>
+    <div className="ah-tonight-copy"><span className="ah-eyebrow">Suggestion</span><RevealHeading as="h3" paused={paused}>Your suggestion comes with today&rsquo;s report</RevealHeading>
+      <p>Generate the daily report, and the one thing worth trying shows up here, ready to add to your calendar.</p>
+      <div className="ah-actions"><a className="btn btn-primary" href="#daily-report-prompt">Generate today&rsquo;s report<Icon name="arrow-up" size={16} /></a></div>
+    </div>
+  </section>;
 }
 
 const evidenceKey = (text: string) =>
@@ -462,21 +340,7 @@ function Finding({
   );
 }
 
-function MorningReport({
-  report,
-  day,
-  veiled,
-  onReveal,
-  motionPaused,
-  morning,
-}: {
-  morning: string;
-  report: any;
-  day: any;
-  veiled: boolean;
-  onReveal: () => void;
-  motionPaused: boolean;
-}) {
+function MorningReport({ report, day, veiled, onReveal, motionPaused, morning, onSuggestion }: { morning: string; report: any; day: any; veiled: boolean; onReveal: () => void; motionPaused: boolean; onSuggestion: (text: string | null) => void }) {
   const heroRef = useRef<HTMLElement>(null);
   const reducedMotion = useReducedMotion();
   const { scrollYProgress } = useScroll({
@@ -549,57 +413,23 @@ function MorningReport({
           <dd>{night?.worn ? fmt.hm(night.wake_time) : "Unavailable"}</dd>
         </div>
       </dl>
-      {veiled ? (
-        <ActionButton
-          className="btn btn-primary"
-          data-tour="reveal"
-          onClick={onReveal}
-        >
-          Explore the explanation
-          <Icon name="chevron-right" size={16} />
-        </ActionButton>
-      ) : null}
-    </>
+      {veiled ? <ActionButton className="btn btn-primary" data-tour="reveal" onClick={onReveal}>Explore the explanation<Icon name="chevron-right" size={16} /></ActionButton> : null}
+  </>
   );
-  const written = useDailyWrittenReport(
-    morning,
-    motionPaused || !!reducedMotion,
-    sleepSummary,
-  );
-  return (
-    <div className="ah-report">
-      <section
-        ref={heroRef}
-        className={"ah-hero" + (motionPaused ? " is-motion-paused" : "")}
-        data-page-section="Your night"
-        data-tour="hero"
-        aria-labelledby="morning-title"
-      >
-        <motion.div
-          className="ah-hero-glow"
-          aria-hidden="true"
-          style={{
-            scale: reducedMotion || motionPaused ? 1 : glowScale,
-            opacity: reducedMotion || motionPaused ? 1 : glowOpacity,
-          }}
-        />
-        <p className="ah-night-date">
-          Last night · {fmt.day(report.night_date)}
-        </p>
-        <div className="ah-hero-main">
-          <div className="ah-hero-night">
-            <RevealHeading
-              as="h1"
-              id="morning-title"
-              paused={motionPaused}
-              lines={["This night's", <em key="score">sleep score</em>]}
-            />
-            <div className="ah-score-stage">
-              <SleepScore report={report} />
-            </div>
-          </div>
-          <DailyReportPrompt paused={motionPaused} controller={written} />
+  const written = useDailyWrittenReport(morning, motionPaused || !!reducedMotion, sleepSummary);
+  // the written report's suggestion, for the suggestion at the bottom of the page (they must not disagree)
+  const writtenSuggestion = written.report?.content.suggestion ?? null;
+  useEffect(() => onSuggestion(writtenSuggestion), [writtenSuggestion, onSuggestion]);
+  return <div className="ah-report">
+    <section ref={heroRef} className={'ah-hero' + (motionPaused ? ' is-motion-paused' : '')} data-page-section="Your night" data-tour="hero" aria-labelledby="morning-title">
+      <motion.div className="ah-hero-glow" aria-hidden="true" style={{ scale: reducedMotion || motionPaused ? 1 : glowScale, opacity: reducedMotion || motionPaused ? 1 : glowOpacity }} />
+      <p className="ah-night-date">Last night · {fmt.day(report.night_date)}</p>
+      <div className="ah-hero-main">
+        <div className="ah-hero-night">
+          <RevealHeading as="h1" id="morning-title" paused={motionPaused} lines={["This night's", <em key="score">sleep score</em>]} />
+          <div className="ah-score-stage"><SleepScore report={report} /></div>
         </div>
+      </div>
         <div className="ah-hero-controls">
           <a className="ah-text-link" href="#night-explanation">
             Explore your night <span aria-hidden="true">↓</span>
@@ -870,6 +700,7 @@ export function MorningView({
   const morning = date || today;
   const pageRef = useRef<HTMLDivElement>(null);
   const [veiled, setVeiled] = useState(!!reveal);
+  const [reportSuggestion, setReportSuggestion] = useState<string | null>(null);
   const motionPaused = !!useReducedMotion();
   useEffect(() => setVeiled(!!reveal), [reveal]);
   const load = useLoad(async () => {
@@ -879,118 +710,19 @@ export function MorningView({
       .catch(() => null);
     return { report, day };
   }, [morning, meta.persona.key]);
-  return (
-    <div ref={pageRef} className="after-hours">
-      <header className="ah-page-header view-head">
-        <div>
-          <span className="ah-eyebrow">Daily Tab</span>
-          <p>
-            {fmt.dayLong(morning)}
-            <span className="ah-demo-label">
-              {meta.source === "demo" ? "Simulated example" : "Your data"}
-            </span>
-          </p>
-        </div>
-        <DateNav
-          label={morning === today ? "This morning" : fmt.day(morning)}
-          prevHref={"/daily/" + dates.addDays(morning, -1)}
-          nextHref={"/daily/" + dates.addDays(morning, 1)}
-          prevDisabled={!!meta.start && morning <= dates.addDays(meta.start, 1)}
-          nextDisabled={morning >= today}
-          extra={
-            morning !== today ? (
-              <button
-                className="btn btn-sm"
-                onClick={() => go("/daily/" + today)}
-              >
-                Today
-              </button>
-            ) : null
-          }
-        />
-      </header>
-      {load.loading ? (
-        <div className="ah-loading" aria-busy="true">
-          <Skeleton height={400} />
-          <p>Preparing your daily brief…</p>
-        </div>
-      ) : load.error || !load.data ? (
-        <section className="ah-empty" role="alert">
-          <span className="ah-eyebrow">Your daily brief</span>
-          <RevealHeading as="h1">A moment out of reach.</RevealHeading>
-          <p>{load.error?.message || "We could not load this report."}</p>
-          <ActionButton className="btn btn-primary" onClick={load.reload}>
-            Try again
-          </ActionButton>
-        </section>
-      ) : (
-        <MorningReport
-          morning={morning}
-          key={`${morning}-${meta.persona.key}`}
-          report={load.data.report}
-          day={load.data.day}
-          veiled={veiled}
-          onReveal={() => setVeiled(false)}
-          motionPaused={motionPaused}
-        />
-      )}
-      <div
-        data-page-section="Reality check and tonight"
-        className={
-          "ah-section daily-actions-grid" + (veiled ? " is-single" : "")
-        }
-      >
-        <section
-          id="reality-check"
-          className="daily-reality-check"
-          aria-label="Reality check"
-        >
-          <RealityView embedded onAnswered={load.reload} />
-        </section>
-        {!veiled ? (
-          <section
-            className="daily-protect-space"
-            aria-labelledby="protect-space-title"
-          >
-            <header className="view-head">
-              <div>
-                <div className="eyebrow">One change for tonight</div>
-                <RevealHeading id="protect-space-title" paused={motionPaused}>
-                  Protect your space
-                </RevealHeading>
-              </div>
-            </header>
-            {load.loading ? (
-              <Skeleton height={180} />
-            ) : load.data ? (
-              load.data.report.suggestions?.[0] ? (
-                <TonightAction
-                  key={`${morning}-${load.data.report.suggestions[0].id}`}
-                  suggestion={load.data.report.suggestions[0]}
-                  morning={morning}
-                  paused={motionPaused}
-                />
-              ) : (
-                <p className="secondary">
-                  No suggestion for tonight yet. Review your activities to keep
-                  your patterns up to date.
-                </p>
-              )
-            ) : (
-              <div className="card stack">
-                <p className="secondary">
-                  Your suggestion will appear when your daily report is
-                  available.
-                </p>
-                <button className="btn" type="button" onClick={load.reload}>
-                  Retry report
-                </button>
-              </div>
-            )}
-          </section>
-        ) : null}
-      </div>
-      <SectionNavigation root={pageRef} paused={motionPaused} />
+  return <div ref={pageRef} className="after-hours">
+    <header className="ah-page-header view-head"><div><span className="ah-eyebrow">Daily Tab</span><p>{fmt.dayLong(morning)}<span className="ah-demo-label">{meta.source === 'demo' ? 'Simulated example' : 'Your data'}</span></p></div><DateNav label={morning === today ? 'This morning' : fmt.day(morning)} prevHref={'/daily/' + dates.addDays(morning, -1)} nextHref={'/daily/' + dates.addDays(morning, 1)} prevDisabled={!!meta.start && morning <= dates.addDays(meta.start, 1)} nextDisabled={morning >= today} extra={morning !== today ? <button className="btn btn-sm" onClick={() => go('/daily/' + today)}>Today</button> : null} /></header>
+    {load.loading ? <div className="ah-loading" aria-busy="true"><Skeleton height={400} /><p>Preparing your daily brief…</p></div> : load.error || !load.data ? <section className="ah-empty" role="alert"><span className="ah-eyebrow">Your daily brief</span><RevealHeading as="h1">A moment out of reach.</RevealHeading><p>{load.error?.message || 'We could not load this report.'}</p><ActionButton className="btn btn-primary" onClick={load.reload}>Try again</ActionButton></section> : <MorningReport morning={morning} key={`${morning}-${meta.persona.key}`} report={load.data.report} day={load.data.day} veiled={veiled} onReveal={() => setVeiled(false)} motionPaused={motionPaused} onSuggestion={setReportSuggestion} />}
+    <div data-page-section="Reality check and tonight" className={'ah-section daily-actions-grid' + (veiled ? ' is-single' : '')}>
+      <section id="reality-check" className="daily-reality-check" aria-label="Reality check"><RealityView embedded onAnswered={load.reload} /></section>
+      {!veiled && reportSuggestion ? <section className="daily-protect-space" aria-labelledby="protect-space-title">
+        <header className="view-head"><div><div className="eyebrow">From your daily report</div><RevealHeading id="protect-space-title" paused={motionPaused}>One thing to try</RevealHeading></div></header>
+        <ReportSuggestion text={reportSuggestion} today={today} paused={motionPaused} />
+      </section> : !veiled ? <section className="daily-protect-space" aria-labelledby="protect-space-title">
+        <header className="view-head"><div><div className="eyebrow">From your daily report</div><RevealHeading id="protect-space-title" paused={motionPaused}>One thing to try</RevealHeading></div></header>
+        <SuggestionPending paused={motionPaused} />
+      </section> : null}
+    </div>
     </div>
   );
 }

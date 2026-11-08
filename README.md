@@ -1,24 +1,35 @@
 # StressLess — DH2465
 
-StressLess brings sleep, heart rate, calendar events, phone use and media history together to show
-patterns in one person's recorded days. The app calculates the measurements and associations; an
-optional Claude writer turns those results into daily and weekly reports.
+# StressLess
 
-The backend uses the signed-in user's synced/imported data by default. Health Connect data comes
-through the Android app in `correlate-app/`; Google Calendar and supported media sources are connected
-through **Connect Your Data**. `STRESSLESS_DATA=demo` enables the legacy simulated dataset for development
-and tests. Missing measurements are unavailable, not zero, and connecting a source does not recover
-history that the source never recorded.
+> Wearables give you a score. They don't tell you why.
 
-## Current pages
+Your watch tells you that you slept badly and that your HRV is down. It does not tell you that it happens after
+a particular meeting, that the evenings you watch an episode of something light after a long day go with deeper
+sleep, or that you reach for your phone more the day after a short night. That knowledge sits spread across
+apps that never talk to each other.
 
-| Page | What is displayed |
-|---|---|
-| Daily Report | Sleep score and rating, time asleep and wake time, a generated report, similar day patterns, sleep stages, HRV and resting heart rate, a BPM/calendar timeline, reality checks and a suggested change for tonight. |
-| Weekly Report | Seven expandable statistics cards, a generated weekly report, a 1–4 week sleep calendar, meeting-load comparison, strongest pattern, the last seven nights and the recurring-pattern graph/table. |
-| Connect Your Data | Health/phone connection instructions, Google Calendar connection, media imports and supported provider sync. |
-| My Account | Account details, password changes and sign-out. |
-| Data and Privacy | Data sources/classes, retention and import information, dataset information and deletion controls. Deletion requires typing `DELETE` and explicitly confirming; Cancel or Escape aborts it. |
+**StressLess connects them.** It brings the biometrics your watch already collects (sleep, heart rate, HRV,
+steps) together with the rest of your life: your calendar, workouts, the music, podcasts and shows you play,
+your phone use, and quick coffee and alcohol check-ins. Then it looks for the links in your own history:
+
+* **which meetings weigh on you**: your heart rate in each recurring meeting against your other meetings that
+  day, and whether a meeting stays with you into the evening and the night;
+* **what helps you recover**: the activities, evenings and habits that go with deeper sleep and a calmer heart;
+* **what happens around your phone**: focus music that cuts pickups during deep work, more screen time after a
+  short night;
+* **how your week fits together**: your best and hardest days, and what to keep or try next week.
+
+Every morning a **daily report** explains last night through what happened yesterday, and every Monday a
+**weekly report** looks back over the week. The statistics are computed by StressLess's own engine; a language
+model (Claude) only chooses which links are worth telling and puts them into plain words, citing the numbers
+each finding rests on. Everything is a comparison within one person's data: StressLess says "goes with" and
+"tends to", never "caused".
+
+### Try it
+
+The running site has a public project page (process, product, team) and a **demo version**: one click on
+**Try the demo** opens the app on a shared demo account, read-only, so every visitor sees the same data.
 
 Use the section arrows to move through long reports. The daily date arrows select another morning;
 the sleep shown belongs to the preceding night. System reduced-motion preferences are respected.
@@ -315,52 +326,27 @@ ANTHROPIC_API_KEY=your_api_key
 # STRESSLESS_WEEKLY_MODEL=your_model_id
 # STRESSLESS_REPORT_EFFORT=medium
 ```
-
-Restart the backend after changing environment variables. The Anthropic Python package must be installed.
-Real-data reports require consent to send the report input. The app uses rules if Claude is disabled,
-consent is missing, the rolling 24-hour report limit is reached (default 50), a pending generation becomes
-stale, or the model request fails/returns unusable content. API failures are logged by the backend.
-
-**Written by …** and **Written without AI** reflect the saved report's actual writer. Reports are saved
-per period and reused; enabling Claude does not rewrite an existing rule-generated report. Development
-servers expose regeneration; production does not. The older internal morning narrative remains
-rule-based and is separate from the generated report card.
-
-Implementation: [generation and storage](backend/stressless/server/reports.py),
-[writers](backend/stressless/engine/report_writer.py),
-[lifestyle links](backend/stressless/engine/lifestyle.py).
-
-## Architecture
-
-```text
-Browser → Next.js pages/components → /api/* → FastAPI
-   └──────── Supabase Auth + user-scoped statistics RPCs
-FastAPI → authenticated user store → synced/imported records → analysis → optional report writer
-Android Health Connect sync → FastAPI → stored sleep/heart-rate/activity records
+browser ──► Next.js (app/, components/)     React views, charts, tour; Supabase Auth session in cookies
+   │            proxy.ts                    refreshes the session; / → /project; signed-out → /auth/demo
+   │            app/auth/demo/route.ts      server-side sign-in to the demo account (service-role key)
+   └─ /api/* ─► FastAPI (api/index.py → backend/stressless)
+                    verifies the Supabase JWT, loads the user's data, runs the engine, writes the reports
+                    └─► Supabase Postgres (PostgREST)    synced and imported data, calendar, media, check-ins,
+                                                         reports, per-user state — row-level security per user
 ```
 
-Supabase Auth identifies each user. Database row-level security isolates their records. Server-only
-provider keys and the Anthropic key are not sent to the browser. Imported media are stored as normalized
-records rather than keeping uploaded files. The optional simulated dataset supports testing; it is not
-a substitute for missing real measurements.
+With `STRESSLESS_DATA=real` (the default) the API reads each user's own rows: what the phone app synced (sleep,
+heart rate, steps, screen time), the calendar, imported media and check-ins
+(`backend/stressless/connectors/real_data.py`).
 
 ## Setup
 
 Requirements: Node.js 20+, [uv](https://docs.astral.sh/uv/) (Python 3.12) and a Supabase project.
 
-1. **Supabase.** Create a project and apply the migrations in `supabase/migrations/` in timestamp order
-   (or use `supabase db push` with the Supabase CLI), including the phone-sync and statistics functions. Under Authentication → URL
-   Configuration, set the Site URL to your deployed URL and add `http://localhost:3000/**` and
-   `https://<your-app>.vercel.app/**` to the redirect URLs. Email confirmation stays on: new accounts
-   confirm their address through the link in the email, which lands on `/auth/confirm`.
-2. **Environment.** `cp .env.example .env.local` and fill in `NEXT_PUBLIC_SUPABASE_URL` and
-   `NEXT_PUBLIC_SUPABASE_ANON_KEY` (Project Settings → API). Projects that still use the legacy
-   JWT secret also need `SUPABASE_JWT_SECRET`; projects on asymmetric signing keys (the default) do not.
-   The Google Calendar connection needs five more server-side variables (`APP_URL`,
-   `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_TOKEN_ENCRYPTION_KEY`, `SUPABASE_SERVICE_ROLE_KEY`; see
-   `.env.example`) and `<APP_URL>/api/calendar/google/callback` registered as a redirect URI on the Google
-   OAuth client. Without them the rest of the app works and the connection reports it is not configured.
-3. **Install and run.**
+1. **Supabase.** Apply the migrations in `supabase/migrations/` in order (SQL editor, or `supabase db push`).
+2. **Environment.** `cp .env.example .env.local` and fill it in (see the table below).
+3. **Demo account.** Create the user in Supabase (Authentication → Users) and put its email in `lib/demo.ts`.
+4. **Install and run.**
 
    ```bash
    npm install
@@ -368,22 +354,68 @@ Requirements: Node.js 20+, [uv](https://docs.astral.sh/uv/) (Python 3.12) and a 
    npm run dev          # Next.js on http://localhost:3000 and FastAPI on :8000 (proxied under /api)
    ```
 
-4. **Tests.** `npm run test:api` runs the Python suite (engine, simulator, connectors, API with an
-   in-memory store); `npm run typecheck` checks the frontend.
+5. **Tests.** `npm run test:api` runs the Python suite (engine, simulator, links, reports, connectors, API with
+   an in-memory store); `npm run typecheck` checks the frontend.
+
+### Environment variables
+
+| Variable | Where | What |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | both | the Supabase project (Project Settings → API) |
+| `SUPABASE_SERVICE_ROLE_KEY` | server | the demo sign-in (`/auth/demo`) and server-side writes (phone sync, check-ins, calendar). Never `NEXT_PUBLIC_` |
+| `STRESSLESS_READ_ONLY` | server | `true` for the shared demo: the API refuses every change except asking for a report, and the UI hides what would fail |
+| `STRESSLESS_ANCHOR` | server | freezes "today" for every account (`YYYY-MM-DD`), for a stable demo or presentation |
+| `ENVIRONMENT` | server | `PROD` on Vercel. Anything else is a dev server, where a stored report can be generated again |
+| `STRESSLESS_REASONER`, `ANTHROPIC_API_KEY` | server | `claude` and a key let Claude write the reports; otherwise rules do. Models: `STRESSLESS_DAILY_MODEL`, `STRESSLESS_WEEKLY_MODEL`; cap on model calls per 24 h: `STRESSLESS_REPORT_DAILY_CAP` |
+| `SUPABASE_JWT_SECRET` | server | only for projects on the legacy JWT secret |
+| `LASTFM_API_KEY`, `TMDB_READ_ACCESS_TOKEN`, `STEAM_*`, `GOOGLE_*`, `APP_URL` | server | optional integrations, below |
 
 ## Deploy to Vercel
 
-Import the repository in Vercel (framework: Next.js). `api/index.py` becomes a Python function serving
-`/api/*` with the packages from `requirements.txt`; `vercel.json` keeps the frontend out of its bundle.
-Set the same environment variables as in `.env.local` for Production and Preview, then deploy. To freeze
-"today" for a presentation, set `STRESSLESS_ANCHOR` to the desired `YYYY-MM-DD` — the backend uses a fixed
-analysis date. Statistics RPCs using database `now()` retain their real-time windows; the anchor does not freeze those cards.
+Import the repository in Vercel (framework: Next.js). `api/index.py` becomes a Python function serving `/api/*`
+with the packages from `requirements.txt`; `vercel.json` keeps the frontend out of its bundle. Set the variables
+above for Production and Preview; `SUPABASE_SERVICE_ROLE_KEY` is used by both the Next.js and the Python side.
+
+## What you are looking at
+
+| Page | What it shows |
+|---|---|
+| Project (`/project`) | The course project: process, product and team, and the way into the demo |
+| Daily Report (`/daily`) | Last night's sleep score, stages and recovery markers (HRV, resting heart rate), similar-day patterns, the day's heart rate against the calendar, a reality check, one change for tonight, and the daily report: the links behind last night |
+| Weekly Report (`/weekly`) | The weekly report, your week in numbers (apps, events and songs by heart rate, flow, meeting hangover), the sleep calendar, sleep by meeting load, and your recurring patterns |
+| Connect Your Data (`/connect`) | Spotify, Netflix, YouTube and Steam histories, imports and Last.fm/Steam sync |
+| Data and Privacy (`/data`) | What is connected, which data is read and why, deleting everything |
+| My Account (`/account`) | Who is signed in, theme, leaving the demo |
+
+Press `t` for the presenter tour; `d` switches light/dark theme, `?` lists the keys.
+
+## How the reports work
+
+1. **Links** (`engine/lifestyle.py`). Each cause (a recurring meeting, an artist, a workout, late screen time, a
+   short night, a show after a busy day, …) is split into days with and without it, stratified by weekend, and
+   compared on what follows: sleep score, time asleep, sleep onset, HRV, resting heart rate, deep sleep, the next
+   day's steps and screen time, daytime heart rate, and the heart rate or phone pickups during an activity. A
+   bootstrap interval decides whether a link is strong, an early hint, or nothing.
+2. **The report input** (`engine/report_input.py`). The links whose cause happened in the period, with their
+   numbers, next to the period's metrics against the person's usual. Obvious links (late phone use, alcohol,
+   coffee, steps, a late night out, …) are left out, and so is what the Daily page already shows. The daily
+   report gets yesterday's links; the weekly report gets the week's, minus those today's daily report told.
+3. **The writer** (`engine/report_writer.py`). Claude (with `STRESSLESS_REASONER=claude`) or the rule writer turns
+   the input into a headline, a summary and two to four findings. It only words what the engine computed: every
+   finding cites the links it rests on, and the page shows their computed values next to it.
+4. **Once per period.** A report is claimed in the database before the model is called, stored, and returned as
+   is from then on (`server/reports.py`).
+
+The daily causes behind last night (`engine/attribution.py`, a within-person ridge regression over calendar
+features with leave-one-out validation) are shown on the Daily page as similar-day patterns.
 
 ## Bring your own data
 
-Use **Connect Your Data** for media histories, library browsing, imports and optional sync.
-Import/sync stores provider records; viewing those histories does not itself generate a Claude report.
-The weekly statistics and generated reports analyze eligible stored data separately.
+On an account of your own (not on the read-only demo), Connect Your Data imports and syncs media history.
+
+The Media tab has separate Spotify, Netflix and Steam sections, with scrollable histories, library browsing,
+and the Morning view's typography and section reveals. It displays imported data without requesting media
+insights, statistical correlations, or Claude analysis.
 
 - **Spotify:** import music/podcast history JSON, including Extended Streaming History. Taste Profile,
   Your Library and Wrapped summaries are also supported. Select history files together.
@@ -492,6 +524,12 @@ queries are sent to TMDB, without viewing dates or profile filenames. Requests a
 on the server. **Fetch missing posters** resumes interrupted work; no metadata lookup starts just by opening
 the page. Network/API failures do not discard imported history. TMDB attribution is displayed under Netflix.
 
+The original health and calendar importers already exist and are tested
+(`backend/stressless/connectors/`): Apple Health (Settings → Health → Export All Health Data), Google
+Calendar (Settings → Import & export → Export) and Google Maps (Google Takeout → Location History, both the
+monthly Semantic Location History files and the newer `Timeline.json`). Note that Vercel limits request
+bodies to 4.5 MB, so large Apple Health exports will need direct-to-storage uploads.
+
 ### YouTube watch-history import
 
 YouTube imports default to the last 90 days, with a choice of 30 days or all history. Every choice is capped
@@ -513,43 +551,50 @@ entries are deduplicated, while repeat views at different timestamps are retaine
 The backend accepts up to 32 MB total for YouTube JSON (other sources remain 4 MB). Your hosting provider
 may enforce a smaller request-body limit; if so, split a large JSON array into valid smaller arrays and
 select the parts together within that deployment's limit. Larger histories exceeding the deployment's
-combined limit will need a future chunked-upload flow. Importing does not itself generate a report; stored history is available to the analysis pipeline.
+combined limit will need a future chunked-upload flow. No AI or statistical analysis is connected.
 
 ## Scripts
 
 ```bash
 npm run dev            # Next.js + FastAPI with reload
-npm run dev:next       # frontend; expects the API on :8000
-npm run dev:api        # backend; loads .env.local
-npm run build          # production frontend build
-npm run typecheck      # frontend TypeScript checks
-npm run test:api       # backend unit/integration tests
-npm run screenshots    # authenticated browser screenshots; needs Playwright Chromium
+npm run dev:next       # only Next.js (expects the API on :8000)
+npm run dev:api        # only FastAPI (uv run uvicorn api.index:app --port 8000)
+npm run build          # production build of the frontend
+npm run typecheck      # TypeScript
+npm run test:api       # Python test suite
+uv run python tools/report_try.py daily --help    # build a report input and optionally call Claude
 ```
 
 ## Project layout
 
-| Path | Purpose |
-|---|---|
-| `app/`, `components/`, `styles/`, `lib/` | Next.js routes, UI, charts and browser helpers. |
-| `backend/stressless/connectors/` | Device sync, stored real-data loading and source importers. |
-| `backend/stressless/engine/` | Scoring inputs, baselines, matching, attribution, recurring/lifestyle patterns and report writers. |
-| `backend/stressless/server/`, `api/index.py` | Authenticated FastAPI routes and deployment entrypoint. |
-| `backend/stressless/store/`, `supabase/migrations/` | User storage, RLS and database statistics functions. |
-| `correlate-app/` | Companion Android app for health/phone sync. |
-| `backend/tests/` | Backend tests. |
-| `backend/stressless/sim/` | Optional legacy demo/test data and shared sleep-score function. |
+```
+app/                   Next.js App Router: the project site (/project), /auth/demo, and one route per view
+components/            React views, SVG charts, app shell, presenter tour, project site, overlays
+lib/                   API client, Supabase clients, the demo account, formatting, icons, navigation
+styles/                the design system and per-view CSS
+proxy.ts               session refresh, / → /project, signed-out visitors → the demo (Next.js 16 proxy)
+api/index.py           Vercel entrypoint for the FastAPI app
+backend/stressless/
+  models.py            shared data model (dataclasses, JSON round-trip)
+  reports.py           report input and content schemas
+  timeutil.py          time conventions (nights, day-relative hours)
+  sim/                 simulated data for the tests: calendar, physiology, sleep score
+  connectors/          real data from Supabase, phone sync, Apple Health, .ics, Google Takeout, media importers
+  store/               per-user state: Supabase (PostgREST) and in-memory stores
+  engine/              features, baselines, attribution, links (lifestyle), report input and writer, habits,
+                       reality checks, what-if, suggestions, pipeline
+  server/              FastAPI app, Supabase JWT auth, read-only guard, reports, sync and check-in routes
+backend/tests/         unittest suite
+supabase/migrations/   tables, row-level security and RPCs
+tools/                 scripts: report try-out, screenshots, palette validation and more
+```
 
-## Limits when interpreting the page
+## Known limitations
 
-- These are within-person associations from recorded history. Scheduling, exercise, missing records and
-  other unmeasured factors can explain a link. An adjusted model does not establish causation.
-- Sleep scores and response/arousal indices are application heuristics, not clinically validated measures.
-  Source devices can misclassify stages or miss readings; the app cannot repair missing measurements.
-- Different cards intentionally use different windows, baselines and confidence rules. A weekly narrative,
-  a rolling 30-day card and an all-history recurring pattern need not agree numerically.
-- The calendar cannot observe everything affecting sleep. Check-ins and supported cross-source records
-  add context but do not measure every possible influence.
-- Some legacy backend/importer capabilities remain outside the current navigation. They are not presented
-  here as current pages or connection options. Detailed historical design notes in `docs/SPEC.md` can lag
-  the shipped UI; the linked implementation files are the reference for calculation details.
+* One person's data: correlation, not proof, and the reports say so.
+* Read-only is enforced by the API; a visitor with browser devtools could still write to the few tables
+  row-level security lets a signed-in user write.
+* `npm run screenshots` (`tools/screenshots.mjs`) still signs in through `/login`, which the demo-only site no
+  longer has.
+* Vercel limits request bodies to 4.5 MB, so large Apple Health exports would need direct-to-storage uploads.
+

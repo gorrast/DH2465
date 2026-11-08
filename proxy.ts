@@ -1,9 +1,12 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
-const PUBLIC_PATHS = ['/login', '/auth'];
+const PUBLIC_PATHS = ['/auth', '/project'];
+// Gone with the demo-only site (no accounts of your own): old links lead into the demo.
+const OLD_PATHS = ['/login', '/reset-password'];
 
-/** Refresh the Supabase session on every page request and send signed-out visitors to /login. */
+/** Refresh the Supabase session on every page request. / is the public project site for everyone; signed-out
+ * visitors to app pages are signed in to the shared demo account (/auth/demo) and come back to the page. */
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
   const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
@@ -22,16 +25,22 @@ export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const isPublic = PUBLIC_PATHS.some((p) => path === p || path.startsWith(p + '/'));
 
-  if (!signedIn && !isPublic) {
+  if (path === '/') {
     const url = request.nextUrl.clone();
-    url.pathname = '/login';
-    url.search = path === '/' ? '' : '?next=' + encodeURIComponent(path + request.nextUrl.search);
+    url.pathname = '/project';
+    url.search = '';
     return NextResponse.redirect(url);
   }
-  if (signedIn && path === '/login') {
+  if (OLD_PATHS.some((p) => path === p || path.startsWith(p + '/'))) {
     const url = request.nextUrl.clone();
-    url.pathname = '/';
+    url.pathname = signedIn ? '/daily' : '/auth/demo';
     url.search = '';
+    return NextResponse.redirect(url);
+  }
+  if (!signedIn && !isPublic) {
+    const url = request.nextUrl.clone();
+    url.pathname = '/auth/demo';
+    url.search = '?next=' + encodeURIComponent(path + request.nextUrl.search);
     return NextResponse.redirect(url);
   }
   return response;

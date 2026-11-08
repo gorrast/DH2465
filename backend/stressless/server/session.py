@@ -75,6 +75,12 @@ def anchor_override() -> Optional[date]:
     return parse_date(raw) if raw else None
 
 
+def read_only() -> bool:
+    """STRESSLESS_READ_ONLY=true: the deployed demo. One shared account that visitors may look at but not change; the
+    stored reports are shown as if written on request (see components/views/DailyWrittenReport.tsx)."""
+    return os.environ.get("STRESSLESS_READ_ONLY", "").strip().lower() in ("1", "true", "yes")
+
+
 def today_for(persona: str) -> date:
     return anchor_override() or today_local(get_persona(persona).tz)
 

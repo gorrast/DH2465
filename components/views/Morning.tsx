@@ -24,6 +24,7 @@ import { ScoreChange, ScoreText } from "../ui/ScoreChange";
 import { Sparkline, Stages } from "../charts/basic";
 import { DayTimeline, valueAt } from "../charts/DayTimeline";
 import { useApp } from "../shell/AppContext";
+import { toast } from "../ui/overlays";
 import { RealityView } from "./Reality";
 import {
   DailyGenerationForm,
@@ -240,7 +241,16 @@ function ReportSuggestion({
   today: string;
   paused: boolean;
 }) {
+  const { meta } = useApp();
   const day = suggestionDay(text, today);
+  // StressLess adds the suggestion to your calendar itself; the read-only demo can only say so
+  const addToCalendar = () =>
+    meta.read_only
+      ? toast(
+          "This would have added the item to your calendar automatically, but this demo is read-only.",
+          { kind: "info", duration: 6000 },
+        )
+      : downloadSuggestion(text, day);
   const when =
     (day === today ? "Tonight" : fmt.day(day)) +
     ", " +
@@ -263,10 +273,10 @@ function ReportSuggestion({
           <button
             className="btn btn-primary"
             type="button"
-            onClick={() => downloadSuggestion(text, day)}
+            onClick={addToCalendar}
           >
             Add to calendar
-            <Icon name="download" size={16} />
+            <Icon name="calendar" size={16} />
           </button>
           <a className="btn" href="#night-explanation">
             Read the report

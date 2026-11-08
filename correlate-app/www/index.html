@@ -195,7 +195,7 @@
   <section class="card" id="account-card">
     <div class="card-head"><h2>Account &amp; sync</h2><span class="sub" id="last-sync"></span></div>
     <form class="signin" id="signin-form" hidden>
-      <div class="status" style="margin-bottom:4px">Sign in with your StressLess account to sync sleep, steps and screen time.</div>
+      <div class="status" style="margin-bottom:4px">Sign in with your StressLess account to sync sleep, heart rate, steps and screen time.</div>
       <input id="signin-email" type="email" autocomplete="username" placeholder="Email" required />
       <input id="signin-password" type="password" autocomplete="current-password" placeholder="Password" required />
       <button type="submit" id="btn-signin">Sign in</button>
@@ -204,7 +204,7 @@
       <div class="row"><span id="account-email"></span><button class="clear-btn" id="btn-signout">Sign out</button></div>
       <button id="btn-sync" style="width:100%;margin-top:8px">Sync</button>
       <div id="consent" hidden style="margin-top:12px">
-        <div class="status">StressLess stores your sleep, steps and app usage (which apps, and when) in your account to
+        <div class="status">StressLess stores your sleep, heart rate and HRV, steps and app usage (which apps, and when) in your account to
           explain how your days affect your sleep. You can delete it with your account at any time.</div>
         <button id="btn-consent" style="width:100%">I agree, sync</button>
       </div>
@@ -219,7 +219,7 @@
       <button id="btn-calendar">Connect</button></div>
     <div class="row"><span><span class="dot off" id="dot-health"></span>Steps &amp; workouts</span>
       <button id="btn-health">Connect</button></div>
-    <div class="row"><span><span class="dot off" id="dot-sleep"></span>Sleep</span>
+    <div class="row"><span><span class="dot off" id="dot-sleep"></span>Sleep &amp; heart rate</span>
       <button id="btn-sleep">Connect</button></div>
     <div class="row"><span><span class="dot off" id="dot-location"></span>Background location</span>
       <button id="btn-location">Connect</button></div>
@@ -265,7 +265,7 @@
   </section>
 
   <section class="card">
-    <div class="card-head"><h2>Sleep</h2><span class="sub">last 30 days</span></div>
+    <div class="card-head"><h2>Sleep &amp; heart</h2><span class="sub">last 30 days</span></div>
     <div id="sleep-body" class="empty">Connect sleep to see your nights here.</div>
   </section>
 

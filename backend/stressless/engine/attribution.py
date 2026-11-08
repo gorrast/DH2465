@@ -385,6 +385,11 @@ def explain_night(ds: Dataset, morning: date, fit_: FitResult, norm: Sequence[Op
                 for w in act.workouts:
                     if w.start < ev.end and w.end > ev.start:
                         ww = w
+            if ev is None and act and ds.phone_rules:   # a logged workout nothing was booked for (features.py)
+                logged = [w for w in act.workouts if w.certain]
+                ww = max(logged, key=lambda w: w.start) if logged else None
+                if ww is not None:
+                    title = "Workout at %s" % hour_label(day_hour(ww.start, night_date))
             if ev is not None:
                 title = "Workout at %s" % hour_label(day_hour(ev.start, night_date))
                 ev_ids = [ev.id]

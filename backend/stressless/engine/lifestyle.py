@@ -185,7 +185,8 @@ def _workouts(ds: Dataset, d: date) -> Optional[List[Tuple[str, datetime]]]:
     if not (any(a.workouts for a in ds.activity) or any(e.type == "workout" for e in ds.events)):
         return None
     a = ds.activity_on(d)
-    out = [(w.kind.lower(), w.end) for w in (a.workouts if a else [])]
+    # phone data: only certain logged workouts; booked ones come from the calendar below (features.py)
+    out = [(w.kind.lower(), w.end) for w in (a.workouts if a else []) if w.certain or not ds.phone_rules]
     out += [(" ".join(filter(None, (e.title, e.location_hint))).lower(), e.end) for e in ds.events_on(d) if e.type == "workout"]
     return out
 

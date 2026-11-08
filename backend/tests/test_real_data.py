@@ -88,6 +88,75 @@ class LoaderTests(unittest.TestCase):
         self.assertEqual(score.value, next(m for m in demo_inp.metrics if m.key == "sleep.score").value)
         self.assertTrue(inp.patterns)
 
+    def test_watch_workouts_drive_the_workout_slot_but_plain_walks_do_not(self):
+        from stressless.engine.features import day_features
+        store = real_store()
+        d = ANCHOR - timedelta(days=3)
+        z = tz("Europe/Stockholm")
+        at = lambda h, m=0: datetime(d.year, d.month, d.day, h, m, tzinfo=z).isoformat()
+        store.tables["calendar_events"] = [e for e in store.tables["calendar_events"]
+                                           if not (e["category"] == "workout" and e["starts_at"][:10] == d.isoformat())]
+        row = next(a for a in store.tables["daily_activity"] if a["day"] == d.isoformat())
+        row["workouts"] = [{"kind": "walk", "start": at(7), "end": at(7, 30), "avg_hr": 90, "max_hr": 95, "counts_as_workout": False},
+                           {"kind": "strength", "start": at(12), "end": at(12, 40), "avg_hr": 95, "max_hr": 110,
+                            "counts_as_workout": True, "certain": False},
+                           {"kind": "run", "start": at(21), "end": at(21, 45), "avg_hr": 150, "max_hr": 175, "calories": 400,
+                            "counts_as_workout": True, "certain": True}]
+        ds = load_dataset(store, ANCHOR)
+        self.assertEqual([w.kind for w in ds.activity_on(d).workouts], ["strength", "run"])   # the plain walk is dropped
+        f = day_features(ds, d)
+        self.assertEqual((f.workout_slot, f.workout_minutes), ("late", 45))
+        for day in (d, d - timedelta(days=1), d - timedelta(days=2)):          # the demo keeps to the calendar
+            self.assertEqual(day_features(self.demo, day), day_features(self.demo, day, events=self.demo.events_on(day)))
+
+    def test_a_booked_workout_is_confirmed_by_an_overlapping_session_and_never_replaced(self):
+        from stressless.engine.reality import reality_checks
+        store = real_store()
+        ev = next(e for e in store.tables["calendar_events"] if e["category"] == "workout"
+                  and datetime.fromisoformat(e["ends_at"]).date() < ANCHOR - timedelta(days=2))
+        s, e = datetime.fromisoformat(ev["starts_at"]), datetime.fromisoformat(ev["ends_at"])
+        d = s.date()
+        hr = next(h for h in store.tables["heart_rate_days"] if h["day"] == d.isoformat())
+        a, b = s.hour * 60 + s.minute, e.hour * 60 + e.minute
+        hr["bpm"][a:b] = [72] * (b - a)                     # nothing in the heart rate either
+        row = next(r for r in store.tables["daily_activity"] if r["day"] == d.isoformat())
+        later = (e + timedelta(hours=4)).isoformat(), (e + timedelta(hours=5)).isoformat()
+        row["workouts"] = [{"kind": "run", "start": later[0], "end": later[1], "avg_hr": 150, "max_hr": 170,
+                            "counts_as_workout": True, "certain": True}]
+
+        def check(st):
+            ds = load_dataset(st, ANCHOR)
+            return next((c for c in reality_checks(ds, d, d, {}) if c.event_id == str(ev["id"])), None)
+
+        c = check(store)                                    # a run hours later does not stand in for the booking
+        self.assertIsNotNone(c)
+        self.assertEqual(c.kind, "booked_not_seen")
+        texts = [x.text for x in c.evidence]
+        self.assertIn("Nothing logged by your watch or phone at that time", texts)
+        self.assertTrue(any(t.startswith("Logged run") for t in texts), texts)
+
+        row["workouts"].append({"kind": "strength", "start": s.isoformat(), "end": (s + timedelta(minutes=30)).isoformat(),
+                                "avg_hr": 95, "max_hr": 110, "counts_as_workout": True, "certain": False})
+        self.assertIsNone(check(store))                     # an overlapping session confirms it, certain or not
+
+    def test_the_seeded_demo_account_keeps_the_calendar_rules(self):
+        from stressless.engine.features import day_features
+        store = real_store()
+        for n in store.tables["sleep_nights"]:
+            n["data_origin"] = "seed-demo"                # what tools/seed_demo.py writes
+        d = ANCHOR - timedelta(days=3)
+        z = tz("Europe/Stockholm")
+        at = lambda h, m=0: datetime(d.year, d.month, d.day, h, m, tzinfo=z).isoformat()
+        store.tables["calendar_events"] = [e for e in store.tables["calendar_events"]
+                                           if not (e["category"] == "workout" and e["starts_at"][:10] == d.isoformat())]
+        row = next(a for a in store.tables["daily_activity"] if a["day"] == d.isoformat())
+        row["workouts"] = [{"kind": "run", "start": at(21), "end": at(21, 45), "avg_hr": 150, "max_hr": 175, "calories": 400}]
+        ds = load_dataset(store, ANCHOR)
+        self.assertTrue(ds.seeded_demo)
+        self.assertFalse(ds.phone_rules)
+        self.assertEqual(day_features(ds, d).workout_slot, "none")    # an unbooked logged workout does not count here
+        self.assertFalse(load_dataset(real_store(), ANCHOR).seeded_demo)
+
     def test_screen_time_metrics_are_loaded_up_to_yesterday(self):
         store = real_store()
         y = ANCHOR - timedelta(days=1)

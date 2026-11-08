@@ -26,6 +26,7 @@ DAYS = 70                                      # history the engine and the repo
 AHEAD = 7                                      # calendar days after today (planner, suggestions)
 
 HEALTH_SOURCES = ("health_connect", "apple_health")
+SEEDED_DEMO = "seed-demo"                      # data_origin of every row tools/seed_demo.py writes
 SOURCE_LABELS = {"health_connect": "Health Connect (Android)", "apple_health": "Apple Health (iPhone)",
                  "google_calendar": "Google Calendar"}
 
@@ -77,12 +78,15 @@ def activity_from_row(row: Dict[str, Any], tzname: str) -> DailyActivity:
     d = parse_date(row["day"])
     workouts = []
     for i, w in enumerate(row.get("workouts") or []):
-        if not (w.get("start") and w.get("end")):
+        # walks that did not raise the heart rate are active minutes, not workouts (connectors/device_sync.py)
+        if not (w.get("start") and w.get("end")) or w.get("counts_as_workout") is False:
             continue
         workouts.append(WatchWorkout(id=new_id("w", d.isoformat(), i), kind=w.get("kind") or "other",
                                      start=parse_dt(w["start"], tzname), end=parse_dt(w["end"], tzname),
                                      avg_hr=int(w.get("avg_hr") or 0), max_hr=int(w.get("max_hr") or 0),
-                                     calories=int(w.get("calories") or 0)))
+                                     calories=int(w.get("calories") or 0),
+                                     # only phone syncs write the flag; it is read only under Dataset.phone_rules
+                                     certain=bool(w.get("certain", True))))
     hourly = [int(h or 0) for h in (row.get("hourly_steps") or [])]
     return DailyActivity(date=d, steps=int(row.get("steps") or 0), active_minutes=int(row.get("active_min") or 0),
                          workouts=workouts, hourly_steps=hourly)
@@ -162,6 +166,7 @@ def load_dataset(store, today: date, days: int = DAYS, name: str = "You") -> Dat
     persona = persona_from_history(name, tzname, nights)
     ds = build_dataset(persona, events, [], hr_days, nights, activity, today, days)
     ds.source = "real"
+    ds.seeded_demo = any(r.get("data_origin") == SEEDED_DEMO for r in night_rows)
     # Other per-day values (screen time, ...), up to the last full day like activity.
     for r in store.rows("daily_metrics", "day", lo, hi):
         d = parse_date(r["day"])

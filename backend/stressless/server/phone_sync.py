@@ -3,7 +3,8 @@
     1. check profiles.consented_at (403 until the user has agreed)
     2. upsert the install's provider_connections (one per source: health_connect, screen_time)
     3. upsert the raw source_records, deduplicated on (user, source, source_record_id)
-    4. recompute sleep_nights, daily_activity and daily_metrics for the nights and days in the upload
+    4. recompute sleep_nights, heart_rate_days, daily_activity and daily_metrics for the nights and days in the upload
+       (heart rate is merged into the stored day, so a sync covering part of a day keeps the minutes it lacks)
     5. upsert connection_streams (permitted, data_from, data_until, last_synced_at) and the connections' last_synced_at
 
 Signed-in users can only read these tables, so this module writes with the service-role key and scopes every query to
@@ -71,6 +72,16 @@ def _upsert(table: str, rows: List[Dict[str, Any]], on_conflict: str) -> None:
         _db("POST", table, params={"on_conflict": on_conflict}, json=rows[i:i + BATCH], prefer="resolution=merge-duplicates,return=minimal")
 
 
+def _upsert_by_columns(table: str, rows: List[Dict[str, Any]], on_conflict: str) -> None:
+    """Upsert rows that do not all carry the same columns: PostgREST bulk upserts need one key set per request, and a
+    column left out of a row keeps its stored value."""
+    groups: Dict[tuple, List[Dict[str, Any]]] = {}
+    for r in rows:
+        groups.setdefault(tuple(sorted(r)), []).append(r)
+    for group in groups.values():
+        _upsert(table, group, on_conflict)
+
+
 def _require_consent(user_id: str) -> None:
     rows = _db("GET", "profiles", params={"user_id": "eq." + user_id, "select": "consented_at"}) or []
     if not rows or not rows[0].get("consented_at"):
@@ -107,6 +118,15 @@ def _earlier_bedtimes(user_id: str, batch: Dict[str, Any]) -> List[float]:
     return [ds.bedtime_min(r["in_bed_at"], r["utc_offset_min"]) for r in rows if r.get("in_bed_at")]
 
 
+def _stored_heart_rate(user_id: str, batch: Dict[str, Any]) -> Dict[str, List[Optional[int]]]:
+    days = sorted(d.isoformat() for d in ds.heart_rate_by_day(batch))
+    if not days:
+        return {}
+    rows = _db("GET", "heart_rate_days", params={"user_id": "eq." + user_id, "select": "day,bpm",
+                                                 "day": "in.(%s)" % ",".join(days)}) or []
+    return {r["day"]: r["bpm"] for r in rows}
+
+
 @router.post("/api/sync")
 def post_sync(body: Optional[Dict[str, Any]] = Body(None), p: Principal = Depends(current_principal)):
     batch = ds.parse(body)
@@ -120,15 +140,21 @@ def post_sync(body: Optional[Dict[str, Any]] = Body(None), p: Principal = Depend
     records = [dict(r, connection_id=conns[r["source"]], **uid) for r in ds.source_records(batch)]
     _upsert("source_records", records, "user_id,source,source_record_id")
 
-    nights = ds.sleep_night_rows(batch, _earlier_bedtimes(p.user_id, batch))
+    hr_days = ds.heart_rate_day_rows(batch, _stored_heart_rate(p.user_id, batch))
+    nights = ds.sleep_night_rows(batch, _earlier_bedtimes(p.user_id, batch), hr_days)
     metrics = ds.metric_rows(batch)
     _upsert("sleep_nights", [dict(r, computed_at=now, **uid) for r in nights], "user_id,night_date")
-    _upsert("daily_activity", [dict(r, computed_at=now, **uid) for r in ds.activity_rows(batch)], "user_id,day")
+    _upsert("heart_rate_days", [dict(r, computed_at=now, **uid) for r in hr_days], "user_id,day")
+    activity = ds.activity_rows(batch, hr_days)
+    _upsert_by_columns("daily_activity", [dict(r, computed_at=now, **uid) for r in activity], "user_id,day")
     _upsert("daily_metrics", [dict(r, computed_at=now, **uid) for r in metrics], "user_id,day,metric_key")
 
     _upsert("connection_streams", [dict(s, connection_id=conns[source], data_type=data_type, last_synced_at=now, updated_at=now, **uid)
                                    for (source, data_type), s in sorted(streams.items())], "connection_id,data_type")
     for cid in conns.values():
         _db("PATCH", "provider_connections", params={"id": "eq." + cid, "user_id": "eq." + p.user_id}, json={"last_synced_at": now})
-    log.info("phone sync for %s: %d records, %d nights, %d metric rows", p.user_id, len(records), len(nights), len(metrics))
-    return JSONResponse(dict(ds.summary(batch, nights, metrics, len(records)), ok=True), headers={"Cache-Control": "no-store"})
+    summary = ds.summary(batch, nights, metrics, len(records), hr_days, activity)
+    log.info("phone sync for %s: %d records, %d nights, %d heart-rate days, %d HRV readings, %d workout sessions "
+             "(%d workouts), %d metric rows", p.user_id, len(records), len(nights), len(hr_days), len(batch["hrv"]),
+             summary["stored"]["workout_sessions"], summary["stored"]["workouts"], len(metrics))
+    return JSONResponse(dict(summary, ok=True), headers={"Cache-Control": "no-store"})

@@ -80,7 +80,7 @@ To distribute to other testers before a public launch, Play Console's
 **internal testing track** needs only a one-time $25 developer account fee,
 no review.
 
-## Sign in & Sync (sleep, steps, screen time → Supabase)
+## Sign in & Sync (sleep, heart rate, HRV, steps, screen time → Supabase)
 
 The **Account & sync** card signs in with the same Supabase email/password account as the web app
 (`www/auth.js`, plain Supabase Auth REST calls). **Sync** re-reads the phone's data and POSTs it to the
@@ -88,7 +88,19 @@ StressLess API (`POST /api/sync`) with the user's access token. The app sends ev
 and the API decides what to keep:
 
 - **Sleep:** Health Connect sessions with their stages (last 30 days).
+- **Heart rate:** all-day Health Connect heart rate (last 30 days), averaged on the phone to one sample per minute.
+- **HRV:** the watch's own RMSSD readings (`HeartRateVariabilityRmssdRecord`, last 30 days). HRV needs
+  beat-to-beat intervals, so it cannot be computed from per-minute heart rate, and only some watch apps write it
+  to Health Connect. capacitor-health-connect 0.7 cannot return this record type on its own:
+  `scripts/patch-health-connect.cjs` adds it and runs on `npm install` (postinstall). Run
+  `node scripts/patch-health-connect.cjs` once by hand if `node_modules` is already installed.
+- **Resting heart rate:** the watch's own readings (`RestingHeartRateRecord`, last 30 days). Without one for a
+  night, the API computes it from the per-minute heart rate: the lowest 30-minute average while asleep.
 - **Steps:** daily totals since 1 January.
+- **Workouts:** Health Connect exercise sessions of the last 30 days (type, start, end, calories, distance, heart
+  rate during them), including the walks the phone detects on its own. Every session adds to the day's active
+  minutes; a walk only counts as a workout (morning/late workout patterns) when its average heart rate is at least
+  30 bpm above that day's usual waking heart rate (`WALK_MIN_HR_RISE` in `connectors/device_sync.py`).
 - **Screen time:** every foreground app session and screen/lock event of the last 7 days
   (`UsageStats.getUsageSessions`). Android only keeps about a week of these, so sync at least weekly.
 
@@ -96,7 +108,9 @@ The API (`backend/stressless/server/phone_sync.py`) follows the ingest flow in `
 - It checks consent; the first sync asks for it.
 - It records this install as its own connection (`health_connect` and `screen_time`).
 - It upserts the raw `source_records`.
-- It recomputes `sleep_nights` (scored), `daily_activity` and the `screen.*` rows in `daily_metrics`.
+- It recomputes `sleep_nights` (scored, with the night's mean HRV in `hrv_rmssd_ms`: readings from bedtime to two
+  hours after waking, and `resting_hr`: the watch's reading, else computed from the night's heart rate), `heart_rate_days` (1440 minutes, merged with what is already stored for that day),
+  `daily_activity` and the `screen.*` rows in `daily_metrics`.
 
 Syncing the same days again overwrites instead of duplicating.
 

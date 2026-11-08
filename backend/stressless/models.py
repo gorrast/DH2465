@@ -99,6 +99,7 @@ class WatchWorkout:
     avg_hr: int
     max_hr: int
     calories: int = 0
+    certain: bool = True                       # sure enough to count with nothing booked (real data: connectors/device_sync.py)
 
 
 @dataclass
@@ -455,6 +456,7 @@ class Dataset:
     showcase: bool = True
     day_metrics: Dict[date, Dict[str, float]] = field(default_factory=dict)   # day -> {"screen.minutes": ...} (daily_metrics)
     media: List[MediaPlay] = field(default_factory=list)                      # Spotify / Netflix plays (media_events)
+    seeded_demo: bool = False                  # real-data tables filled by tools/seed_demo.py (the shared demo account)
     unlocks: List[datetime] = field(default_factory=list)                     # phone unlocks, local time (source_records)
 
     def __post_init__(self) -> None:
@@ -505,6 +507,12 @@ class Dataset:
 
     def night(self, d: date) -> Optional[SleepNight]:
         return self._nights.get(d)
+
+    @property
+    def phone_rules(self) -> bool:
+        """The workout rules for data synced from a phone (certain workouts count, booked workouts are checked against
+        logged sessions): real data, but not the seeded demo account, which keeps showing exactly what it was made with."""
+        return self.source == "real" and not self.seeded_demo
 
     def activity_on(self, d: date) -> Optional[DailyActivity]:
         return self._activity.get(d)

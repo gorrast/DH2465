@@ -11,7 +11,12 @@ Conventions (SPEC §3, §7.1):
 * ``early_start`` looks only at meetings, travel and personal events (a 07:00 run is not an
   early start);
 * a workout is ``late`` when it starts >= 19:30 **or** ends within two hours of the persona's
-  usual bedtime.
+  usual bedtime;
+* for data synced from a phone (``ds.phone_rules``) the workouts are the booked ones plus the logged workouts
+  that no booked workout covers and that are ``certain`` (long enough, heart rate clearly up). A
+  logged session never replaces or moves a booked one: a booking that looks missed is asked about
+  (engine/reality.py). The demo, and the seeded demo account, keep to the calendar: the simulator's
+  causal model, and so its answer key, is driven by the attended calendar events alone.
 """
 from __future__ import annotations
 
@@ -94,11 +99,16 @@ def day_features(ds: Optional[Dataset], d: date, events: Optional[Sequence[Calen
         f.social_end_hour = max(day_hour(e.end, d) for e in socials)
         f.evening_social = 1 if f.social_end_hour >= SOCIAL_EVENING_FROM_HOUR else 0
 
-    workouts = [e for e in evs if e.type == "workout"]
+    workouts = [(e.start, e.end) for e in evs if e.type == "workout"]
+    if events is None and ds is not None and ds.phone_rules:
+        act = ds.activity_on(d)
+        booked = list(workouts)
+        workouts += [(w.start, w.end) for w in (act.workouts if act else [])
+                     if w.certain and not any(w.start < be and w.end > bs for bs, be in booked)]
     if workouts:
-        last = max(workouts, key=lambda e: e.start)
-        f.workout_minutes = sum(max(0, e.duration_min) for e in workouts)
-        f.workout_slot = workout_slot_for(day_hour(last.start, d), day_hour(last.end, d), _usual_bedtime_hour(ds))
+        last = max(workouts)
+        f.workout_minutes = sum(max(0, int((e - s).total_seconds() // 60)) for s, e in workouts)
+        f.workout_slot = workout_slot_for(day_hour(last[0], d), day_hour(last[1], d), _usual_bedtime_hour(ds))
 
     travels = [e for e in evs if e.type == "travel"]
     if travels:

@@ -11,6 +11,7 @@ import { ScoreChange, ScoreText } from '../ui/ScoreChange';
 import { Sparkline, Stages } from '../charts/basic';
 import { DayTimeline, valueAt } from '../charts/DayTimeline';
 import { useApp } from '../shell/AppContext';
+import { toast } from '../ui/overlays';
 import { RealityView } from './Reality';
 import { DailyGenerationForm, useDailyWrittenReport } from './DailyWrittenReport';
 import { DateNav, Skeleton, useLoad } from './common';
@@ -94,13 +95,18 @@ function downloadSuggestion(text: string, day: string) {
 
 /** The written report's suggestion, repeated where the page ends (same card style as the suggestion for tonight). */
 function ReportSuggestion({ text, today, paused }: { text: string; today: string; paused: boolean }) {
+  const { meta } = useApp();
   const day = suggestionDay(text, today);
+  // StressLess adds the suggestion to your calendar itself; the read-only demo can only say so
+  const addToCalendar = () => meta.read_only
+    ? toast('This would have added the item to your calendar automatically, but this demo is read-only.', { kind: 'info', duration: 6000 })
+    : downloadSuggestion(text, day);
   const when = (day === today ? 'Tonight' : fmt.day(day)) + ', ' + SUGGESTION_HOURS.map((h) => h + ':00').join('–');
   return <section className="ah-tonight" data-tour="suggestion" aria-label="One thing to try">
     <div className="ah-tonight-icon"><Icon name="sparkles" size={22} /></div>
     <div className="ah-tonight-copy"><span className="ah-eyebrow">Suggestion</span><RevealHeading as="h3" paused={paused}>{text}</RevealHeading>
       <div className="ah-actions">
-        <button className="btn btn-primary" type="button" onClick={() => downloadSuggestion(text, day)}>Add to calendar<Icon name="download" size={16} /></button>
+        <button className="btn btn-primary" type="button" onClick={addToCalendar}>Add to calendar<Icon name="calendar" size={16} /></button>
         <a className="btn" href="#night-explanation">Read the report<Icon name="chevron-right" size={16} /></a>
       </div>
       <p className="ah-estimate">{when}</p>

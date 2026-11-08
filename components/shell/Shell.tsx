@@ -155,7 +155,7 @@ export function Shell({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // keyboard: 1–5 views, ←/→ change day, t tour, d theme, ? help
+  // keyboard: 1–6 views, ←/→ change day, t tour, d theme, ? help
   const route = parsePath(pathname);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -184,7 +184,7 @@ export function Shell({ children }: { children: ReactNode }) {
         return;
       }
       if (e.key === "?") {
-        toast("Keys: 1–5 views · ←/→ change day · t tour · d toggle theme");
+        toast("Keys: 1–6 views · ←/→ change day · t tour · d toggle theme");
         return;
       }
       if (e.key === "d") {

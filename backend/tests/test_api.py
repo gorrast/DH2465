@@ -50,6 +50,20 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(r.status_code, expect, "%s -> %s %s" % (path, r.status_code, r.text[:200]))
         return r
 
+    def test_social_page_ranks_the_person_among_their_groups(self):
+        s = self.jget("/api/social")
+        self.assertEqual(len(s["groups"]), 3)
+        for g in s["groups"]:
+            self.assertIn(s["me"], g["members"])
+            for board in g["week"] + g["season"]:
+                ranks = [r["rank"] for r in board["rows"]]
+                self.assertEqual(ranks, list(range(1, len(ranks) + 1)))
+                better = s["metrics"][board["metric"]]["better"]
+                values = [r["value"] for r in board["rows"]]
+                self.assertEqual(values, sorted(values, reverse=better == "up"))
+            self.assertEqual(sum(r["points"] for r in g["standings"]), 4 * 6 * len(g["metrics"]))
+        self.assertTrue(any(c["joined"] for c in s["challenges"]))
+
     def test_read_only_demo_refuses_changes_but_serves_reports(self):
         from unittest import mock
         with mock.patch.dict(os.environ, {"STRESSLESS_READ_ONLY": "true"}):

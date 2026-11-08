@@ -1,0 +1,250 @@
+/* Social: groups, leaderboards, team goals and challenges (components/views/Social.tsx) */
+.social-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.social-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  background: var(--card);
+  color: var(--ink-primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.social-tab:hover {
+  border-color: var(--interactive);
+}
+.social-tab.active {
+  background: var(--interactive);
+  border-color: var(--interactive);
+  color: var(--interactive-ink);
+}
+.social-tab.active .muted {
+  color: inherit;
+  opacity: 0.75;
+}
+
+.social-group {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.social-group-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.social-group-head h2 {
+  margin: 0;
+}
+.social-group-head p {
+  margin: 4px 0 0;
+}
+.social-members {
+  display: flex;
+  gap: 4px;
+}
+.social-avatar {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--interactive-soft);
+  color: var(--interactive);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.social-boards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+.social-board header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.social-board h3,
+.social-goal h3,
+.social-challenge h3 {
+  margin: 0;
+  font-size: 17px;
+}
+.social-board ol,
+.social-standings ol,
+.social-progress {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.social-board li,
+.social-standings li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: 10px;
+}
+.social-board li.is-me,
+.social-standings li.is-me,
+.social-progress li.is-me {
+  background: var(--interactive-soft);
+}
+.social-rank {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-muted);
+}
+.social-rank.rank-1 {
+  background: #e8b04b;
+  color: #2a1d05;
+}
+.social-rank.rank-2 {
+  background: #c3cad6;
+  color: #1c2230;
+}
+.social-rank.rank-3 {
+  background: #c98a5a;
+  color: #2a1608;
+}
+.social-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+.social-value {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.social-usual {
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+.social-usual.is-good,
+.social-progress .is-good {
+  color: var(--score-positive);
+}
+.social-usual.is-bad {
+  color: var(--score-negative);
+}
+
+.social-extras {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  align-items: start;
+  gap: 16px;
+}
+.social-goal {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.social-bar {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--card-2);
+  overflow: hidden;
+}
+.social-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--interactive), #7fd3b0);
+}
+.social-goal p,
+.social-standings p {
+  margin: 0;
+}
+.social-standings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.social-section-head h2 {
+  margin: 0;
+}
+.social-section-head p {
+  margin: 4px 0 0;
+}
+.social-challenges {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 16px;
+}
+.social-challenge-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+.social-challenge {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.social-challenge.is-joined {
+  border-color: var(--interactive);
+}
+.social-challenge header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.social-challenge header p {
+  margin: 4px 0 0;
+}
+.social-progress li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 8px;
+  border-radius: 10px;
+}
+.social-progress .social-name {
+  flex: 1;
+}
+.social-dots {
+  display: flex;
+  gap: 4px;
+}
+.social-dots span {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--card-2);
+  border: 1px solid var(--hairline);
+}
+.social-dots span.on {
+  background: var(--interactive);
+  border-color: var(--interactive);
+}
+.social-privacy {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}

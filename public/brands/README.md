@@ -1,6 +1,6 @@
 # Media brand marks
 
-Spotify, Netflix, YouTube and Steam SVG marks are bundled from the Simple Icons project:
+Spotify, Netflix, YouTube, Steam, Google Calendar, Proton Calendar, Garmin and Fitbit SVG marks are bundled from the Simple Icons project:
 https://github.com/simple-icons/simple-icons/tree/develop/icons
 
 The Simple Icons license is included in `simple-icons-LICENSE.md`. Brand names and marks belong to their
@@ -15,3 +15,6 @@ Reddit, WhatsApp, Snapchat, Google Chrome, and Facebook, alongside the existing 
 Package IDs are mapped in `lib/app-brands.ts`; unknown apps use initials. Apps from the user's
 app-usage and app heart-rate rankings appear in the decorative row. When neither ranking has data,
 a labeled set of seven illustrative app logos is displayed instead; no statistics are fabricated.
+
+The Connect Your Data heading mixes calendar and wearable marks with the media marks. These are decorative
+illustrations of data-source categories, not an indication that every depicted provider has an active integration.

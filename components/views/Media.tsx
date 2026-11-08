@@ -137,7 +137,7 @@ const logoBubbles = [
     stillY: 30,
   },
   {
-    provider: "spotify",
+    provider: "googlecalendar",
     x: 58,
     size: 54,
     duration: 29,
@@ -155,7 +155,7 @@ const logoBubbles = [
     stillY: 22,
   },
   {
-    provider: "steam",
+    provider: "fitbit",
     x: 88,
     size: 62,
     duration: 32,
@@ -164,7 +164,7 @@ const logoBubbles = [
     stillY: 58,
   },
   {
-    provider: "netflix",
+    provider: "protoncalendar",
     x: 12,
     size: 48,
     duration: 35,
@@ -200,7 +200,7 @@ const logoBubbles = [
     stillY: 48,
   },
   {
-    provider: "spotify",
+    provider: "garmin",
     x: 81,
     size: 68,
     duration: 39,

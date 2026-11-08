@@ -96,6 +96,37 @@
   --logo-image: url("/brands/steam.svg");
   --logo-color: #b4d0f2;
 }
+.media-logo-bubble[data-provider="googlecalendar"] {
+  --logo-image: url("/brands/googlecalendar.svg");
+  --logo-color: #72a7ff;
+}
+.media-logo-bubble[data-provider="protoncalendar"] {
+  --logo-image: url("/brands/protoncalendar.svg");
+  --logo-color: #b29aff;
+}
+.media-logo-bubble[data-provider="garmin"] {
+  --logo-image: url("/brands/garmin.svg");
+  --logo-color: #b4d0f2;
+}
+.media-logo-bubble[data-provider="fitbit"] {
+  --logo-image: url("/brands/fitbit.svg");
+  --logo-color: #58d3d4;
+}
+.media-logo-bubble[data-provider="garmin"] .media-logo-mark {
+  width: 80%;
+}
+:root[data-theme="light"] .media-logo-bubble[data-provider="googlecalendar"] {
+  --logo-color: #2762c2;
+}
+:root[data-theme="light"] .media-logo-bubble[data-provider="protoncalendar"] {
+  --logo-color: #6d4cc4;
+}
+:root[data-theme="light"] .media-logo-bubble[data-provider="garmin"] {
+  --logo-color: #456b9a;
+}
+:root[data-theme="light"] .media-logo-bubble[data-provider="fitbit"] {
+  --logo-color: #087d80;
+}
 .media-logo-mark {
   display: block;
   width: 55%;

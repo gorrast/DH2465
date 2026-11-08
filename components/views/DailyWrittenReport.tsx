@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api } from "@/lib/api";
+import { sectionScrollTop } from "@/lib/section-scroll";
 import { useLoad } from "./common";
 import { ReportCard, sourceLine, type Overview, type Report } from "./Home";
 import { ReportInsights } from "./ReportInsights";
@@ -31,13 +32,14 @@ export function useDailyWrittenReport(
   useEffect(() => {
     if (!scrollVersion || !report) return;
     const frame = requestAnimationFrame(() => {
-      section.current?.scrollIntoView({
+      if (!section.current) return;
+      window.scrollTo({
+        top: sectionScrollTop(section.current),
         behavior:
           paused ||
           window.matchMedia("(prefers-reduced-motion: reduce)").matches
             ? "instant"
             : "smooth",
-        block: "start",
       });
       section.current?.focus({ preventScroll: true });
     });
@@ -101,6 +103,7 @@ export function useDailyWrittenReport(
         <section
           ref={section}
           data-page-section="Daily report"
+          data-page-section-anchor=".v-home-report"
           id="night-explanation"
           className="ah-section daily-written-report written-report"
           tabIndex={-1}

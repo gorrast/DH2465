@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { Icon } from "./Icon";
+import { sectionScrollTop } from "@/lib/section-scroll";
 
 /** Navigate the currently rendered sections, including reports added after loading. */
 export function SectionNavigation({
@@ -14,13 +15,6 @@ export function SectionNavigation({
   const [destinations, setDestinations] = useState({ up: "", down: "" });
   const frame = useRef(0);
   const targets = () => {
-    const limit = Math.max(
-      0,
-      document.documentElement.scrollHeight - window.innerHeight,
-    );
-    const offset =
-      (document.querySelector(".topbar")?.getBoundingClientRect().height ||
-        72) + 16;
     return Array.from(
       root.current?.querySelectorAll<HTMLElement>("[data-page-section]") || [],
     )
@@ -30,21 +24,9 @@ export function SectionNavigation({
           !element.closest("[hidden], [inert]"),
       )
       .map((element, index) => {
-        const anchor = element.closest(".section-snap-boundary") || element;
         return {
           label: element.dataset.pageSection!,
-          top:
-            index === 0
-              ? 0
-              : Math.min(
-                  limit,
-                  Math.max(
-                    0,
-                    anchor.getBoundingClientRect().top +
-                      window.scrollY -
-                      offset,
-                  ),
-                ),
+          top: index === 0 ? 0 : sectionScrollTop(element),
         };
       });
   };

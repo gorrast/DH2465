@@ -1,131 +1,496 @@
-/* Social: groups, leaderboards, team goals and challenges (components/views/Social.tsx) */
-.social-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+/* Social: groups, leaderboards, team goals and challenges (components/views/Social.tsx).
+   Builds on the Weekly tab's .weekly-dashboard, .weekly-section-heading and .weekly-range. */
+.v-social {
+  --recovery: #8abcaf;
+  --social-gold: #e8b04b;
+  --social-silver: #c3cad6;
+  --social-bronze: #c98a5a;
 }
-.social-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 16px;
-  border-radius: 999px;
-  border: 1px solid var(--hairline);
-  background: var(--card);
-  color: var(--ink-primary);
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-.social-tab:hover {
-  border-color: var(--interactive);
-}
-.social-tab.active {
-  background: var(--interactive);
-  border-color: var(--interactive);
-  color: var(--interactive-ink);
-}
-.social-tab.active .muted {
-  color: inherit;
-  opacity: 0.75;
+:root[data-theme="light"] .v-social {
+  --recovery: #336b5c;
 }
 
-.social-group {
+/* ---- Hero ---------------------------------------------------------------- */
+.social-hero {
+  position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+  padding: 36px 0 28px;
+  margin-bottom: 28px;
 }
-.social-group-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-.social-group-head h2 {
+.social-hero h1 {
   margin: 0;
+  font-size: clamp(40px, 5.1vw, 72px);
+  letter-spacing: -0.045em;
+  line-height: 1.15;
 }
-.social-group-head p {
-  margin: 4px 0 0;
+.social-hero > p {
+  max-width: 520px;
+  margin: 0;
+  color: var(--ink-secondary);
+  font-size: 16px;
+  line-height: 1.6;
 }
-.social-members {
-  display: flex;
-  gap: 4px;
+.social-hero-glow {
+  position: absolute;
+  z-index: -2;
+  inset: -40px 0 -20px;
+  background: var(--glow-report);
+  pointer-events: none;
 }
+.social-hero-faces {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  pointer-events: none;
+  user-select: none;
+}
+.social-hero-faces > span {
+  position: absolute;
+  opacity: 0.55;
+  animation: social-float 7s ease-in-out calc(var(--i) * -1.1s) infinite;
+}
+/* scattered around the heading, three on each side */
+.social-hero-faces > span:nth-child(1) {
+  left: 6%;
+  top: 18%;
+}
+.social-hero-faces > span:nth-child(2) {
+  left: 15%;
+  top: 62%;
+}
+.social-hero-faces > span:nth-child(3) {
+  left: 24%;
+  top: 8%;
+}
+.social-hero-faces > span:nth-child(4) {
+  right: 24%;
+  top: 10%;
+}
+.social-hero-faces > span:nth-child(5) {
+  right: 14%;
+  top: 60%;
+}
+.social-hero-faces > span:nth-child(6) {
+  right: 5%;
+  top: 22%;
+}
+.social-hero-faces > span:nth-child(n + 7) {
+  display: none;
+}
+@keyframes social-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-4deg);
+  }
+  50% {
+    transform: translateY(-12px) rotate(4deg);
+  }
+}
+.social-toggle {
+  width: min(320px, 100%);
+  margin: 12px 0 0;
+}
+.social-toggle button {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* ---- Avatars ------------------------------------------------------------- */
 .social-avatar {
   flex: none;
   display: inline-grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
   border-radius: 50%;
-  background: var(--interactive-soft);
-  color: var(--interactive);
-  font-size: 12px;
   font-weight: 700;
+  letter-spacing: 0;
+  color: hsl(var(--avatar-hue) 45% 18%);
+  background: linear-gradient(
+    145deg,
+    hsl(var(--avatar-hue) 70% 82%),
+    hsl(var(--avatar-hue) 55% 66%)
+  );
+  box-shadow: 0 0 0 2px var(--card);
+}
+.social-avatar.is-me {
+  color: #1b1f3b;
+  background: linear-gradient(145deg, #ffa595, #ff6f5b);
+}
+.social-stack {
+  display: inline-flex;
+  align-items: center;
+}
+.social-stack > * + * {
+  margin-left: -7px;
+}
+.social-more {
+  margin-left: 4px !important;
+  font-size: 11px;
+  color: var(--ink-muted);
 }
 
-.social-boards {
+/* ---- Group switcher ------------------------------------------------------ */
+.social-groups {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 6px;
+  padding: 6px;
+  background: var(--card-2);
+  border: 1px solid var(--hairline);
+  border-radius: 18px;
+  margin-bottom: 24px;
+}
+.social-group-tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 13px;
+  background: transparent;
+  color: var(--ink-muted);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.social-group-tab > :not(.social-group-indicator) {
+  position: relative;
+  z-index: 1;
+}
+.social-group-tab:hover:not(.active) {
+  color: var(--ink-secondary);
+}
+.social-group-tab.active {
+  color: var(--ink-primary);
+}
+.social-group-indicator {
+  position: absolute;
+  inset: 0;
+  background: var(--card);
+  border: 1px solid var(--hairline);
+  border-radius: 13px;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.1);
+}
+.social-group-icon {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  border: 1px solid var(--hairline);
+  background: var(--interactive-soft);
+  color: var(--interactive);
+}
+.social-group-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.social-group-text strong {
+  font-size: 15px;
+  font-weight: 600;
+}
+.social-group-text span {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- Cards --------------------------------------------------------------- */
+.social-card,
+.social-board {
+  min-width: 0;
+  border: 1px solid var(--hairline);
+  border-radius: 20px;
+  background: linear-gradient(145deg, var(--card), var(--card-2));
+  padding: 24px;
+  box-shadow: 0 4px 20px rgb(0 0 0 / 0.025);
+}
+.social-card > section,
+.social-board > section {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.social-card h3,
+.social-board h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 550;
+  letter-spacing: -0.025em;
+  line-height: 1.3;
+}
+.social-board-icon {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  color: var(--interactive);
+  background: var(--interactive-soft);
+}
+
+/* summary row: your standing, the team goal, the season podium */
+.social-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.25fr;
   gap: 16px;
 }
-.social-board header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 12px;
+.social-standing {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(130deg, var(--interactive-soft), var(--card));
 }
-.social-board h3,
-.social-goal h3,
-.social-challenge h3 {
+.social-standing::after {
+  content: "";
+  position: absolute;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  background: var(--interactive);
+  opacity: 0.05;
+  top: -70px;
+  right: -60px;
+  pointer-events: none;
+}
+.social-big {
+  margin: 4px 0 0;
+  font-size: clamp(54px, 6vw, 76px);
+  font-weight: 500;
+  letter-spacing: -0.06em;
+  line-height: 1;
+}
+.social-big small {
+  font-size: 18px;
+  letter-spacing: -0.01em;
+  color: var(--ink-muted);
+}
+.social-standing p.secondary {
   margin: 0;
-  font-size: 17px;
+  line-height: 1.6;
 }
-.social-board ol,
-.social-standings ol,
-.social-progress {
+.social-members {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 6px;
+}
+
+.social-goal-ring {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin: auto 0;
+}
+.social-goal-ring svg {
+  width: min(200px, 100%);
+  height: auto;
+}
+.social-goal-value {
+  fill: var(--ink-primary);
+  font-size: 34px;
+  font-weight: 500;
+  letter-spacing: -0.05em;
+}
+.social-goal-of {
+  fill: var(--ink-muted);
+  font-size: 12px;
+}
+.social-goal-ring p {
+  margin: 0;
+}
+
+/* season podium */
+.social-podium {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  align-items: end;
+  gap: 8px;
+  margin-top: 8px;
+}
+.social-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.social-step-name {
+  font-size: 13px;
+  font-weight: 600;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.social-step.is-me .social-step-name {
+  color: var(--accent);
+}
+.social-step-block {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2px;
+  padding-top: 10px;
+  border-radius: 12px 12px 4px 4px;
+  border: 1px solid var(--hairline);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--step) 30%, var(--card)),
+    var(--card)
+  );
+}
+.social-step-block strong {
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--step);
+}
+.social-step-block span {
+  font-size: 12px;
+  color: var(--ink-secondary);
+}
+.social-step.place-1 {
+  --step: var(--social-gold);
+}
+.social-step.place-2 {
+  --step: var(--social-silver);
+}
+.social-step.place-3 {
+  --step: var(--social-bronze);
+}
+.social-step.place-1 .social-step-block {
+  height: 104px;
+}
+.social-step.place-2 .social-step-block {
+  height: 80px;
+}
+.social-step.place-3 .social-step-block {
+  height: 62px;
+}
+.social-rest {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 6px;
+  gap: 2px;
 }
-.social-board li,
-.social-standings li {
+.social-rest li {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 7px 8px;
+  padding: 6px 8px;
   border-radius: 10px;
+  font-size: 13px;
+  color: var(--ink-secondary);
 }
-.social-board li.is-me,
-.social-standings li.is-me,
-.social-progress li.is-me {
+.social-rest li.is-me {
   background: var(--interactive-soft);
+  color: var(--ink-primary);
+}
+
+/* ---- Leaderboards -------------------------------------------------------- */
+.social-boards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+.social-board header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.social-board-period {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink-muted);
+  text-align: right;
+}
+.social-board ol {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: grid;
+}
+.social-board li {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  align-items: center;
+  column-gap: 10px;
+  padding: 12px 8px 14px;
+  border-top: 1px solid var(--hairline);
+}
+.social-board li.is-me {
+  border-radius: 12px;
+  border-top-color: transparent;
+  background: var(--interactive-soft);
+}
+.social-board li.is-me + li {
+  border-top-color: transparent;
+}
+.social-reach {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 5px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--card-3);
+  overflow: hidden;
+}
+.social-reach::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: calc(var(--reach) * 100%);
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--interactive), var(--recovery));
+  opacity: 0.75;
+}
+.social-board li.is-me .social-reach::after {
+  background: linear-gradient(90deg, #ffa595, #ff6f5b);
+  opacity: 1;
 }
 .social-rank {
   flex: none;
   display: inline-grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   font-size: 12px;
   font-weight: 700;
   color: var(--ink-muted);
 }
 .social-rank.rank-1 {
-  background: #e8b04b;
+  background: var(--social-gold);
   color: #2a1d05;
 }
 .social-rank.rank-2 {
-  background: #c3cad6;
+  background: var(--social-silver);
   color: #1c2230;
 }
 .social-rank.rank-3 {
-  background: #c98a5a;
+  background: var(--social-bronze);
   color: #2a1608;
 }
 .social-name {
@@ -133,14 +498,28 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
+  gap: 2px;
   line-height: 1.25;
+  font-size: 14px;
+  font-weight: 500;
+}
+.social-name > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .social-value {
+  font-size: 15px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 .social-usual {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   font-size: 12px;
+  font-weight: 400;
   color: var(--ink-muted);
 }
 .social-usual.is-good,
@@ -151,100 +530,143 @@
   color: var(--score-negative);
 }
 
-.social-extras {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  align-items: start;
-  gap: 16px;
-}
-.social-goal {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.social-bar {
-  height: 10px;
-  border-radius: 999px;
-  background: var(--card-2);
-  overflow: hidden;
-}
-.social-bar span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--interactive), #7fd3b0);
-}
-.social-goal p,
-.social-standings p {
-  margin: 0;
-}
-.social-standings {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.social-section-head h2 {
-  margin: 0;
-}
-.social-section-head p {
-  margin: 4px 0 0;
-}
+/* ---- Challenges ---------------------------------------------------------- */
 .social-challenges {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
   margin-top: 16px;
 }
 .social-challenge-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 16px;
-}
-.social-challenge {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.social-challenge.is-joined {
-  border-color: var(--interactive);
+  align-items: start;
 }
 .social-challenge header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
-.social-challenge header p {
-  margin: 4px 0 0;
+.social-challenge p {
+  margin: 0;
+}
+.social-challenge.is-joined {
+  border-color: color-mix(in srgb, var(--interactive) 55%, var(--hairline));
+  background: linear-gradient(145deg, var(--interactive-soft), var(--card) 60%);
+}
+.social-joined {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--interactive-ink);
+  background: var(--interactive);
+}
+.social-challenge-mine {
+  font-size: 14px;
+  color: var(--ink-secondary);
+}
+.social-challenge-mine strong {
+  font-size: 26px;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  color: var(--ink-primary);
+}
+.social-progress {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
 }
 .social-progress li {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 5px 8px;
+  padding: 6px 8px;
   border-radius: 10px;
 }
-.social-progress .social-name {
-  flex: 1;
+.social-progress li.is-me {
+  background: var(--interactive-soft);
 }
 .social-dots {
   display: flex;
   gap: 4px;
 }
 .social-dots span {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--card-2);
+  width: 14px;
+  height: 14px;
+  border-radius: 5px;
+  background: var(--card-3);
   border: 1px solid var(--hairline);
 }
 .social-dots span.on {
-  background: var(--interactive);
-  border-color: var(--interactive);
+  background: linear-gradient(145deg, var(--interactive), var(--recovery));
+  border-color: transparent;
 }
+.social-progress li.is-me .social-dots span.on {
+  background: linear-gradient(145deg, #ffa595, #ff6f5b);
+}
+.social-progress li > .small {
+  min-width: 28px;
+  text-align: right;
+}
+.social-challenge-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 8px;
+}
+
 .social-privacy {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 12px;
+  margin: 36px auto 0;
+  max-width: 640px;
+  padding: 14px 18px;
+  border-radius: 14px;
+  border: 1px solid var(--hairline);
+  background: var(--card-2);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-secondary);
+}
+.social-privacy > .icon {
+  flex: none;
+  color: var(--interactive);
+}
+
+/* ---- Small screens and reduced motion ------------------------------------ */
+@media (max-width: 1000px) {
+  .social-summary {
+    grid-template-columns: 1fr 1fr;
+  }
+  .social-standings {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 640px) {
+  .social-summary {
+    grid-template-columns: 1fr;
+  }
+  .social-hero-faces {
+    display: none;
+  }
+  .social-dots span {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .social-hero-faces > span {
+    animation: none;
+  }
+}
+.v-social.is-motion-paused .social-hero-faces > span {
+  animation: none;
 }

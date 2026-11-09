@@ -417,46 +417,16 @@ function Finding({
                   </p>
                 ) : null}
                 {ev.series?.length ? (
-                  <>
-                    <Sparkline
-                      className="ah-evidence-spark"
-                      values={ev.series}
-                      norm={ev.series_baseline}
-                      height={64}
-                      unit={ev.unit}
-                      label={ev.kind}
-                      start={ev.series_start}
-                      stepMin={ev.series_step_min || 5}
-                    />
-                    <details className="ah-data-details">
-                      <summary>Read chart values</summary>
-                      <div className="ah-data-scroll">
-                        <table className="data">
-                          <thead>
-                            <tr>
-                              <th>Time</th>
-                              <th>Measured {ev.unit}</th>
-                              <th>Your usual</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {ev.series.map((v: number | null, j: number) => (
-                              <tr key={j}>
-                                <td>
-                                  {minuteLabel(
-                                    (minuteOf(ev.series_start, date) ?? 0) +
-                                      j * (ev.series_step_min || 5),
-                                  )}
-                                </td>
-                                <td>{fmt.num(v, 0)}</td>
-                                <td>{fmt.num(ev.series_baseline?.[j], 0)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </details>
-                  </>
+                  <Sparkline
+                    className="ah-evidence-spark"
+                    values={ev.series}
+                    norm={ev.series_baseline}
+                    height={64}
+                    unit={ev.unit}
+                    label={ev.kind}
+                    start={ev.series_start}
+                    stepMin={ev.series_step_min || 5}
+                  />
                 ) : null}
               </div>
             ) : null,

@@ -56,5 +56,34 @@ keys `source_records(user_id, source, source_record_id)` and
    missing. After a successful preview, set `APPLE_IMPORT_ENABLED=true` for the
    approved upload; set it back to `false` afterward.
 
-The importer adds raw records and Apple-specific daily metrics only. It does
-not populate the main app’s shared analysis summaries.
+## App summaries
+
+Use `STRESSLESS_API_URL` in your uploader's `.env` to point at the StressLess
+deployment with `POST /api/apple/derive` enabled. The raw upload is independent
+of the website. After a successful raw upload, explicitly process the same
+date range:
+
+```sh
+python3 sync_apple.py --derive --since 2026-09-01 --until 2026-09-28T12:00:00 --timezone America/Los_Angeles
+```
+
+The CLI uses an inclusive start and exclusive end, then asks the backend to
+process the local dates those bounds touch. Use a window with complete Apple
+data for the days and nights you want to process. The report engine reads the
+same shared summary tables for all sources, and the Apple importer preserves the
+original HealthKit measurements, units and categories in `source_records`.
+
+- Apple Activity Summary totals take priority over reconstructed energy,
+  exercise and stand totals. Exported workout heart-rate statistics take
+  priority over averages calculated from nearby samples.
+- Recorded sleep stages and overnight vitals are used when present.
+  StressLess calculates its own sleep score from measured sleep.
+- Apple-only `health.*` values are available as report inputs when present.
+- Screen Time merges overlapping sessions across devices. The 22:00–03:00
+  late-use window belongs to the evening's date.
+
+Apply the reviewed Apple metrics registry migration
+`20261109000000_apple_health_metrics.sql` before using server-side processing.
+The backend fills missing summaries and keeps existing Apple, Android and
+Garmin rows for the same keys. This is a separate write operation from the raw
+upload. The read-only public demo blocks this processing endpoint.

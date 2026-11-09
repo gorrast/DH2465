@@ -85,6 +85,8 @@ class Fake:
             for new in body if isinstance(body, list) else [body]:
                 old = next((r for r in self.tables[table] if keys != [""] and all(r[k] == new[k] for k in keys)), None)
                 if old:
+                    if "resolution=ignore-duplicates" in request.headers.get("prefer", ""):
+                        continue
                     old.update(new)
                 else:
                     old = dict({"id": str(uuid.uuid4())} if table != "provider_connection_credentials" else {}, **new)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 import csv
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import gzip
 import hashlib
 import json
@@ -280,6 +280,29 @@ def upload(client, run, state, batch_size, target, approval):
     atomic_json(run / 'sync_state.json', state)
 
 
+def derive_body(lower, upper, zone):
+    """The local dates the server should recompute: the nights and days the selected window covers."""
+    body = dict(timeZone=str(zone))
+    if upper is not None:
+        body['until'] = (upper - timedelta(microseconds=1)).astimezone(zone).date().isoformat()
+    if lower is not None:
+        body['since'] = lower.astimezone(zone).date().isoformat()
+    return body
+
+
+def derive(client, config, body):
+    api = (config.get('STRESSLESS_API_URL') or '').strip()
+    if not api:
+        print('STRESSLESS_API_URL is not set: the app summaries (sleep scores, steps, heart rate) were not computed.\n'
+              'Set it in .env, then run: python3 sync_apple.py --derive')
+        return False
+    print('Computing sleep scores, heart rate, activity and screen-time summaries on the server...', flush=True)
+    result = client.derive(api, body)
+    stored = result.get('stored') or {}
+    print(f'  {result.get("since")} .. {result.get("until")}: ' + ', '.join(f'{v:,} {k.replace("_", " ")}' for k, v in stored.items()))
+    return True
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--env-file', type=Path, default=ROOT / '.env')
@@ -288,6 +311,8 @@ def main(argv=None):
     mode.add_argument('--preview', action='store_true', help='validate batches online without writing application data')
     mode.add_argument('--upload', action='store_true', help='append new rows only; requires a saved approved preview')
     mode.add_argument('--check-connection', action='store_true', help='verify login, consent and standalone endpoint; no application-data writes')
+    mode.add_argument('--derive', action='store_true', help='fill missing app summaries from already uploaded raw data; '
+                      '--since/--until pick the dates (default: the last 70 days)')
     parser.add_argument('--approve-plan', help='SHA256 printed by the reviewed online preview')
     parser.add_argument('--only', choices=['all', 'screen', 'health'], default='all')
     parser.add_argument('--health-export', type=Path, default=ROOT / 'apple_health_export')
@@ -316,6 +341,15 @@ def main(argv=None):
             raise SyncError('--upload requires --resume RUN and --approve-plan HASH from an online preview.')
         if args.approve_plan and not args.upload:
             raise SyncError('--approve-plan is only valid with --upload.')
+        if args.derive:
+            config = read_config(args.env_file.expanduser())
+            url, key, _ = settings(config)
+            client = Client(url, key)
+            user_id = uuid_arg(client.login(config))
+            if config.get('SUPABASE_USER_ID') and uuid_arg(config['SUPABASE_USER_ID']) != user_id:
+                raise SyncError('Signed-in user differs from optional SUPABASE_USER_ID; stopped.')
+            zone = ZoneInfo(args.timezone)
+            return 0 if derive(client, config, derive_body(*date_bounds(args.since, args.until, zone), zone)) else 1
         if args.check_connection:
             config = read_config(args.env_file.expanduser())
             url, key, _ = settings(config)
@@ -352,7 +386,7 @@ def main(argv=None):
                 if not info.get('enabled'):
                     raise SyncError('Server-side uploads are disabled. See the admin setup in README.md.')
                 upload(client, run, state, args.batch_size, target, args.approve_plan)
-                print('Append-only upload complete. Existing rows and shared summaries were not overwritten.')
+                print('Append-only upload complete. Run --derive separately to prepare app summaries.')
         for warning in state['warnings']:
             print('Warning: ' + warning)
         return 2 if state['warnings'] else 0

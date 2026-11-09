@@ -143,6 +143,30 @@ class Client:
         self.project_ref = result['project_ref']
         return result
 
+    def derive(self, api_url, body):
+        """Ask the StressLess API to compute the app's nights and days (sleep_nights, heart_rate_days,
+        daily_activity, daily_metrics) from the raw Apple records already uploaded. Safe to repeat."""
+        parts = urlsplit(api_url)
+        local = parts.hostname in ('localhost', '127.0.0.1')
+        if not parts.hostname or parts.scheme != 'https' and not (local and parts.scheme == 'http') or parts.query or parts.fragment:
+            raise APIError('STRESSLESS_API_URL must be the HTTPS address of the StressLess API (http only for localhost).')
+        if not self.access_token:
+            raise APIError('Sign in before making a data request.')
+        if self.refresh_token and self.expires_at and time.time() >= self.expires_at - 60:
+            self.refresh()
+        request = Request(api_url.rstrip('/') + '/api/apple/derive', method='POST',
+                          data=json.dumps(body).encode(), headers={'Content-Type': 'application/json', 'Accept': 'application/json',
+                                                                   'Authorization': 'Bearer ' + self.access_token})
+        try:
+            with self.opener.open(request, timeout=300) as response:
+                return json.loads(response.read() or b'{}')
+        except HTTPError as exc:
+            exc.close()
+            hint = {400: 'invalid date range', 401: 'sign-in rejected', 403: 'consent missing in the app'}.get(exc.code, 'server error')
+            raise APIError(f'Computing the app summaries failed (HTTP {exc.code}: {hint}). The raw upload is kept; rerun with --derive.') from None
+        except (URLError, TimeoutError, OSError):
+            raise APIError('Could not reach STRESSLESS_API_URL. The raw upload is kept; rerun with --derive.') from None
+
     def import_batch(self, table, rows, preview=True):
         if table not in ('source_records', 'daily_metrics') or not getattr(self, 'project_ref', None):
             raise APIError('Check the standalone endpoint before importing.')

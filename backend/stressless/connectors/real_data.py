@@ -27,6 +27,7 @@ AHEAD = 7                                      # calendar days after today (plan
 
 HEALTH_SOURCES = ("health_connect", "apple_health")
 SOURCE_LABELS = {"health_connect": "Health Connect (Android)", "apple_health": "Apple Health (iPhone)",
+                 "apple_screen_time": "Screen Time (Apple)", "screen_time": "Screen time (Android)",
                  "google_calendar": "Google Calendar"}
 
 

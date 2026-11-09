@@ -31,7 +31,7 @@ from ..engine.media_insights import analyze_media
 from ..sim.personas import PERSONA_ORDER, PERSONAS
 from ..store import SupabaseError
 from ..timeutil import parse_date
-from . import calendar, checkins, phone_sync, session, reports, social
+from . import apple_sync, calendar, checkins, phone_sync, session, reports, social
 from .auth import Principal, current_principal
 
 log = logging.getLogger("stressless.server")
@@ -41,6 +41,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 app = FastAPI(title="StressLess API", version=__version__, docs_url="/api/docs", openapi_url="/api/openapi.json", redoc_url=None)
 app.include_router(calendar.router)
 app.include_router(phone_sync.router)
+app.include_router(apple_sync.router)
 app.include_router(checkins.router)
 app.include_router(reports.router)
 app.include_router(social.router)

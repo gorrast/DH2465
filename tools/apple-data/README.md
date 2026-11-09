@@ -56,5 +56,27 @@ keys `source_records(user_id, source, source_record_id)` and
    missing. After a successful preview, set `APPLE_IMPORT_ENABLED=true` for the
    approved upload; set it back to `false` afterward.
 
-The importer adds raw records and Apple-specific daily metrics only. It does
-not populate the main app’s shared analysis summaries.
+## App summaries
+
+The upload itself only adds raw records. When it finishes, the importer calls
+the StressLess API (`STRESSLESS_API_URL` in `.env`) at `POST /api/apple/derive`,
+which reads those raw records back and computes what the app uses, the same
+tables an Android phone sync fills:
+
+- `sleep_nights`: one scored night per date, with stages and the overnight
+  HRV (SDNN), resting heart rate, breathing rate, blood oxygen and wrist
+  temperature deviation
+- `heart_rate_days`: per-minute heart rate
+- `daily_activity`: steps, hourly steps, exercise minutes and workouts (with
+  heart rate and calories)
+- `daily_metrics`: `screen.minutes` and `screen.late_minutes`, plus the
+  Apple-only `health.*` values (active energy, exercise minutes, stand hours,
+  VO2 max, walking heart rate, daytime HRV, mindful minutes; migration
+  `20261109000000_apple_health_metrics.sql`)
+
+It overwrites the computed rows for the dates it covers and can be repeated,
+for example after uploading more data or when the URL was not set:
+
+```sh
+python3 sync_apple.py --derive --since 2026-09-01 --until 2026-11-01
+```

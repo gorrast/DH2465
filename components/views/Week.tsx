@@ -120,7 +120,7 @@ export function WeekView({ end: endParam }: { end?: string }) {
   const paused = !!reduced;
   const [weeks, setWeeks] = useState(4);
   const load = useLoad(() => api.get('/api/week?end=' + end + (hd ? '&history_days=' + hd : '')), [end, hd, meta.persona.key]);
-  const appStatistics = useAppStatistics();
+  const appStatistics = useAppStatistics(today);
   const floatingApps = featuredAppBrands(appStatistics.apps.data || [], (appStatistics.appHR.data || []).map(app => ({ packageName: app.package_name, appName: app.app_name })));
   const appKeys = new Set(floatingApps.map(app => app.key));
   const headerApps = [...floatingApps, ...EXAMPLE_APP_BRANDS.filter(app => !appKeys.has(app.key))].slice(0, 7);

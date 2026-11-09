@@ -14,7 +14,9 @@ import { gsap } from "gsap";
 import { Flip } from "gsap/Flip";
 
 gsap.registerPlugin(Flip);
+import { dates } from "@/lib/format";
 import { getSupabase } from "@/lib/supabase/client";
+import { useApp } from "../shell/AppContext";
 import { Icon } from "../ui/Icon";
 import { useLoad } from "./common";
 import type { AppStatistics } from "./useAppStatistics";
@@ -52,16 +54,6 @@ type FlowCandidate = {
   app_sessions: number;
   unlocks_during_event: number;
 };
-type WrappedResult = {
-  archetype: string;
-  item_title: string;
-  artist_name: string | null;
-  primary_value: number | null;
-  comparison_value: number | null;
-  sample_count: number;
-  plays_count: number;
-  note: string;
-};
 type MeetingHangover = {
   event_id: string;
   event_title: string | null;
@@ -74,8 +66,11 @@ type MeetingHangover = {
   post_hr_sample_count: number;
 };
 
-async function rpc<T>(name: string): Promise<T[]> {
-  const { data, error } = await getSupabase().rpc(name);
+/** A statistics function, counting back from the app's "now" (frozen on the demo) instead of the database clock. */
+async function rpc<T>(name: string, today: string): Promise<T[]> {
+  const { data, error } = await getSupabase().rpc(name, {
+    p_as_of: dates.asOf(today),
+  });
   if (error) throw new Error(error.message);
   return (data || []) as T[];
 }
@@ -304,6 +299,7 @@ export function FunStatisticsView({
   appStatistics: AppStatistics;
 }) {
   const paused = useWeeklyMotion();
+  const { today } = useApp();
   const [focused, setFocused] = useState<number | null>(null);
   const grid = useRef<HTMLDivElement>(null);
   const snapshot = useRef<ReturnType<typeof Flip.getState> | null>(null);
@@ -345,35 +341,30 @@ export function FunStatisticsView({
   // Each insight loads independently: a slow or unavailable source never blocks the others.
   const { apps, appHR } = appStatistics;
   const eventHR = useLoad(
-    () => rpc<EventHeartRate>("top_calendar_events_by_heart_rate"),
-    [],
+    () => rpc<EventHeartRate>("top_calendar_events_by_heart_rate", today),
+    [today],
   );
   const spotify = useLoad(
-    () => rpc<SpotifyTrack>("top_spotify_tracks_by_gets_you_going"),
-    [],
+    () => rpc<SpotifyTrack>("top_spotify_tracks_by_gets_you_going", today),
+    [today],
   );
   const flow = useLoad(
     async () =>
       Array.from(
         new Map(
-          (await rpc<FlowCandidate>("flow_state_candidates")).map((block) => [
-            `${block.event_category}:${block.event_title}:${block.starts_at}:${block.ends_at}`,
-            block,
-          ]),
+          (await rpc<FlowCandidate>("flow_state_candidates", today)).map(
+            (block) => [
+              `${block.event_category}:${block.event_title}:${block.starts_at}:${block.ends_at}`,
+              block,
+            ],
+          ),
         ).values(),
       ),
-    [],
+    [today],
   );
-  const wrapped = useLoad(async () => {
-    const [archetypes, tracks] = await Promise.all([
-      rpc<WrappedResult>("cardiac_wrapped"),
-      rpc<SpotifyTrack>("top_spotify_track_gets_you_going_this_week"),
-    ]);
-    return { archetypes, track: tracks[0] };
-  }, []);
   const meetings = useLoad(
-    () => rpc<MeetingHangover>("meeting_hangover_index"),
-    [],
+    () => rpc<MeetingHangover>("meeting_hangover_index", today),
+    [today],
   );
   return (
     <section
@@ -389,9 +380,7 @@ export function FunStatisticsView({
             <h1 id="weekly-numbers-title">Your week in numbers</h1>
           )}
         </div>
-        <p>
-          Seven insights. Click a card to explore.
-        </p>
+        <p>Seven insights. Click a card to explore.</p>
       </header>
       <p className="weekly-stat-instruction">
         <Icon name="info" size={14} />
@@ -554,67 +543,10 @@ export function FunStatisticsView({
             </ol>
           </StatisticCard>
           <StatisticCard
-            title="Your Cardiac Wrapped"
-            icon="sparkles"
-            period="Last 7 days"
-            index={5}
-            summary={{
-              value:
-                wrapped.data?.track?.gets_you_going_score ??
-                wrapped.data?.archetypes[0]?.primary_value ??
-                null,
-              unit: wrapped.data?.track ? "/100" : "bpm",
-              label:
-                wrapped.data?.track?.song_title ||
-                wrapped.data?.archetypes[0]?.archetype ||
-                "Your music response",
-            }}
-            load={wrapped}
-            empty={!wrapped.data?.archetypes.length && !wrapped.data?.track}
-            note="Stationary = ≤2,000 recorded daily steps. Calmer is compared with non-Spotify heart rate, not verified silence."
-          >
-            <ul>
-              {wrapped.data?.track ? (
-                <StatRow
-                  title={wrapped.data.track.song_title}
-                  subtitle={`Gets You Going · ${wrapped.data.track.artist_name}`}
-                  value={wrapped.data.track.gets_you_going_score}
-                  unit="/100"
-                  detail={`${number(wrapped.data.track.avg_bpm)} bpm avg · ${number(wrapped.data.track.peak_bpm)} peak · ${signed(wrapped.data.track.bpm_above_resting)} above resting · ${wrapped.data.track.times_played} plays`}
-                />
-              ) : null}
-              {wrapped.data?.archetypes.map((result) => (
-                <StatRow
-                  key={result.archetype}
-                  title={
-                    (result.archetype === "True Calmer"
-                      ? result.artist_name
-                      : result.item_title) || result.archetype
-                  }
-                  subtitle={[
-                    result.archetype,
-                    result.archetype !== "True Calmer" && result.artist_name,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
-                  value={result.primary_value}
-                  unit={
-                    result.archetype === "True Calmer"
-                      ? "bpm below"
-                      : result.archetype === "Cardiac Anthem"
-                        ? "bpm surge"
-                        : "bpm variation"
-                  }
-                  detail={`${result.archetype === "Cardiac Anthem" ? "Peak HR" : result.archetype === "True Calmer" ? "Artist-play average" : "Average HR"} ${number(result.comparison_value)} bpm · ${result.sample_count} samples · ${result.plays_count} plays. ${result.note}`}
-                />
-              ))}
-            </ul>
-          </StatisticCard>
-          <StatisticCard
             title="Meeting Hangover Index"
             icon="briefcase"
             period="Last 30 days"
-            index={6}
+            index={5}
             summary={{
               value: meetings.data?.[0]?.post_meeting_hr_drift ?? null,
               unit: "bpm drift",

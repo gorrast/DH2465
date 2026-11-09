@@ -75,6 +75,9 @@ export const dates = {
   localToday: () => toISODate(new Date()),
   weekday: (iso: string) => DAYS[parseISODate(iso).getDay()],
   diffDays: (a: string, b: string) => Math.round((parseISODate(b).getTime() - parseISODate(a).getTime()) / 86400000),
+  /** "Now" as the app sees it: the current time of day on the app's today, which STRESSLESS_ANCHOR can freeze. Queries
+   * that count back ("the last 7 days") start from here, so they line up with the data on the demo. */
+  asOf: (today: string) => new Date(Date.now() + dates.diffDays(dates.localToday(), today) * 86400000).toISOString(),
 };
 
 export const minuteLabel = (m: number) => {

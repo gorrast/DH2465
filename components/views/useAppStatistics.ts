@@ -1,5 +1,6 @@
 "use client";
 
+import { dates } from "@/lib/format";
 import { getSupabase } from "@/lib/supabase/client";
 import { useLoad } from "./common";
 
@@ -19,7 +20,8 @@ export type AppHeartRate = {
   sessions_measured: number;
 };
 
-async function topApps(): Promise<AppUsage[]> {
+async function topApps(today: string): Promise<AppUsage[]> {
+  const asOf = dates.asOf(today);
   const supabase = getSupabase();
   const { data: auth, error: authError } = await supabase.auth.getUser();
   if (authError) throw new Error(authError.message);
@@ -29,7 +31,8 @@ async function topApps(): Promise<AppUsage[]> {
     .select("source_record_id,value")
     .eq("user_id", auth.user.id)
     .eq("data_type", "app_usage")
-    .gte("start_at", new Date(Date.now() - 7 * 86400000).toISOString());
+    .gte("start_at", new Date(Date.parse(asOf) - 7 * 86400000).toISOString())
+    .lt("start_at", asOf);
   if (error) throw new Error(error.message);
   const totals = new Map<string, number>();
   for (const row of data || []) {
@@ -62,14 +65,16 @@ async function topApps(): Promise<AppUsage[]> {
     .slice(0, 5);
 }
 
-/** The header and statistic cards share these requests and their current results. */
-export function useAppStatistics() {
-  const apps = useLoad(topApps, []);
+/** The header and statistic cards share these requests and their current results. `today` is the app's today. */
+export function useAppStatistics(today: string) {
+  const apps = useLoad(() => topApps(today), [today]);
   const appHR = useLoad(async () => {
-    const { data, error } = await getSupabase().rpc("top_apps_by_heart_rate");
+    const { data, error } = await getSupabase().rpc("top_apps_by_heart_rate", {
+      p_as_of: dates.asOf(today),
+    });
     if (error) throw new Error(error.message);
     return (data || []) as AppHeartRate[];
-  }, []);
+  }, [today]);
   return { apps, appHR };
 }
 

@@ -54,6 +54,16 @@ type FlowCandidate = {
   app_sessions: number;
   unlocks_during_event: number;
 };
+type WrappedResult = {
+  archetype: string;
+  item_title: string;
+  artist_name: string | null;
+  primary_value: number | null;
+  comparison_value: number | null;
+  sample_count: number;
+  plays_count: number;
+  note: string;
+};
 type MeetingHangover = {
   event_id: string;
   event_title: string | null;
@@ -362,6 +372,13 @@ export function FunStatisticsView({
       ),
     [today],
   );
+  const wrapped = useLoad(async () => {
+    const [archetypes, tracks] = await Promise.all([
+      rpc<WrappedResult>("cardiac_wrapped", today),
+      rpc<SpotifyTrack>("top_spotify_track_gets_you_going_this_week", today),
+    ]);
+    return { archetypes, track: tracks[0] };
+  }, [today]);
   const meetings = useLoad(
     () => rpc<MeetingHangover>("meeting_hangover_index", today),
     [today],
@@ -543,10 +560,67 @@ export function FunStatisticsView({
             </ol>
           </StatisticCard>
           <StatisticCard
+            title="Your Cardiac Wrapped"
+            icon="sparkles"
+            period="Last 7 days"
+            index={5}
+            summary={{
+              value:
+                wrapped.data?.track?.gets_you_going_score ??
+                wrapped.data?.archetypes[0]?.primary_value ??
+                null,
+              unit: wrapped.data?.track ? "/100" : "bpm",
+              label:
+                wrapped.data?.track?.song_title ||
+                wrapped.data?.archetypes[0]?.archetype ||
+                "Your music response",
+            }}
+            load={wrapped}
+            empty={!wrapped.data?.archetypes.length && !wrapped.data?.track}
+            note="Stationary = ≤2,000 recorded daily steps. Calmer is compared with non-Spotify heart rate, not verified silence."
+          >
+            <ul>
+              {wrapped.data?.track ? (
+                <StatRow
+                  title={wrapped.data.track.song_title}
+                  subtitle={`Gets You Going · ${wrapped.data.track.artist_name}`}
+                  value={wrapped.data.track.gets_you_going_score}
+                  unit="/100"
+                  detail={`${number(wrapped.data.track.avg_bpm)} bpm avg · ${number(wrapped.data.track.peak_bpm)} peak · ${signed(wrapped.data.track.bpm_above_resting)} above resting · ${wrapped.data.track.times_played} plays`}
+                />
+              ) : null}
+              {wrapped.data?.archetypes.map((result) => (
+                <StatRow
+                  key={result.archetype}
+                  title={
+                    (result.archetype === "True Calmer"
+                      ? result.artist_name
+                      : result.item_title) || result.archetype
+                  }
+                  subtitle={[
+                    result.archetype,
+                    result.archetype !== "True Calmer" && result.artist_name,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                  value={result.primary_value}
+                  unit={
+                    result.archetype === "True Calmer"
+                      ? "bpm below"
+                      : result.archetype === "Cardiac Anthem"
+                        ? "bpm surge"
+                        : "bpm variation"
+                  }
+                  detail={`${result.archetype === "Cardiac Anthem" ? "Peak HR" : result.archetype === "True Calmer" ? "Artist-play average" : "Average HR"} ${number(result.comparison_value)} bpm · ${result.sample_count} samples · ${result.plays_count} plays. ${result.note}`}
+                />
+              ))}
+            </ul>
+          </StatisticCard>
+          <StatisticCard
             title="Meeting Hangover Index"
             icon="briefcase"
             period="Last 30 days"
-            index={5}
+            index={6}
             summary={{
               value: meetings.data?.[0]?.post_meeting_hr_drift ?? null,
               unit: "bpm drift",

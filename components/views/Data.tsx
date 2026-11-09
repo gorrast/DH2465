@@ -40,7 +40,7 @@ const CLASSES = [
   ["Steps", "one total per day", "to see how active each day was", SYNCED],
   [
     "Screen time",
-    "which apps were open and when, screen unlocks (Android app)",
+    "which apps were open and when, and screen unlocks on Android",
     "to see how evening screen use relates to your sleep",
     SYNCED,
   ],
@@ -167,8 +167,8 @@ export function DataView() {
             status={isDemo ? "Demo data" : "Synced"}
             note={
               isDemo
-                ? "Simulated smartwatch: heart rate, sleep stages, HRV, resting heart rate. In the product: Health Connect, synced by the StressLess Android app."
-                : "Sleep and steps from Health Connect, synced by the StressLess Android app. Any watch that writes to Health Connect works."
+                ? "Simulated smartwatch: heart rate, sleep stages, HRV, resting heart rate. In the product: Health Connect on Android or Apple Health on iPhone."
+                : "Sleep and steps from Health Connect on Android or Apple Health on iPhone. Any watch that writes to either works."
             }
           />
         </div>

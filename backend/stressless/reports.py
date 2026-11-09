@@ -2,8 +2,8 @@
 
 Three layers
 ------------
-* ``ReportInput`` — everything the engine computed before the model is called. The model sees only this:
-  numbers, labels and dates, never ids, clock times, places or people (same rule as ``reasoning.build_payload``).
+* ``ReportInput`` — everything the engine computed before the model is called, plus the person's whole calendar
+  (every event with every field: titles, times, places, attendees, notes, ids). The model sees only this.
 * ``DailyContent`` / ``WeeklyContent`` — what the model writes. Words only: a finding points at the numbers
   behind it with ``evidence`` keys from the input, so the UI shows computed values and never model-written ones.
 * ``Report`` — the stored row: input + content + how and when it was made.
@@ -80,6 +80,21 @@ class DayPoint(BaseModel):
     tags: List[str] = Field(default_factory=list)   # "Travel day", "5 meetings", "Morning workout"
 
 
+class CalendarEntry(BaseModel):
+    """One calendar event, every field of ``models.CalendarEvent`` as it is stored (sent to the model as is)."""
+    id: str
+    title: str
+    start: datetime
+    end: datetime
+    type: str
+    location_hint: Optional[str] = None
+    attendees: int = 0
+    recurring_key: Optional[str] = None
+    source: str = "demo"
+    attended: Optional[bool] = None
+    notes: Optional[str] = None
+
+
 class ReportInput(BaseModel):
     kind: ReportKind
     period_start: date                         # daily: the morning; weekly: the Monday
@@ -90,6 +105,7 @@ class ReportInput(BaseModel):
     days: List[DayPoint] = Field(default_factory=list)       # weekly: each day; daily: the day before
     suggestions: List[str] = Field(default_factory=list)     # ready-made suggestion titles, best first
     notes: List[str] = Field(default_factory=list)           # gaps and caveats the report must respect
+    calendar: List[CalendarEntry] = Field(default_factory=list)   # every calendar event the person has, all fields
 
     def keys(self) -> set[str]:
         return {m.key for m in self.metrics} | {p.key for p in self.patterns}

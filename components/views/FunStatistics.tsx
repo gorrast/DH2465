@@ -14,7 +14,9 @@ import { gsap } from "gsap";
 import { Flip } from "gsap/Flip";
 
 gsap.registerPlugin(Flip);
+import { dates } from "@/lib/format";
 import { getSupabase } from "@/lib/supabase/client";
+import { useApp } from "../shell/AppContext";
 import { Icon } from "../ui/Icon";
 import { useLoad } from "./common";
 import type { AppStatistics } from "./useAppStatistics";
@@ -74,8 +76,11 @@ type MeetingHangover = {
   post_hr_sample_count: number;
 };
 
-async function rpc<T>(name: string): Promise<T[]> {
-  const { data, error } = await getSupabase().rpc(name);
+/** A statistics function, counting back from the app's "now" (frozen on the demo) instead of the database clock. */
+async function rpc<T>(name: string, today: string): Promise<T[]> {
+  const { data, error } = await getSupabase().rpc(name, {
+    p_as_of: dates.asOf(today),
+  });
   if (error) throw new Error(error.message);
   return (data || []) as T[];
 }
@@ -304,6 +309,7 @@ export function FunStatisticsView({
   appStatistics: AppStatistics;
 }) {
   const paused = useWeeklyMotion();
+  const { today } = useApp();
   const [focused, setFocused] = useState<number | null>(null);
   const grid = useRef<HTMLDivElement>(null);
   const snapshot = useRef<ReturnType<typeof Flip.getState> | null>(null);
@@ -345,35 +351,37 @@ export function FunStatisticsView({
   // Each insight loads independently: a slow or unavailable source never blocks the others.
   const { apps, appHR } = appStatistics;
   const eventHR = useLoad(
-    () => rpc<EventHeartRate>("top_calendar_events_by_heart_rate"),
-    [],
+    () => rpc<EventHeartRate>("top_calendar_events_by_heart_rate", today),
+    [today],
   );
   const spotify = useLoad(
-    () => rpc<SpotifyTrack>("top_spotify_tracks_by_gets_you_going"),
-    [],
+    () => rpc<SpotifyTrack>("top_spotify_tracks_by_gets_you_going", today),
+    [today],
   );
   const flow = useLoad(
     async () =>
       Array.from(
         new Map(
-          (await rpc<FlowCandidate>("flow_state_candidates")).map((block) => [
-            `${block.event_category}:${block.event_title}:${block.starts_at}:${block.ends_at}`,
-            block,
-          ]),
+          (await rpc<FlowCandidate>("flow_state_candidates", today)).map(
+            (block) => [
+              `${block.event_category}:${block.event_title}:${block.starts_at}:${block.ends_at}`,
+              block,
+            ],
+          ),
         ).values(),
       ),
-    [],
+    [today],
   );
   const wrapped = useLoad(async () => {
     const [archetypes, tracks] = await Promise.all([
-      rpc<WrappedResult>("cardiac_wrapped"),
-      rpc<SpotifyTrack>("top_spotify_track_gets_you_going_this_week"),
+      rpc<WrappedResult>("cardiac_wrapped", today),
+      rpc<SpotifyTrack>("top_spotify_track_gets_you_going_this_week", today),
     ]);
     return { archetypes, track: tracks[0] };
-  }, []);
+  }, [today]);
   const meetings = useLoad(
-    () => rpc<MeetingHangover>("meeting_hangover_index"),
-    [],
+    () => rpc<MeetingHangover>("meeting_hangover_index", today),
+    [today],
   );
   return (
     <section
@@ -389,9 +397,7 @@ export function FunStatisticsView({
             <h1 id="weekly-numbers-title">Your week in numbers</h1>
           )}
         </div>
-        <p>
-          Seven insights. Click a card to explore.
-        </p>
+        <p>Seven insights. Click a card to explore.</p>
       </header>
       <p className="weekly-stat-instruction">
         <Icon name="info" size={14} />

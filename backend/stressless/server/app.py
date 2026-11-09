@@ -31,7 +31,7 @@ from ..engine.media_insights import analyze_media
 from ..sim.personas import PERSONA_ORDER, PERSONAS
 from ..store import SupabaseError
 from ..timeutil import parse_date
-from . import apple_sync, calendar, checkins, phone_sync, session, reports
+from . import calendar, checkins, phone_sync, session, reports, social, apple_sync
 from .auth import Principal, current_principal
 
 log = logging.getLogger("stressless.server")
@@ -44,6 +44,7 @@ app.include_router(phone_sync.router)
 app.include_router(apple_sync.router)
 app.include_router(checkins.router)
 app.include_router(reports.router)
+app.include_router(social.router)
 JSON_TYPE = "application/json; charset=utf-8"
 MAX_MEDIA_UPLOAD_BYTES = 4 * 1024 * 1024
 MAX_MEDIA_UPLOAD_FILES = 20

@@ -3,9 +3,8 @@
 Everything here is computed by the engine; the model only puts it into words and picks which links are worth telling.
 What the pages already show (the recovery markers, the "similar day" causes behind last night) is context at most, and
 obvious links (``OBVIOUS``) are left out, so the report is about what only StressLess can see.
-Only numbers, code-written labels, dates, music names (artists, podcasts, shows) and the titles of recurring calendar
-activities that became a link (a series, or a title used on many days: "Statistics lecture", "Study session") go in: no
-other event titles, places, people, ids or clock times, because the input is sent to the model as is.
+The whole calendar goes in as well (``calendar``): every event the person has, with every field (title, start, end,
+type, place, attendees, series, source, attended, notes, id), unfiltered. The input is sent to the model as is.
 
 The heart of a report is its links (``Pattern``s from ``lifestyle``): how one data source goes with another in the
 person's own history. Links whose cause happened in the period come first, links between two sources before links
@@ -17,7 +16,7 @@ import statistics
 from datetime import date, timedelta
 from typing import Dict, List, Optional, Set
 
-from ..reports import Metric, Pattern, DayPoint, ReportInput
+from ..reports import CalendarEntry, Metric, Pattern, DayPoint, ReportInput
 from . import baselines as bl
 from .features import day_features, describe_features
 from .lifestyle import LifestylePattern, _has_calendar, active_on, day_tags, daytime_hr
@@ -73,12 +72,12 @@ def _metric(key: str, label: str, source: str, unit: str, value: Optional[float]
                   status=bl._status(zv, good))
 
 
-def _scrub(text: str, titles: List[str]) -> str:
-    """Engine texts can name calendar events ("Board dinner ran 2 h past 18:00"); the model never sees event names."""
-    for t in sorted(titles, key=len, reverse=True):
-        if t:
-            text = text.replace(t, "an event")
-    return text[:1].upper() + text[1:]
+def _calendar(ds) -> List[CalendarEntry]:
+    """Every calendar event in the dataset, all fields, oldest first (attended or not)."""
+    return [CalendarEntry(id=e.id, title=e.title, start=e.start, end=e.end, type=e.type, location_hint=e.location_hint,
+                          attendees=e.attendees, recurring_key=e.recurring_key, source=e.source, attended=e.attended,
+                          notes=e.notes)
+            for e in sorted(ds.events, key=lambda e: e.start)]
 
 
 def _days_before(d: date, n: int) -> List[date]:
@@ -218,20 +217,19 @@ def daily_input(engine, morning: date) -> ReportInput:
         metrics.append(_metric("calendar.meeting_time", "Time in meetings the day before", "calendar", "min",
                                float(f.meeting_minutes), [float(day_features(ds, d).meeting_minutes) for d in weekday_before], "down"))
 
-    titles = [ev.title for d in (night_date, morning) for ev in ds.events_on(d, include_unattended=True)]
     # Only links whose cause happened yesterday (or, for a short night, last night). The daily model's likely causes
     # behind last night are not sent: the Daily page shows them already ("Similar day patterns").
     lifestyle = engine.lifestyle(morning)
     happened = {p.key: int(active_on(ds, p, _cause_day(p, night_date))) for p in lifestyle if p.primary is not None}
     patterns = _links(lifestyle, happened, set(), "daily")
 
-    notes = [_scrub(n, titles) for n in (r.missing_data, r.unexplained_note, r.confidence_note) if n]
+    notes = [n for n in (r.missing_data, r.unexplained_note, r.confidence_note) if n]
     if not logged and any(_day_metric(ds, d, k) is not None for d in before for k, _, _, _ in CHECKIN_DEFS):
         notes.append("Coffee and alcohol were not logged for the day before, so the report cannot say whether they played a part.")
     yesterday = DayPoint(day=night_date, score=r.score, tags=_chips(ds, f) + day_tags(ds, night_date, lifestyle))
     return ReportInput(kind="daily", period_start=morning, period_end=morning,
                        n_nights=r.model.n_nights if r.model else 0, metrics=metrics, patterns=patterns, days=[yesterday],
-                       suggestions=[_scrub(s.title, titles) for s in r.suggestions], notes=notes)
+                       suggestions=[s.title for s in r.suggestions], notes=notes, calendar=_calendar(ds))
 
 
 def weekly_input(engine, monday: date, told: Optional[Set[str]] = None) -> ReportInput:
@@ -291,4 +289,4 @@ def weekly_input(engine, monday: date, told: Optional[Set[str]] = None) -> Repor
     if n_hist < 10:
         notes.append("Only %d nights of history before this week, so the usual values are rough." % n_hist)
     return ReportInput(kind="weekly", period_start=monday, period_end=days[-1], n_nights=n_hist, metrics=metrics,
-                       patterns=patterns, days=points, notes=notes)
+                       patterns=patterns, days=points, notes=notes, calendar=_calendar(ds))

@@ -35,6 +35,16 @@ OBVIOUS = frozenset({"late_screen", "heavy_screen", "many_pickups", "late_stream
 # Phone-sync screen time (daily_metrics): key, label, unit; lower is better for all three
 SCREEN_DEFS = (("screen.minutes", "Screen time", "min"), ("screen.late_minutes", "Screen time after 22:00", "min"),
                ("screen.pickups", "Phone pickups", "count"))
+# Apple Health values are optional and keep their own measurement semantics.
+APPLE_HEALTH_DEFS = (
+    ("health.active_energy", "Apple Health active energy", "kcal"),
+    ("health.exercise_min", "Apple Health exercise time", "min"),
+    ("health.stand_hours", "Apple Health stand hours", "count"),
+    ("health.vo2max", "Apple Health VO₂ max", "mL/kg/min"),
+    ("health.walking_hr", "Apple Health walking heart rate", "bpm"),
+    ("health.hrv_sdnn_day", "Apple Health daily HRV (SDNN)", "ms"),
+    ("health.mindful_min", "Apple Health mindful minutes", "min"),
+)
 # Manual check-ins (daily_metrics, source manual): key, label, unit, good direction
 CHECKIN_DEFS = (("intake.coffee_cups", "Coffee", "cups", "none"), ("intake.alcohol_units", "Alcohol", "units", "down"))
 
@@ -189,6 +199,11 @@ def daily_input(engine, morning: date) -> ReportInput:
         if v is not None:
             metrics.append(_metric(key, label + " the day before", "screen_time", unit, v,
                                    [_day_metric(ds, d, key) for d in before], "down"))
+    for key, label, unit in APPLE_HEALTH_DEFS:
+        v = _day_metric(ds, night_date, key)
+        if v is not None:
+            metrics.append(_metric(key, label + " the day before", "apple_health", unit, v,
+                                   [_day_metric(ds, d, key) for d in before], "none"))
     logged = False
     for key, label, unit, good in CHECKIN_DEFS:
         v = _day_metric(ds, night_date, key)
@@ -242,6 +257,11 @@ def weekly_input(engine, monday: date, told: Optional[Set[str]] = None) -> Repor
         if value is not None:
             metrics.append(_metric(key, label + " per day (week average)", "screen_time", unit, value,
                                    [_day_metric(ds, d, key) for d in _days_before(monday, HISTORY)], "down"))
+    for key, label, unit in APPLE_HEALTH_DEFS:
+        value = _mean([_day_metric(ds, d, key) for d in days])
+        if value is not None:
+            metrics.append(_metric(key, label + " (week average)", "apple_health", unit, value,
+                                   [_day_metric(ds, d, key) for d in _days_before(monday, HISTORY)], "none"))
     n_logged = sum(1 for d in days if any(_day_metric(ds, d, k) is not None for k, _, _, _ in CHECKIN_DEFS))
     for key, label, unit, good in CHECKIN_DEFS:
         value = _mean([_day_metric(ds, d, key) for d in days])

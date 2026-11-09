@@ -58,25 +58,32 @@ keys `source_records(user_id, source, source_record_id)` and
 
 ## App summaries
 
-The upload itself only adds raw records. When it finishes, the importer calls
-the StressLess API (`STRESSLESS_API_URL` in `.env`) at `POST /api/apple/derive`,
-which reads those raw records back and computes what the app uses, the same
-tables an Android phone sync fills:
-
-- `sleep_nights`: one scored night per date, with stages and the overnight
-  HRV (SDNN), resting heart rate, breathing rate, blood oxygen and wrist
-  temperature deviation
-- `heart_rate_days`: per-minute heart rate
-- `daily_activity`: steps, hourly steps, exercise minutes and workouts (with
-  heart rate and calories)
-- `daily_metrics`: `screen.minutes` and `screen.late_minutes`, plus the
-  Apple-only `health.*` values (active energy, exercise minutes, stand hours,
-  VO2 max, walking heart rate, daytime HRV, mindful minutes; migration
-  `20261109000000_apple_health_metrics.sql`)
-
-It overwrites the computed rows for the dates it covers and can be repeated,
-for example after uploading more data or when the URL was not set:
+Use `STRESSLESS_API_URL` in your uploader's `.env` to point at the StressLess
+deployment with `POST /api/apple/derive` enabled. The raw upload is independent
+of the website. After a successful raw upload, explicitly process the same
+date range:
 
 ```sh
-python3 sync_apple.py --derive --since 2026-09-01 --until 2026-11-01
+python3 sync_apple.py --derive --since 2026-09-01 --until 2026-09-28T12:00:00 --timezone America/Los_Angeles
 ```
+
+The CLI uses an inclusive start and exclusive end, then asks the backend to
+process the local dates those bounds touch. Use a window with complete Apple
+data for the days and nights you want to process. The report engine reads the
+same shared summary tables for all sources, and the Apple importer preserves the
+original HealthKit measurements, units and categories in `source_records`.
+
+- Apple Activity Summary totals take priority over reconstructed energy,
+  exercise and stand totals. Exported workout heart-rate statistics take
+  priority over averages calculated from nearby samples.
+- Recorded sleep stages and overnight vitals are used when present.
+  StressLess calculates its own sleep score from measured sleep.
+- Apple-only `health.*` values are available as report inputs when present.
+- Screen Time merges overlapping sessions across devices. The 22:00–03:00
+  late-use window belongs to the evening's date.
+
+Apply the reviewed Apple metrics registry migration
+`20261109000000_apple_health_metrics.sql` before using server-side processing.
+The backend fills missing summaries and keeps existing Apple, Android and
+Garmin rows for the same keys. This is a separate write operation from the raw
+upload. The read-only public demo blocks this processing endpoint.

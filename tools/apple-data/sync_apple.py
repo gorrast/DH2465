@@ -286,10 +286,7 @@ def derive_body(lower, upper, zone):
     if upper is not None:
         body['until'] = (upper - timedelta(microseconds=1)).astimezone(zone).date().isoformat()
     if lower is not None:
-        since = lower.astimezone(zone).date()
-        if upper is not None:  # the server recomputes at most 400 days per request; the app looks at the last 70
-            since = max(since, datetime.fromisoformat(body['until']).date() - timedelta(days=400))
-        body['since'] = since.isoformat()
+        body['since'] = lower.astimezone(zone).date().isoformat()
     return body
 
 
@@ -314,7 +311,7 @@ def main(argv=None):
     mode.add_argument('--preview', action='store_true', help='validate batches online without writing application data')
     mode.add_argument('--upload', action='store_true', help='append new rows only; requires a saved approved preview')
     mode.add_argument('--check-connection', action='store_true', help='verify login, consent and standalone endpoint; no application-data writes')
-    mode.add_argument('--derive', action='store_true', help='only (re)compute the app summaries from already uploaded raw data; '
+    mode.add_argument('--derive', action='store_true', help='fill missing app summaries from already uploaded raw data; '
                       '--since/--until pick the dates (default: the last 70 days)')
     parser.add_argument('--approve-plan', help='SHA256 printed by the reviewed online preview')
     parser.add_argument('--only', choices=['all', 'screen', 'health'], default='all')
@@ -348,7 +345,9 @@ def main(argv=None):
             config = read_config(args.env_file.expanduser())
             url, key, _ = settings(config)
             client = Client(url, key)
-            client.login(config)
+            user_id = uuid_arg(client.login(config))
+            if config.get('SUPABASE_USER_ID') and uuid_arg(config['SUPABASE_USER_ID']) != user_id:
+                raise SyncError('Signed-in user differs from optional SUPABASE_USER_ID; stopped.')
             zone = ZoneInfo(args.timezone)
             return 0 if derive(client, config, derive_body(*date_bounds(args.since, args.until, zone), zone)) else 1
         if args.check_connection:
@@ -387,10 +386,7 @@ def main(argv=None):
                 if not info.get('enabled'):
                     raise SyncError('Server-side uploads are disabled. See the admin setup in README.md.')
                 upload(client, run, state, args.batch_size, target, args.approve_plan)
-                print('Append-only upload complete. Existing raw rows were not overwritten.')
-                window = state.get('date_filter') or {}
-                lower, upper = (parse_time(window.get(k)) for k in ('since', 'until'))
-                derive(client, config, derive_body(lower, upper, ZoneInfo(state['timezone'])))
+                print('Append-only upload complete. Run --derive separately to prepare app summaries.')
         for warning in state['warnings']:
             print('Warning: ' + warning)
         return 2 if state['warnings'] else 0

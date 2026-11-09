@@ -10,6 +10,7 @@ selected out of the payload, so the large payloads are never downloaded. Every t
 """
 from __future__ import annotations
 
+import math
 import statistics
 from collections import Counter, defaultdict
 from datetime import date, datetime, time, timedelta
@@ -29,6 +30,7 @@ TEMP = "HKQuantityTypeIdentifierAppleSleepingWristTemperature"
 STEPS = "HKQuantityTypeIdentifierStepCount"
 SLEEP = "HKCategoryTypeIdentifierSleepAnalysis"
 WORKOUT = "Workout"
+ACTIVITY_SUMMARY = "ActivitySummary"
 ENERGY = "HKQuantityTypeIdentifierActiveEnergyBurned"
 EXERCISE = "HKQuantityTypeIdentifierAppleExerciseTime"
 STAND = "HKCategoryTypeIdentifierAppleStandHour"
@@ -45,6 +47,7 @@ HEALTH_DATA_TYPES = ("heart_rate", "ah_heart_rate", "resting_heart_rate", "ah_re
                      "ah_active_energy_burned", "ah_apple_exercise_time", "ah_apple_stand_hour", "ah_vo2_max",
                      "ah_walking_heart_rate_average", "ah_mindful_session")
 WORKOUT_DATA_TYPE = "ah_workout"
+ACTIVITY_SUMMARY_DATA_TYPE = "ah_activity_summary"
 SCREEN_DATA_TYPE = "app_usage"
 
 SESSION_GAP = timedelta(minutes=90)   # sleep segments further apart than this are separate sessions (a nap, the night)
@@ -59,12 +62,10 @@ def _sample(r: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         end = ds._ts(r["end_at"], "end_at") if r.get("end_at") else start
     except ValueError:
         return None
-    try:
-        value = float(r["value"]) if r.get("value") is not None else None
-    except (TypeError, ValueError):
-        value = None
+    value = _number(r.get("value"))
     return {"kind": r.get("kind") or "", "start": start, "end": max(start, end), "offset": int(r.get("start_offset_min") or 0),
-            "origin": r.get("data_origin"), "value": value, "stage": r.get("stage"), "payload": r.get("payload")}
+            "origin": r.get("data_origin"), "value": value, "unit": r.get("unit"),
+            "stage": r.get("stage"), "payload": r.get("payload")}
 
 
 def parse(rows: Iterable[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
@@ -81,6 +82,20 @@ def parse(rows: Iterable[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
 
 def _local_day(s: Dict[str, Any]) -> date:
     return ds.local(s["start"], s["offset"]).date()
+
+
+def _number(value: Any) -> Optional[float]:
+    try:
+        n = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return n if math.isfinite(n) else None
+
+
+def _kcal(value: Any, unit: Optional[str]) -> Optional[float]:
+    amount = _number(value)
+    factor = {"kcal": 1, "kJ": 1 / 4.184, "J": 1 / 4184}.get(unit)
+    return amount * factor if amount is not None and amount >= 0 and factor is not None else None
 
 
 def _median(vals: List[float]) -> Optional[float]:
@@ -109,15 +124,36 @@ def sleep_sessions(samples: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             cur.append(s)
         if cur:
             sessions.append(_session(origin, cur))
-    # A phone's plain "in bed" next to a watch's staged night would otherwise count as all asleep and win the night.
-    staged = {ds.night_of(s["start"], s["offset"])[0] for s in sessions if any(st["kind"] in ds.ASLEEP for st in s["stages"])}
-    return sorted((s for s in sessions if ds.night_of(s["start"], s["offset"])[0] not in staged
-                   or any(st["kind"] in ds.ASLEEP for st in s["stages"])), key=lambda s: s["start"])
+    # Apple distinguishes "In Bed" from measured sleep.
+    return sorted((s for s in sessions if any(st["kind"] in ds.ASLEEP for st in s["stages"])),
+                  key=lambda s: s["start"])
 
 
 def _session(origin: Optional[str], segs: List[Dict[str, Any]]) -> Dict[str, Any]:
     start, end = min(s["start"] for s in segs), max(s["end"] for s in segs)
-    stages = [{"start": s["start"], "end": s["end"], "raw": s["stage"], "kind": _stage_kind(s["stage"])} for s in segs]
+    stages = []
+    marks: Dict[datetime, Counter] = defaultdict(Counter)
+    for s in segs:
+        kind = _stage_kind(s["stage"])
+        if kind != "inbed":
+            marks[s["start"]][kind] += 1
+            marks[s["end"]][kind] -= 1
+    active: Counter = Counter()
+    boundaries = sorted(marks)
+    for a, b in zip(boundaries, boundaries[1:]):
+        active.update(marks[a])
+        kinds = {kind for kind, n in active.items() if n > 0}
+        if kinds.intersection(("light", "deep", "rem")):
+            kinds.discard("asleep")
+        if len(kinds) > 1:
+            stages = []  # conflicting measurements from the same origin
+            break
+        if kinds:
+            kind = kinds.pop()
+            if stages and stages[-1]["end"] == a and stages[-1]["kind"] == kind:
+                stages[-1]["end"] = b
+            else:
+                stages.append({"start": a, "end": b, "kind": kind})
     return {"id": "apple:%s:%d" % (origin or "", int(start.timestamp())), "start": start, "end": end,
             "offset": segs[0]["offset"], "origin": origin, "modified": None, "stages": stages}
 
@@ -126,11 +162,12 @@ def sleep_night_rows(raw: Dict[str, List[Dict[str, Any]]], earlier_bedtimes: Opt
                      first: Optional[date] = None, last: Optional[date] = None) -> List[Dict[str, Any]]:
     """Scored nights (device_sync's scoring) with the watch's overnight vitals added."""
     sessions = sleep_sessions(raw.get(SLEEP, []))
-    rows = ds.sleep_night_rows({"sleep": sessions}, earlier_bedtimes)
+    # Reuse the sleep score, with Apple vitals filled from the original records below.
+    rows = ds.sleep_night_rows({"sleep": sessions, "hrv": [], "resting_hr": []}, earlier_bedtimes)
     rows = [r for r in rows if (first is None or r["night_date"] >= first.isoformat())
             and (last is None or r["night_date"] <= last.isoformat())]
     rhr_by_night: Dict[str, List[float]] = defaultdict(list)
-    for s in raw.get(RHR, []):   # Apple's resting HR for a day describes the night that ended that morning
+    for s in raw.get(RHR, []):   # use Apple's recorded resting HR for the reporting morning
         if s["value"] is not None:
             rhr_by_night[(_local_day(s) - timedelta(days=1)).isoformat()].append(s["value"])
     temps: Dict[str, Optional[float]] = {}
@@ -198,19 +235,21 @@ def _workout_kind(payload: Any) -> str:
     return "other"
 
 
+def _workout_stats(payload: Any, kind: str) -> Dict[str, Any]:
+    for child in (payload or {}).get("children") or []:
+        attrs = child.get("attributes") or {}
+        if child.get("tag") == "WorkoutStatistics" and attrs.get("type") == kind:
+            return attrs
+    return {}
+
+
 def _workout_calories(payload: Any) -> int:
-    payload = payload or {}
-    attrs = payload.get("attributes") or {}
-    try:
-        if attrs.get("totalEnergyBurned"):
-            return int(float(attrs["totalEnergyBurned"]))
-        for child in payload.get("children") or []:   # newer exports: <WorkoutStatistics type=... sum=...>
-            a = child.get("attributes") or {}
-            if child.get("tag") == "WorkoutStatistics" and a.get("type") == ENERGY and a.get("sum"):
-                return int(float(a["sum"]))
-    except (TypeError, ValueError):
-        pass
-    return 0
+    stats = _workout_stats(payload, ENERGY)
+    kcal = _kcal(stats.get("sum"), stats.get("unit"))
+    if kcal is None:
+        attrs = (payload or {}).get("attributes") or {}
+        kcal = _kcal(attrs.get("totalEnergyBurned"), attrs.get("totalEnergyBurnedUnit"))
+    return int(kcal) if kcal is not None else 0
 
 
 def activity_rows(raw: Dict[str, List[Dict[str, Any]]], first: date, last: date) -> List[Dict[str, Any]]:
@@ -231,23 +270,32 @@ def activity_rows(raw: Dict[str, List[Dict[str, Any]]], first: date, last: date)
         d = _local_day(w)
         if not first <= d <= last or w["end"] <= w["start"]:
             continue
-        beats = [s["value"] for s in hr if w["start"] <= s["start"] <= w["end"]]
+        stats = _workout_stats(w["payload"], HR)
+        avg = _number(stats.get("average")) if stats.get("unit") == "count/min" else None
+        peak = _number(stats.get("maximum")) if stats.get("unit") == "count/min" else None
+        if avg is None or peak is None:
+            beats = [s["value"] for s in hr if w["start"] <= s["start"] <= w["end"]]
+            if beats:
+                avg = statistics.mean(beats) if avg is None else avg
+                peak = max(beats) if peak is None else peak
         workouts[d].append({"kind": _workout_kind(w["payload"]), "start": ds.iso(w["start"]), "end": ds.iso(w["end"]),
-                            "avg_hr": int(round(statistics.mean(beats))) if beats else 0,
-                            "max_hr": int(max(beats)) if beats else 0, "calories": _workout_calories(w["payload"]),
+                            "avg_hr": round(avg) if avg is not None else 0,
+                            "max_hr": round(peak) if peak is not None else 0, "calories": _workout_calories(w["payload"]),
                             "data_origin": w["origin"]})
         offsets[d][w["offset"]] += 1
+    rings = _activity_rings(raw, first, last)
     exercise = _per_day_best_origin(raw.get(EXERCISE, []), first, last)
     rows = []
-    for d in sorted(set(by_origin) | set(workouts) | set(exercise)):
+    # Native exercise alone is stored in daily_metrics. An activity row without steps
+    # would otherwise be shown as zero steps by the app's shared activity model.
+    for d in sorted(set(by_origin) | set(workouts)):
         hourly = max(by_origin[d].values(), key=sum) if by_origin.get(d) else []
         ws = workouts.get(d, [])
-        # Apple's exercise minutes (the green ring) when there are any, otherwise the workouts' length
-        active = exercise[d] if d in exercise else sum(ds._minutes(ds._ts(w["start"], ""), ds._ts(w["end"], "")) for w in ws)
-        if not offsets[d]:
-            offsets[d][next(s["offset"] for s in raw[EXERCISE] if _local_day(s) == d)] += 1
+        active = rings.get(d, {}).get("health.exercise_min", exercise.get(d))
+        if active is None and ws:
+            active = sum(ds._minutes(ds._ts(w["start"], ""), ds._ts(w["end"], "")) for w in ws)
         rows.append({"day": d.isoformat(), "source": HEALTH, "utc_offset_min": offsets[d].most_common(1)[0][0],
-                     "steps": sum(hourly) if hourly else None, "active_min": min(1440, int(active)),
+                     "steps": sum(hourly) if hourly else None, "active_min": min(1440, round(active)) if active is not None else None,
                      "hourly_steps": hourly, "workouts": ws})
     return rows
 
@@ -274,10 +322,29 @@ HEALTH_METRICS = ("health.active_energy", "health.exercise_min", "health.stand_h
                   "health.walking_hr", "health.hrv_sdnn_day", "health.mindful_min")
 
 
+def _activity_rings(raw: Dict[str, List[Dict[str, Any]]], first: date, last: date) -> Dict[date, Dict[str, float]]:
+    """Use the totals Apple already computed, including explicitly recorded zeroes."""
+    rings: Dict[date, Dict[str, float]] = {}
+    for sample in raw.get(ACTIVITY_SUMMARY, []):
+        attrs = (sample.get("payload") or {}).get("attributes") or {}
+        day = _local_day(sample)
+        if not first <= day <= last or attrs.get("dateComponents") != day.isoformat():
+            continue
+        values = {
+            "health.active_energy": _kcal(attrs.get("activeEnergyBurned"), attrs.get("activeEnergyBurnedUnit")),
+            "health.exercise_min": _number(attrs.get("appleExerciseTime")),
+            "health.stand_hours": _number(attrs.get("appleStandHours")),
+        }
+        # An export can include another copy of a day's totals. Never add copies together.
+        rings.setdefault(day, {}).update({k: v for k, v in values.items() if v is not None and v >= 0})
+    return rings
+
+
 def health_metric_rows(raw: Dict[str, List[Dict[str, Any]]], first: date, last: date) -> List[Dict[str, Any]]:
     """daily_metrics rows for what the Apple export has beyond the derived tables (see HEALTH_METRICS)."""
     vals: Dict[str, Dict[date, float]] = {
-        "health.active_energy": _per_day_best_origin(raw.get(ENERGY, []), first, last),
+        "health.active_energy": _per_day_best_origin(
+            [dict(s, value=_kcal(s["value"], s["unit"])) for s in raw.get(ENERGY, [])], first, last),
         "health.exercise_min": _per_day_best_origin(raw.get(EXERCISE, []), first, last),
     }
     median_of = lambda kind: {d: statistics.median(v) for d, ss in _per_day(raw.get(kind, []), first, last).items()
@@ -290,6 +357,9 @@ def health_metric_rows(raw: Dict[str, List[Dict[str, Any]]], first: date, last: 
                                   for d, ss in _per_day(raw.get(STAND, []), first, last).items()}
     vals["health.mindful_min"] = {d: sum(ds._minutes(s["start"], s["end"]) for s in ss)
                                   for d, ss in _per_day(raw.get(MINDFUL, []), first, last).items()}
+    for day, totals in _activity_rings(raw, first, last).items():
+        for key, value in totals.items():
+            vals[key][day] = value
     return [{"day": d.isoformat(), "metric_key": key, "value": round(v, 1), "source": HEALTH}
             for key in HEALTH_METRICS for d, v in sorted(vals[key].items())]
 
@@ -298,30 +368,33 @@ def health_metric_rows(raw: Dict[str, List[Dict[str, Any]]], first: date, last: 
 def screen_metric_rows(rows: Iterable[Dict[str, Any]], first: date, last: date) -> List[Dict[str, Any]]:
     """screen.minutes and screen.late_minutes per local day, from the app-usage sessions. Sessions on the Mac and
     the iPhone that overlap are counted once (the union of the intervals). Unlocks are not in the Apple data."""
-    spans = sorted((s["start"], s["end"], s["offset"]) for s in (_sample(r) for r in rows) if s and s["end"] > s["start"])
+    system_surfaces = {"com.apple.loginwindow", "com.apple.screensaver", "com.apple.springboard"}
+    samples = (_sample(r) for r in rows)
+    spans = sorted((s["start"], s["end"], s["offset"]) for s in samples
+                   if s and s["end"] > s["start"] and s["origin"] not in system_surfaces
+                   and not (s["origin"] or "").startswith("com.apple.springboard."))
     merged: List[List[Any]] = []
     for a, b, off in spans:
         if merged and a <= merged[-1][1]:
             merged[-1][1] = max(merged[-1][1], b)
         else:
             merged.append([a, b, off])
-    if not merged:
-        return []
-    days: Dict[date, Dict[str, float]] = {}
-    lo = max(first, ds.local(merged[0][0], merged[0][2]).date())
-    hi = min(last, ds.local(merged[-1][1], merged[-1][2]).date())
-    for i in range((hi - lo).days + 1):
-        days[lo + timedelta(days=i)] = {"minutes": 0.0, "late_minutes": 0.0}
+    minutes: Dict[date, float] = defaultdict(float)
+    late: Dict[date, float] = defaultdict(float)
     for a, b, off in merged:
         la, lb = ds.local(a, off), ds.local(b, off)
         d = la.date() - timedelta(days=1)
         while d <= lb.date():
-            if d in days:
+            if first <= d <= last:
                 midnight = datetime.combine(d, time(0, 0))
-                days[d]["minutes"] += ds._overlap(la, lb, midnight, midnight + timedelta(days=1))
-                days[d]["late_minutes"] += ds._overlap(la, lb, midnight + timedelta(hours=ds.LATE_FROM_H),
-                                                       midnight + timedelta(days=1, hours=ds.LATE_TO_H))
+                total = ds._overlap(la, lb, midnight, midnight + timedelta(days=1))
+                overnight = ds._overlap(la, lb, midnight + timedelta(hours=ds.LATE_FROM_H),
+                                        midnight + timedelta(days=1, hours=ds.LATE_TO_H))
+                if total:
+                    minutes[d] += total
+                if overnight:
+                    late[d] += overnight
             d += timedelta(days=1)
-    return [{"day": d.isoformat(), "metric_key": "screen." + k, "value": round(v, 1), "source": SCREEN}
-            for d, vals in sorted(days.items()) for k, v in vals.items()]
-
+    return [{"day": d.isoformat(), "metric_key": key, "value": round(v, 1), "source": SCREEN}
+            for key, totals in (("screen.minutes", minutes), ("screen.late_minutes", late))
+            for d, v in sorted(totals.items())]

@@ -1,7 +1,7 @@
 """Apple data (tools/apple-data): POST /api/apple/derive, the Apple counterpart of POST /api/sync's step 4.
 
 The Apple importer runs on a Mac and only appends raw ``source_records`` (through the apple-import Edge Function).
-Afterwards it calls this endpoint, which reads those raw rows back and fills the derived tables like a phone sync:
+Afterwards it calls this endpoint, which reads those raw rows back and adds missing rows to the derived tables:
 
     1. check profiles.consented_at (403 until the user has agreed)
     2. read the user's raw apple_health / apple_screen_time records for the nights and days asked for
@@ -27,19 +27,20 @@ from ..connectors import device_sync as ds
 from ..connectors.real_data import DAYS
 from ..timeutil import parse_date
 from .auth import Principal, current_principal
-from .phone_sync import _connection, _db, _earlier_bedtimes, _require_consent, _upsert
+from .phone_sync import BATCH, _connection, _db, _earlier_bedtimes, _require_consent, _upsert
 
 log = logging.getLogger("stressless.server.apple_sync")
 router = APIRouter()
 
 PAGE = 1000
 MAX_SPAN_DAYS = 400
-RAW_COLUMNS = "data_type,data_origin,start_at,end_at,start_offset_min,value"
+RAW_COLUMNS = "data_type,data_origin,start_at,end_at,start_offset_min,value,unit"
 EXPORT_ID = "apple-export"
 # (source, data_type of connection_streams, raw data_types it is read from)
 STREAMS = [(ad.HEALTH, "sleep_session", ("ah_sleep_analysis",)),
            (ad.HEALTH, "heart_rate", ("heart_rate", "ah_heart_rate")),
            (ad.HEALTH, "steps", ("steps", "ah_step_count")),
+           (ad.HEALTH, ad.ACTIVITY_SUMMARY_DATA_TYPE, (ad.ACTIVITY_SUMMARY_DATA_TYPE,)),
            (ad.SCREEN, "app_usage", (ad.SCREEN_DATA_TYPE,))]
 LABELS = {ad.HEALTH: "Apple Health export", ad.SCREEN: "Mac Screen Time"}
 
@@ -58,6 +59,15 @@ def _raw(user_id: str, source: str, types: tuple, lo: datetime, hi: datetime, se
     return _all("source_records", {"user_id": "eq." + user_id, "source": "eq." + source,
                                    "data_type": "in.(%s)" % ",".join(types), "select": select, "order": "start_at.asc,id.asc",
                                    "and": "(start_at.gte.%s,start_at.lt.%s)" % (ds.iso(lo), ds.iso(hi))})
+
+
+def _insert_missing(table: str, rows: List[Dict[str, Any]], key: str) -> List[Dict[str, Any]]:
+    """Let the existing unique key protect summaries, even during a concurrent sync."""
+    inserted = []
+    for i in range(0, len(rows), BATCH):
+        inserted += _db("POST", table, params={"on_conflict": "user_id," + key, "select": "source," + key},
+                        json=rows[i:i + BATCH], prefer="resolution=ignore-duplicates,return=representation")
+    return inserted
 
 
 def _edge(user_id: str, source: str, types: tuple, column: str, desc: bool) -> Optional[str]:
@@ -96,7 +106,8 @@ def post_apple_derive(body: Optional[Dict[str, Any]] = Body(None), p: Principal 
     hi = datetime.combine(last + timedelta(days=2), datetime.min.time(), tzinfo=timezone.utc)
     rows = _raw(p.user_id, ad.HEALTH, ad.HEALTH_DATA_TYPES, lo, hi,
                 RAW_COLUMNS + ",kind:payload->>apple_type,stage:payload->attributes->>value")
-    rows += [dict(r, kind=ad.WORKOUT) for r in _raw(p.user_id, ad.HEALTH, (ad.WORKOUT_DATA_TYPE,), lo, hi, RAW_COLUMNS + ",payload")]
+    for kind, data_type in ((ad.WORKOUT, ad.WORKOUT_DATA_TYPE), (ad.ACTIVITY_SUMMARY, ad.ACTIVITY_SUMMARY_DATA_TYPE)):
+        rows.extend(dict(r, kind=kind) for r in _raw(p.user_id, ad.HEALTH, (data_type,), lo, hi, RAW_COLUMNS + ",payload"))
     screen = _raw(p.user_id, ad.SCREEN, (ad.SCREEN_DATA_TYPE,), lo, hi, RAW_COLUMNS)
     raw = ad.parse(rows)
 
@@ -105,10 +116,10 @@ def post_apple_derive(body: Optional[Dict[str, Any]] = Body(None), p: Principal 
     hr_days = ad.heart_rate_day_rows(raw, first, last)
     activity = ad.activity_rows(raw, first, last)
     metrics = ad.screen_metric_rows(screen, first, last) + ad.health_metric_rows(raw, first, last)
-    _upsert("sleep_nights", [dict(r, computed_at=now, **uid) for r in nights], "user_id,night_date")
-    _upsert("heart_rate_days", [dict(r, computed_at=now, **uid) for r in hr_days], "user_id,day")
-    _upsert("daily_activity", [dict(r, computed_at=now, **uid) for r in activity], "user_id,day")
-    _upsert("daily_metrics", [dict(r, computed_at=now, **uid) for r in metrics], "user_id,day,metric_key")
+    nights = _insert_missing("sleep_nights", [dict(r, computed_at=now, **uid) for r in nights], "night_date")
+    hr_days = _insert_missing("heart_rate_days", [dict(r, computed_at=now, **uid) for r in hr_days], "day")
+    activity = _insert_missing("daily_activity", [dict(r, computed_at=now, **uid) for r in activity], "day")
+    metrics = _insert_missing("daily_metrics", [dict(r, computed_at=now, **uid) for r in metrics], "day,metric_key")
 
     # Sync bookkeeping, so the app lists the Apple sources with how far their data goes.
     device = {"install_id": EXPORT_ID, "platform": "ios", "time_zone": body.get("timeZone")}

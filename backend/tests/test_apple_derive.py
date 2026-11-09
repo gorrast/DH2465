@@ -7,6 +7,9 @@ import httpx
 from fastapi.testclient import TestClient
 
 from stressless.connectors import apple_derive as ad
+from stressless.engine.pipeline import Engine
+from stressless.engine.report_input import daily_input, weekly_input
+from stressless.connectors.real_data import load_dataset
 from stressless.server import phone_sync
 from stressless.server.app import app
 from stressless.server.auth import Principal, current_principal
@@ -24,12 +27,12 @@ def at(day: str, hour: float) -> datetime:
     return datetime(y, m, d, tzinfo=timezone.utc) + timedelta(hours=hour, minutes=-OFF)
 
 
-def rec(kind, start, end=None, value=None, origin=WATCH, stage=None, data_type=None, payload=None):
+def rec(kind, start, end=None, value=None, origin=WATCH, stage=None, data_type=None, payload=None, unit=None):
     _n[0] += 1
     iso = lambda t: t.isoformat().replace("+00:00", "Z")
     return {"id": "r%06d" % _n[0], "user_id": "user-a", "source": ad.HEALTH, "data_type": data_type or "ah_x", "kind": kind,
             "data_origin": origin, "start_at": iso(start), "end_at": iso(end or start), "start_offset_min": OFF,
-            "value": value, "stage": stage, "payload": payload}
+            "value": value, "stage": stage, "payload": payload, "unit": unit}
 
 
 def seg(day, a, b, stage, origin=WATCH):
@@ -61,9 +64,12 @@ class DeriveTests(unittest.TestCase):
         self.assertIsNone(r["skin_temp_dev"])
         self.assertTrue(0 <= r["score"] <= 100)
 
-    def test_phone_only_night_still_counts(self):
-        rows = ad.sleep_night_rows(ad.parse([seg("2026-10-05", 23, 30.5, "InBed", origin=PHONE)]))
-        self.assertEqual((rows[0]["asleep_min"], rows[0]["has_stages"], rows[0]["data_origin"]), (450, False, PHONE))
+    def test_in_bed_is_not_asleep_and_generic_asleep_does_not_double_count(self):
+        d = "2026-10-05"
+        in_bed = seg(d, 23, 30.5, "InBed", origin=PHONE)
+        self.assertEqual(ad.sleep_night_rows(ad.parse([in_bed])), [])
+        rows = ad.sleep_night_rows(ad.parse(night(d) + [seg(d, 23.25, 26, "AsleepUnspecified")]))
+        self.assertEqual(rows[0]["asleep_min"], 450)
 
     def test_nap_is_not_merged_into_the_night(self):
         rows = ad.sleep_night_rows(ad.parse(night() + [seg("2026-10-05", 14, 14.75, "AsleepCore")]))
@@ -89,7 +95,7 @@ class DeriveTests(unittest.TestCase):
                         rec(ad.HR, at(d, 18.2), value=140), rec(ad.HR, at(d, 18.4), value=160),
                         rec(ad.WORKOUT, at(d, 18), at(d, 18.5), payload={"attributes": {
                             "workoutActivityType": "HKWorkoutActivityTypeRunning"}, "children": [
-                            {"tag": "WorkoutStatistics", "attributes": {"type": ad.ENERGY, "sum": "310.5"}}]})])
+                            {"tag": "WorkoutStatistics", "attributes": {"type": ad.ENERGY, "sum": "310.5", "unit": "kcal"}}]})])
         (row,) = ad.activity_rows(raw, date(2026, 10, 5), date(2026, 10, 5))
         self.assertEqual((row["steps"], row["hourly_steps"][9], row["hourly_steps"][18], row["active_min"]), (4200, 1200, 3000, 30))
         self.assertEqual({k: row["workouts"][0][k] for k in ("kind", "avg_hr", "max_hr", "calories")},
@@ -97,7 +103,8 @@ class DeriveTests(unittest.TestCase):
 
     def test_apple_only_daily_metrics(self):
         d = "2026-10-05"
-        raw = ad.parse([rec(ad.ENERGY, at(d, 9), value=200), rec(ad.ENERGY, at(d, 12), value=150, origin=PHONE),
+        raw = ad.parse([rec(ad.ENERGY, at(d, 9), value=836.8, unit="kJ"),
+                        rec(ad.ENERGY, at(d, 12), value=150, origin=PHONE, unit="kcal"),
                         rec(ad.EXERCISE, at(d, 18), value=25), rec(ad.EXERCISE, at(d, 19), value=10),
                         rec(ad.STAND, at(d, 9), at(d, 10), stage="HKCategoryValueAppleStandHourStood"),
                         rec(ad.STAND, at(d, 10), at(d, 11), stage="HKCategoryValueAppleStandHourIdle"),
@@ -108,7 +115,37 @@ class DeriveTests(unittest.TestCase):
         self.assertEqual(got, {"health.active_energy": 200, "health.exercise_min": 35, "health.stand_hours": 1,
                                "health.vo2max": 44.2, "health.walking_hr": 98, "health.hrv_sdnn_day": 70,
                                "health.mindful_min": 15})
-        self.assertEqual(ad.activity_rows(raw, date(2026, 10, 5), date(2026, 10, 5))[0]["active_min"], 35)
+        self.assertEqual(ad.activity_rows(raw, date(2026, 10, 5), date(2026, 10, 5)), [])
+
+    def test_native_activity_and_workout_values_take_precedence(self):
+        d = "2026-10-05"
+        start = date.fromisoformat(d)
+        raw = ad.parse([
+            rec(ad.ACTIVITY_SUMMARY, at(d, 0), at(d, 24), payload={"attributes": {
+                "dateComponents": d, "activeEnergyBurned": "1046", "activeEnergyBurnedUnit": "kJ",
+                "appleExerciseTime": "0", "appleStandHours": "12"}}),
+            rec(ad.ENERGY, at(d, 9), value=200, unit="kcal"),
+            rec(ad.EXERCISE, at(d, 18), value=35),
+            rec(ad.WORKOUT, at(d, 18), at(d, 18.5), payload={"children": [
+                {"tag": "WorkoutStatistics", "attributes": {
+                    "type": ad.HR, "unit": "count/min", "average": "121", "maximum": "142"}}]}),
+            rec(ad.HR, at(d, 18.2), value=160),
+        ])
+        metrics = ad.health_metric_rows(raw, start, start)
+        self.assertEqual({m["metric_key"]: m["value"] for m in metrics}, {
+            "health.active_energy": 250, "health.exercise_min": 0, "health.stand_hours": 12})
+        (activity,) = ad.activity_rows(raw, start, start)
+        self.assertEqual(activity["active_min"], 0)
+        (workout,) = activity["workouts"]
+        self.assertEqual((workout["avg_hr"], workout["max_hr"]), (121, 142))
+
+        store = MemoryStore()
+        store.tables["daily_metrics"] = metrics
+        morning = start + timedelta(days=1)
+        engine = Engine(load_dataset(store, morning), store)
+        for inp in (daily_input(engine, morning), weekly_input(engine, start)):
+            got = {m.key: m.value for m in inp.metrics if m.source == "apple_health"}
+            self.assertEqual(got, {"health.active_energy": 250, "health.exercise_min": 0, "health.stand_hours": 12})
 
     def test_screen_time_counts_overlapping_devices_once(self):
         d = "2026-10-05"
@@ -116,6 +153,9 @@ class DeriveTests(unittest.TestCase):
                 dict(rec("", at(d, 23), at(d, 23.5)), source=ad.SCREEN)]
         got = {m["metric_key"]: m["value"] for m in ad.screen_metric_rows(rows, date(2026, 10, 5), date(2026, 10, 5))}
         self.assertEqual(got, {"screen.minutes": 120.0, "screen.late_minutes": 30.0})
+        rows = [rec("", at(d, 25), at(d, 25.5)), rec("", at(d, 23), at(d, 24), origin="com.apple.loginwindow")]
+        got = {(m["day"], m["metric_key"]): m["value"] for m in ad.screen_metric_rows(rows, date(2026, 10, 5), date(2026, 10, 6))}
+        self.assertEqual(got, {("2026-10-05", "screen.late_minutes"): 30.0, ("2026-10-06", "screen.minutes"): 30.0})
 
 
 ENV = {"NEXT_PUBLIC_SUPABASE_URL": "https://db.test", "SUPABASE_SERVICE_ROLE_KEY": "service-key"}
@@ -144,22 +184,30 @@ class DeriveApiTests(unittest.TestCase):
         d = "2026-10-05"
         self.fake.tables["source_records"] = night() + [
             rec(ad.HR, at(d, 8), value=61, data_type="heart_rate"), rec(ad.STEPS, at(d, 9), value=500, data_type="steps"),
-            rec(ad.ENERGY, at(d, 9), value=120, data_type="ah_active_energy_burned"),
+            rec(ad.ACTIVITY_SUMMARY, at(d, 0), at(d, 24), data_type="ah_activity_summary",
+                payload={"attributes": {"dateComponents": d, "appleExerciseTime": "17"}}),
+            rec(ad.ENERGY, at(d, 9), value=120, data_type="ah_active_energy_burned", unit="kcal"),
             dict(rec("", at(d, 10), at(d, 10.5), data_type="app_usage"), source=ad.SCREEN)]
         r = self.client.post("/api/apple/derive", json={"since": "2026-10-01", "until": "2026-10-06", "timeZone": "Europe/Stockholm"})
         self.assertEqual(r.status_code, 200, r.text)
         self.assertEqual(r.json()["stored"], {"nights": 1, "heart_rate_days": 1, "activity_days": 1, "screen_days": 1,
-                                              "health_metric_rows": 3})
+                                              "health_metric_rows": 4})
         t = self.fake.tables
         self.assertEqual(t["sleep_nights"][0]["hrv_sdnn_ms"], 45.0)
         self.assertEqual(t["daily_activity"][0]["steps"], 500)
+        self.assertEqual(t["daily_activity"][0]["active_min"], 17)
         self.assertEqual(sorted(m["metric_key"] for m in t["daily_metrics"]),
-                         ["health.active_energy", "health.hrv_sdnn_day", "health.hrv_sdnn_day", "screen.late_minutes", "screen.minutes"])
+                         ["health.active_energy", "health.exercise_min", "health.hrv_sdnn_day", "health.hrv_sdnn_day", "screen.minutes"])
         self.assertEqual(sorted(c["provider"] for c in t["provider_connections"]), ["apple_health", "apple_screen_time"])
-        self.assertEqual({s["data_type"] for s in t["connection_streams"]}, {"sleep_session", "heart_rate", "steps", "app_usage"})
-        # Running it again replaces the rows instead of adding to them
-        self.assertEqual(self.client.post("/api/apple/derive", json={"since": "2026-10-01", "until": "2026-10-06"}).status_code, 200)
+        self.assertEqual({s["data_type"] for s in t["connection_streams"]}, {"sleep_session", "heart_rate", "steps", "ah_activity_summary", "app_usage"})
+        # Simulate a competing source occupying the same daily keys before a rerun.
+        t["sleep_nights"][0].update(source="garmin", score=90)
+        t["daily_activity"][0].update(source="health_connect", steps=1000)
+        next_run = self.client.post("/api/apple/derive", json={"since": "2026-10-01", "until": "2026-10-06"})
+        self.assertEqual(next_run.status_code, 200, next_run.text)
+        self.assertFalse(any(next_run.json()["stored"].values()))
         self.assertEqual((len(t["sleep_nights"]), len(t["provider_connections"])), (1, 2))
+        self.assertEqual((t["sleep_nights"][0]["score"], t["daily_activity"][0]["steps"]), (90, 1000))
 
     def test_needs_consent_and_valid_dates(self):
         self.fake.tables["profiles"][0]["consented_at"] = None

@@ -614,6 +614,7 @@ function MorningReport({
               <SleepScore report={report} />
             </div>
           </div>
+          <DailyReportPrompt paused={motionPaused} controller={written} />
         </div>
         <div className="ah-hero-controls">
           <a className="ah-text-link" href="#night-explanation">

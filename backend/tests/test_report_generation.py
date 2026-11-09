@@ -53,19 +53,26 @@ class InputTests(unittest.TestCase):
         cls.ds = fresh_dataset()
         cls.engine = Engine(cls.ds)
 
-    def test_daily_input_has_metrics_patterns_and_no_event_names(self):
-        """No event titles, except those of recurring activities that became a link (an agreed exception)."""
+    def test_daily_input_has_metrics_patterns_and_the_whole_calendar(self):
         inp = daily_input(self.engine, ANCHOR)
         self.assertEqual((inp.kind, inp.period_start, inp.period_end), ("daily", ANCHOR, ANCHOR))
         self.assertIn("sleep.score", inp.keys())
         self.assertTrue(inp.patterns)
         self.assertEqual(len(inp.keys()), len(inp.metrics) + len(inp.patterns))     # keys are unique
-        text = inp.model_dump_json()
-        night = ANCHOR - timedelta(days=1)
-        linked = [p.title for p in inp.patterns if p.key.startswith(("pattern.series_", "pattern.pair_", "pattern.meeting_hr_"))]
-        for ev in self.ds.events_on(night, include_unattended=True) + self.ds.events_on(ANCHOR, include_unattended=True):
-            if not any(ev.title in t for t in linked):
-                self.assertNotIn(ev.title, text)
+        self.assertEqual(len(inp.calendar), len(self.ds.events))
+
+    def test_request_sends_every_calendar_event_with_every_field(self):
+        for inp in (daily_input(self.engine, ANCHOR), weekly_input(self.engine, MONDAY)):
+            sent = json.loads(build_request(inp)["messages"][0]["content"].split("\n\n", 1)[1])
+            self.assertEqual(len(sent["calendar"]), len(self.ds.events))
+            by_id = {e["id"]: e for e in sent["calendar"]}
+            for ev in self.ds.events:
+                e = by_id[ev.id]
+                self.assertEqual((e["title"], e["type"], e["location_hint"], e["attendees"], e["recurring_key"],
+                                  e["source"], e["attended"], e["notes"]),
+                                 (ev.title, ev.type, ev.location_hint, ev.attendees, ev.recurring_key, ev.source,
+                                  ev.attended, ev.notes))
+                self.assertEqual((e["start"], e["end"]), (ev.start.isoformat(), ev.end.isoformat()))
 
     def test_weekly_input_covers_monday_to_sunday(self):
         inp = weekly_input(self.engine, MONDAY)

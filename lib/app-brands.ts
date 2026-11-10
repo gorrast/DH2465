@@ -17,11 +17,17 @@ const BRANDS: BrandDefinition[] = [
   { key: 'facebook', name: 'Facebook', color: '#78adf7', packages: ['com.facebook.katana', 'com.facebook.lite'], aliases: ['facebook'] },
 ];
 
+/** Proper names for common apps without a bundled logo (their package names do not read well on their own). */
+const APP_NAMES: Record<string, string> = {
+  'com.linkedin.android': 'LinkedIn', 'com.slack': 'Slack', 'com.microsoft.office.outlook': 'Outlook',
+  'com.microsoft.teams': 'Teams', 'com.google.android.apps.maps': 'Google Maps', 'com.google.android.gm': 'Gmail',
+};
+
 export function appBrand(app: AppIdentity): AppBrand {
   const packageName = app.packageName.trim().toLowerCase();
   const name = app.appName.trim();
   const match = BRANDS.find(brand => brand.packages.includes(packageName) || brand.aliases?.includes(name.toLowerCase()));
-  const label = match?.name || name || packageName;
+  const label = match?.name || APP_NAMES[packageName] || name || packageName;
   const words = label.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
   const initials = words.length > 1 ? words.slice(0, 2).map(word => word[0]).join('') : label.slice(0, 2);
   return {

@@ -1,5 +1,6 @@
 "use client";
 
+import { appBrand } from "@/lib/app-brands";
 import { dates } from "@/lib/format";
 import { getSupabase } from "@/lib/supabase/client";
 import { useLoad } from "./common";
@@ -50,12 +51,14 @@ async function topApps(today: string): Promise<AppUsage[]> {
       .replace(/[._]/g, " ")
       .trim()
       .toLowerCase();
+    const fallback = cleaned
+      ? cleaned.replace(/\b[a-z]/g, (letter) => letter.toUpperCase())
+      : packageName;
+    // the brand's own name where it is known (com.instagram.android would otherwise read "Android")
     return {
       packageName,
       minutes,
-      appName: cleaned
-        ? cleaned.replace(/\b[a-z]/g, (letter) => letter.toUpperCase())
-        : packageName,
+      appName: appBrand({ packageName, appName: fallback }).name,
     };
   })
     .sort(
@@ -73,7 +76,13 @@ export function useAppStatistics(today: string) {
       p_as_of: dates.asOf(today),
     });
     if (error) throw new Error(error.message);
-    return (data || []) as AppHeartRate[];
+    return ((data || []) as AppHeartRate[]).map((app) => ({
+      ...app,
+      app_name: appBrand({
+        packageName: app.package_name,
+        appName: app.app_name,
+      }).name,
+    }));
   }, [today]);
   return { apps, appHR };
 }

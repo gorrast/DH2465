@@ -123,6 +123,7 @@ export function useDailyWrittenReport(
         <section
           ref={section}
           data-page-section="Daily report"
+          data-tour="daily-report"
           data-page-section-anchor=".v-home-report"
           id="night-explanation"
           className="ah-section daily-written-report written-report"

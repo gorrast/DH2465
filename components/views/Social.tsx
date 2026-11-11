@@ -647,7 +647,7 @@ export function SocialView() {
           "v-social weekly-dashboard" + (paused ? " is-motion-paused" : "")
         }
       >
-        <header className="social-hero" data-page-section="Your groups">
+        <header className="social-hero" data-page-section="Your groups" data-tour="social">
           <div className="social-hero-glow" aria-hidden="true" />
           {social ? (
             <div className="social-hero-faces" aria-hidden="true">

@@ -1,5 +1,5 @@
 'use client';
-/* The 24-hour day: calendar lane, Maps lane, minute heart rate against the personal norm, sleep shading (charts.js). */
+/* The 24-hour day: calendar lane, location lane, minute heart rate against the personal norm, sleep shading (charts.js). */
 import { memo, useId, useMemo, useRef, useState } from 'react';
 import { minuteLabel, minuteOf } from '@/lib/format';
 import { ICON_PATHS, eventIcon } from '@/lib/icons';

@@ -1,6 +1,6 @@
 """Time helpers shared by the simulator, engine, and server.
 
-Conventions (see SPEC.md § Time model):
+Conventions (see docs/PROTOTYPE1_SPEC.md § Time model):
 - Every datetime is timezone-aware in the persona's zone (default Europe/Stockholm).
 - A *night* is keyed by the date of the evening it started: sleep that begins at
   23:10 on 26 Sep or at 00:40 on 27 Sep both belong to night 2026-09-26.

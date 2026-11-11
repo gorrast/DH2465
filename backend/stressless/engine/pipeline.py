@@ -1,4 +1,4 @@
-"""The Engine façade: everything the server and CLI need, with instance-level caches (SPEC §7.10)."""
+"""The Engine façade: everything the server and CLI need, with instance-level caches (PROTOTYPE1_SPEC §7.10)."""
 from __future__ import annotations
 
 import logging

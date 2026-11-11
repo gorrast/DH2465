@@ -1,4 +1,4 @@
-"""Per-request engines on stateless functions (SPEC §8.1).
+"""Per-request engines on stateless functions (PROTOTYPE1_SPEC §8.1).
 
 A user's dataset is identified by (persona, seed, today) and regenerated on demand — about 0.15 s — then the user's
 own state is replayed onto it. Warm instances keep recently generated datasets and recently used engines in small LRU

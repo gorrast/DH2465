@@ -1,4 +1,4 @@
-# StressLess — Demo Specification (v2, post-critique)
+# StressLess — Prototype 1 Specification
 
 > "Wearables give you a score. They don't tell you why."
 > StressLess connects Google Calendar and Google Maps to the biometric data an Apple Watch

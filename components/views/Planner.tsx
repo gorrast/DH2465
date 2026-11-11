@@ -1,5 +1,5 @@
 "use client";
-/* Planner: what-if on today's (or a coming day's) calendar, with a predicted delta and likely range (SPEC §9.4). */
+/* Planner: what-if on today's (or a coming day's) calendar, with a predicted delta and likely range (PROTOTYPE1_SPEC §9.4). */
 import { useEffect, useRef, useState } from "react";
 import { LayoutGroup, motion, useReducedMotion } from "motion/react";
 import { ActionButton, calmTransition } from "../ui/Motion";

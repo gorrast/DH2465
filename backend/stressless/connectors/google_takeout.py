@@ -1,4 +1,4 @@
-"""Google Takeout location history importer: Semantic Location History and Timeline.json (SPEC §6.1)."""
+"""Google Takeout location history importer: Semantic Location History and Timeline.json (PROTOTYPE1_SPEC §6.1)."""
 from __future__ import annotations
 
 import json

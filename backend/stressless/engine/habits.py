@@ -1,4 +1,4 @@
-"""Recurring patterns ranked by their association with sleep, stratified by weekend nights (SPEC §7.6)."""
+"""Recurring patterns ranked by their association with sleep, stratified by weekend nights (PROTOTYPE1_SPEC §7.6)."""
 from __future__ import annotations
 
 import math

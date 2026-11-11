@@ -1,4 +1,4 @@
-"""Assemble an imported Dataset from parsed sources (SPEC §6.1)."""
+"""Assemble an imported Dataset from parsed sources (PROTOTYPE1_SPEC §6.1)."""
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
@@ -32,4 +32,4 @@ def build_dataset(persona: Persona, events: Sequence[CalendarEvent], visits: Seq
 
 
 def imported_persona(name: str, tzname: str = DEFAULT_TZ) -> Persona:
-    return Persona(key="imported", name=name, tagline="Your own data", description="Imported from Apple Health, your calendar and Google Takeout.", tz=tzname)
+    return Persona(key="imported", name=name, tagline="Your own data", description="Imported from Apple Health and your calendar.", tz=tzname)

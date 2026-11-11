@@ -74,6 +74,19 @@ class InputTests(unittest.TestCase):
                                   ev.attended, ev.notes))
                 self.assertEqual((e["start"], e["end"]), (ev.start.isoformat(), ev.end.isoformat()))
 
+    def test_anonymized_request_hides_titles_places_and_notes(self):
+        inp = weekly_input(self.engine, MONDAY)
+        with mock.patch.dict(os.environ, {"STRESSLESS_ANONYMIZE_CALENDAR": "true"}):
+            body = build_request(inp)["messages"][0]["content"].split("\n\n", 1)[1]
+        sent = json.loads(body)
+        self.assertEqual(len(sent["calendar"]), len(self.ds.events))
+        for e in sent["calendar"]:
+            self.assertIsNone(e["location_hint"])
+            self.assertIsNone(e["notes"])
+            self.assertRegex(e["title"], r"^[A-Z][a-z]+ \d+$")
+        for title in {ev.title for ev in self.ds.events if len(ev.title) > 3}:
+            self.assertNotIn('"' + title + '"', body)
+
     def test_weekly_input_covers_monday_to_sunday(self):
         inp = weekly_input(self.engine, MONDAY)
         self.assertEqual([d.day for d in inp.days], [MONDAY + timedelta(days=k) for k in range(7)])

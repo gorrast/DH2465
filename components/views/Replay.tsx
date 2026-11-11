@@ -1,5 +1,5 @@
 "use client";
-/* Replay view: the day as the watch saw it, against the calendar and Maps (SPEC §9.4). */
+/* Replay view: the day as the watch saw it, against the calendar and Maps (PROTOTYPE1_SPEC §9.4). */
 import Link from "next/link";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";

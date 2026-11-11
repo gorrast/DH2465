@@ -1,5 +1,8 @@
 """Fill a demo account with 90 days of believable data, with links planted on purpose.
 
+The planted links are made to match participant P2's findings in the pre-study exactly: the demo shows the same
+insights as P2's real data without showing that data, which stays private.
+
     uv run --env-file .env.local python tools/seed_demo.py --user <demo uuid> --calibrate <your uuid>           # dry run
     uv run --env-file .env.local python tools/seed_demo.py --user <demo uuid> --calibrate <your uuid> --write   # replace
     uv run --env-file .env.local python tools/seed_demo.py --user <demo uuid> --remove                          # empty it

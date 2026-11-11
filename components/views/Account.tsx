@@ -20,7 +20,11 @@ export function AccountView() {
           <div className="row">
             <button className="btn" type="button" onClick={signOut}>
               <Icon name="logout" size={16} />
-              Leave the demo
+              Sign out
+            </button>
+            <button className="btn btn-danger" type="button">
+              <Icon name="trash" size={16} />
+              Delete account
             </button>
           </div>
         </section>

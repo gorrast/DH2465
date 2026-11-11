@@ -1,4 +1,4 @@
-"""Within-person attribution: LOO-CV ridge, block bootstrap, active-only contributions (SPEC §7.5).
+"""Within-person attribution: LOO-CV ridge, block bootstrap, active-only contributions (PROTOTYPE1_SPEC §7.5).
 
 Pure Python. The only function that reads ``Dataset.truth`` is ``validation`` (Lab only).
 """

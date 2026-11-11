@@ -1,4 +1,4 @@
-"""Sleep score from the same inputs a watch has (SPEC §5.4).
+"""Sleep score from the same inputs a watch has (PROTOTYPE1_SPEC §5.4).
 
 Shared by the simulator and the importers so a real Apple Health export is scored the same way
 as the digital twin. Apple-style bands are used for the rating label only; this is *our* score.

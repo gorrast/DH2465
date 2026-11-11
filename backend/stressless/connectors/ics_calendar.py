@@ -1,4 +1,4 @@
-"""Google Calendar / iCalendar (.ics) importer with recurrence expansion (SPEC §6.1)."""
+"""Google Calendar / iCalendar (.ics) importer with recurrence expansion (PROTOTYPE1_SPEC §6.1)."""
 from __future__ import annotations
 
 import hashlib

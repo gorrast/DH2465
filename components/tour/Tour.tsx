@@ -1,5 +1,5 @@
 'use client';
-/* Presenter tour: ten steps in pitch order, spotlighting the [data-tour] anchors the views render (SPEC §9.4). */
+/* Presenter tour: six steps in pitch order, spotlighting the [data-tour] anchors the views render (PROTOTYPE1_SPEC §9.4). */
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import type { ReplayControls, TourControls } from '../shell/AppContext';
 

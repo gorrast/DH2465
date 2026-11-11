@@ -5,7 +5,7 @@ import { DemoButton } from '@/components/auth/DemoButton';
 export const metadata: Metadata = { title: 'Project' };
 
 const SECTIONS = [
-  { href: '/project/process', title: 'The process', text: 'Three prototypes, from a simulated person to an app that runs on real data, and the final report.' },
+  { href: '/project/process', title: 'The process', text: 'Two prototypes, from a simulated person to an app that runs on real data, and the report.' },
   { href: '/project/product', title: 'The product', text: 'What StressLess does, how it connects your calendar, watch, location, phone and media, and what it looks like.' },
   { href: '/project/team', title: 'The team', text: 'The six students behind StressLess.' },
 ];

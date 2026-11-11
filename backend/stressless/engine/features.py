@@ -4,7 +4,7 @@ The simulator calls ``day_features`` on the *attended* events to drive its causa
 engine calls it on ``ds.events_on(d)`` (events not marked ``attended=False``). Because both
 sides use this one function, a definitional drift can never masquerade as an engine error.
 
-Conventions (SPEC §3, §7.1):
+Conventions (PROTOTYPE1_SPEC §3, §7.1):
 * hour-of-day values are relative to midnight of the event's calendar day, so an event that
   ends 00:30 the next morning has ``end_hour == 24.5``;
 * ``is_weekend`` marks the *night* before a non-workday (Fri/Sat nights);

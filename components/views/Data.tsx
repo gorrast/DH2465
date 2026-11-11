@@ -1,66 +1,64 @@
 "use client";
-/* Data & privacy: what is connected, what is read, persona/seed, import, delete (SPEC §9.4). */
+/* Data & privacy: what is connected, what is read and kept, delete. */
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { api } from "@/lib/api";
-import { fmt } from "@/lib/format";
 import { Icon } from "../ui/Icon";
 import { busy, confirmModal, toast } from "../ui/overlays";
 import { useApp } from "../shell/AppContext";
 import { ViewHead, useLoad } from "./common";
 
-const DEMO = "demo: regenerated, never stored";
-const SYNCED = "your account, until you delete it";
+const KEPT = "your account, until you delete it";
 
 const CLASSES = [
   [
     "Calendar events",
-    "title, start, end, venue and description as written in the event; guests' names, emails and replies",
+    "title, start, end, location and the number of guests",
     "to know what your day looked like",
-    DEMO,
+    KEPT,
   ],
   [
     "Sleep",
     "bedtime, stages, interruptions, wake time",
     "to compute and explain the sleep score",
-    DEMO,
+    KEPT,
   ],
   [
     "Heart rate",
     "one sample per minute",
     "to see how your body responded during and after events",
-    DEMO,
+    KEPT,
   ],
   [
     "Recovery markers",
     "overnight HRV, resting heart rate",
     "to compare each night with your own baseline",
-    DEMO,
+    KEPT,
   ],
-  ["Steps", "one total per day", "to see how active each day was", SYNCED],
+  ["Steps", "one total per day", "to see how active each day was", KEPT],
   [
     "Screen time",
     "which apps were open and when, and screen unlocks on Android",
     "to see how evening screen use relates to your sleep",
-    SYNCED,
+    KEPT,
   ],
   [
     "Media history",
     "titles, artists or channels and times from the Spotify, Netflix, YouTube, Steam and Last.fm imports you add",
     "to see how evening listening, watching and gaming relate to your sleep",
-    SYNCED,
+    KEPT,
   ],
   [
     "Check-ins",
     "cups of coffee and units of alcohol you log",
     "to account for what the calendar cannot see",
-    SYNCED,
+    KEPT,
   ],
   [
     "Your answers",
     "yes/no to reality checks, accepted suggestions",
     "to correct the calendar and improve your patterns",
-    SYNCED,
+    KEPT,
   ],
 ];
 
@@ -114,25 +112,20 @@ export function DataView() {
     try {
       const ok = await confirmModal({
         title: "Delete all data?",
-        body: "This permanently removes everything stored in your account: synced sleep, steps and screen time, your calendar, media imports, check-ins, reports, answers and connections. This cannot be undone. The default demo is regenerated.",
+        body: "This permanently removes everything stored in your account: synced sleep, heart rate, steps and screen time, your calendar, media imports, check-ins, reports, answers and connections. This cannot be undone.",
         confirmLabel: "Permanently delete all data",
         confirmText: "DELETE",
         danger: true,
       });
       if (!ok) return;
       busy({
-        title: "Deleting and regenerating",
-        steps: [
-          "Removing your data",
-          "Booking a fresh calendar",
-          "Simulating heart rate and sleep",
-          "Fitting the model",
-        ],
+        title: "Deleting your data",
+        steps: ["Removing your data", "Disconnecting your sources"],
       });
       await api.post("/api/reset");
       const m = await refreshMeta();
       setHistoryDays(null);
-      toast("All data deleted. Fresh demo ready.", { kind: "success" });
+      toast("All data deleted.", { kind: "success" });
       go("/daily/" + m.today);
     } catch (e: any) {
       toast(e.message, { kind: "error" });
@@ -157,7 +150,7 @@ export function DataView() {
             status={isDemo ? "Demo data" : "Connected"}
             note={
               isDemo
-                ? "Ten weeks of a simulated calendar. In the product: Google Calendar, read-only, plus one write per accepted suggestion."
+                ? "Ten weeks of a simulated calendar. In the product: Google Calendar, read-only, write access is a future feature. "
                 : "Read from your Google Calendar."
             }
           />
@@ -168,7 +161,7 @@ export function DataView() {
             note={
               isDemo
                 ? "Simulated smartwatch: heart rate, sleep stages, HRV, resting heart rate. In the product: Health Connect on Android or Apple Health on iPhone."
-                : "Sleep and steps from Health Connect on Android or Apple Health on iPhone. Any watch that writes to either works."
+                : "Sleep, heart rate, HRV, resting heart rate and steps from Health Connect on Android or Apple Health on iPhone. Any watch that writes to either works."
             }
           />
         </div>
@@ -233,10 +226,6 @@ export function DataView() {
                       " after social evenings"}
                   </span>
                 ) : null}
-                <span className="chip">
-                  {"generated " +
-                    (meta.generated_at ? fmt.hm(meta.generated_at) : "–")}
-                </span>
               </div>
               {hidden ? (
                 <p className="tiny muted" style={{ marginTop: "8px" }}>
@@ -253,8 +242,7 @@ export function DataView() {
                 </div>
                 <p className="small secondary">
                   Removes everything stored in your account, including synced
-                  and imported data and your connections, then regenerates the
-                  default demo.
+                  and imported data and your connections.
                 </p>
                 <button
                   className="btn btn-danger"

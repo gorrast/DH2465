@@ -1,4 +1,4 @@
-"""Streaming Apple Health export.xml importer (SPEC §6.1). Never loads the file into memory."""
+"""Streaming Apple Health export.xml importer (PROTOTYPE1_SPEC §6.1). Never loads the file into memory."""
 from __future__ import annotations
 
 import logging

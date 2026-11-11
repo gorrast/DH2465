@@ -1,4 +1,4 @@
-"""End-to-end acceptance: generate -> Engine -> report, for every persona (SPEC §10)."""
+"""End-to-end acceptance: generate -> Engine -> report, for every persona (PROTOTYPE1_SPEC §10)."""
 import json
 import time
 import unittest

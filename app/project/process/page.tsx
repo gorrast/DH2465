@@ -12,10 +12,10 @@ const REPORT = FINAL_REPORT
 
 const STAGES = [
   {
-    title: 'First prototype',
+    title: 'Prototype 1',
     text: [
-      'We started from a gap in wearables: they report a sleep score but not the reason behind it, because the reason usually sits in the calendar. Without shared watch data yet, the first prototype simulates a person whose calendar, location history and watch data are generated from a known causal model.',
-      'That let us build and check the core ideas against an answer key: a morning report with the likely causes of last night\'s score, a replay of the evening, reality checks when the calendar and the body disagree, and weekly patterns.',
+      'We started from a gap in wearables: they report a sleep score but not the reason behind it. The first prototype was a web demo that tested the product logic before any calendar or wearable was connected. Three simulated personas, Alex, Sam and Robin, each had a generated calendar, location history, minute-level heart rate, sleep and recovery data, so the statistical engine could be checked against causes we had planted ourselves.',
+      'It had a tab for each idea: a morning report with up to four likely causes and a suggested calendar change, a replay of the day, a weekly view, reality checks, a what-if planner, data and privacy, and a look under the hood of the model. Three testers at a legal-tech scale-up found it cluttered and asked for fewer tabs.',
     ],
     shots: [
       { src: '/project/morning-reveal.png', alt: 'Morning report with three likely causes' },
@@ -24,21 +24,13 @@ const STAGES = [
     ],
   },
   {
-    title: 'Second prototype',
+    title: 'Prototype 2',
     text: [
-      'We rebuilt the prototype as a web app with accounts and moved from simulated to real data: a companion phone app that syncs health and screen-time data, Google Calendar, Apple Health and Google Takeout imports, and media services such as Spotify, Netflix, YouTube and Steam.',
-      'Daily and weekly reports are now written by a language model from statistics the engine has already computed, so it narrates measured patterns instead of inventing them.',
-    ],
-    shots: [],
-  },
-  {
-    title: 'Final prototype',
-    text: [
-      'The final prototype focuses on clarity. A new visual direction, "After Hours", puts the sleep score and one suggestion first and keeps the details a click away. Navigation went down to five tabs: Daily and Weekly reports, connecting data, the account, and data and privacy.',
-      'We added check-ins for coffee and alcohol, which the calendar cannot see, and a shared demo account so anyone can try the app without signing up.',
+      'The second prototype runs on real data. An Android app syncs health and screen-time data, Google Calendar connects through a read-only login, Apple Health comes in as an export, and media history comes from Spotify, Netflix and YouTube exports and synced Last.fm and Steam accounts. Coffee and alcohol check-ins cover what the calendar cannot see.',
+      'The tabs were cut down to a daily report, a weekly report and connecting your data, plus your account and data and privacy, in a navy and cream design. The reports are written by a language model from statistics the engine has already computed. Nine testers tried it on their own data, and their wish to compare with colleagues led to a sixth tab: Social, a demo of opt-in leaderboards and challenges.',
     ],
     shots: [
-      { src: '/project/daily.jpg', alt: 'The Daily view in the After Hours design on desktop' },
+      { src: '/project/daily.jpg', alt: 'The daily report with last night\'s sleep score' },
       { src: '/project/weekly-patterns.jpg', alt: 'Recurring patterns ranked by their effect on sleep' },
       { src: '/project/weekly-report.jpg', alt: 'The weekly report' },
     ],

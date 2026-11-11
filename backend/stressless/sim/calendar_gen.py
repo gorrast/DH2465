@@ -1,4 +1,4 @@
-"""Calendar generator for the digital twin (SPEC §5.2).
+"""Calendar generator for the digital twin (PROTOTYPE1_SPEC §5.2).
 
 Produces ten weeks of realistic events for a persona plus attendance ground truth. Titles and
 venues are fictional. ``CalendarEvent.attended`` is always left ``None``; the truth lives in

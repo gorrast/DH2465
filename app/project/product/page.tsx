@@ -15,7 +15,7 @@ const MEDIA = [
 const SOURCES: { icon: string; title: string; text: string; brands?: typeof MEDIA }[] = [
   { icon: 'calendar', title: 'Calendar', text: 'what you did' },
   { icon: 'watch', title: 'Watch', text: 'sleep, heart rate, HRV, steps' },
-  { icon: 'map', title: 'Location', text: 'where you were' },
+  { icon: 'map', title: 'Location [planned]', text: 'where you were' },
   { icon: 'screen', title: 'Phone usage', text: 'when you reached for your phone' },
   { icon: 'music', title: 'Media', text: 'what you play and watch', brands: MEDIA },
 ];
@@ -29,7 +29,8 @@ const FEATURES = [
   { title: 'Weekly report', text: 'Patterns that repeat across weeks, such as how meeting-heavy days or late workouts affect the next night, ranked by effect.' },
   { title: 'Reality checks', text: 'When the calendar and your location or heart rate disagree, StressLess asks: "Did you actually do this?" Your answer updates the patterns.' },
   { title: 'Fun statistics', text: 'Playful, non-medical correlations with your music, shows, videos and games.' },
-  { title: 'Connect your data', text: 'Apple Health through the companion app, Google Calendar, Google Takeout, and media services.' },
+  { title: 'Social', text: 'Opt in to compare sleep, phone use and movement with friends or colleagues, measured against each person\'s own baseline.' },
+  { title: 'Connect your data', text: 'Apple Health, Google Calendar, Google Takeout, and media services.' },
   { title: 'Data and privacy', text: 'See what is connected and what is read, and delete everything with one action.' },
 ];
 

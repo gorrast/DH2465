@@ -1,4 +1,4 @@
-"""Connector base classes and shared parsing/classification helpers (SPEC §6.1)."""
+"""Connector base classes and shared parsing/classification helpers (PROTOTYPE1_SPEC §6.1)."""
 from __future__ import annotations
 
 import abc

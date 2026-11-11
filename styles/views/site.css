@@ -365,38 +365,84 @@ a.site-card:hover {
 }
 .site-team {
   list-style: none;
-  margin: 32px 0 0;
+  margin: 48px 0 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  max-width: 420px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 32px;
 }
 .site-member {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 16px;
-  padding: 12px 16px;
-  border-radius: 14px;
-  background: var(--card);
-  border: 1px solid var(--hairline);
+  gap: 20px;
+  min-width: 0;
+  text-align: center;
 }
 .site-member-avatar {
-  flex: none;
+  position: relative;
+  isolation: isolate;
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: var(--interactive);
-  color: var(--interactive-ink);
+  width: max(0px, calc(min(85%, 280px) - 38px));
+  aspect-ratio: 1;
+  overflow: hidden;
+  color: #172b4d;
   font-weight: 600;
-  font-size: 14px;
+  font-size: clamp(40px, 5vw, 72px);
   letter-spacing: 0.02em;
 }
-.site-member-name {
+.site-member-avatar::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 22% 0 0;
+  background: linear-gradient(155deg, var(--portrait-background), var(--portrait-background-end));
+}
+.site-member-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center bottom;
+  transform: translateY(3px) scale(1.12);
+  transform-origin: center bottom;
+}
+.site-member[data-portrait^="nima-"] .site-member-avatar img {
+  transform: none;
+}
+.site-member[data-portrait^="hugo-ankarcrona"] .site-member-avatar img {
+  transform: translateY(3px) scale(1.04);
+}
+/* This supplied cutout has extra transparent space above and to its left. */
+.site-member[data-portrait^="knut-"] .site-member-avatar img {
+  transform: translateX(-34%) scale(1.48);
+}
+.site-member-caption {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.site-member-title {
   font-size: 18px;
+  line-height: 1.4;
+  color: var(--ink-secondary);
+}
+.site-member-name {
+  font-size: clamp(24px, 2.5vw, 32px);
+  line-height: 1.25;
   color: var(--ink-primary);
+  overflow-wrap: anywhere;
+}
+@media (max-width: 900px) {
+  .site-team {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px;
+  }
+}
+@media (max-width: 600px) {
+  .site-team {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .site-accent {
   color: var(--accent);

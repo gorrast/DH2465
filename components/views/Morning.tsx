@@ -71,6 +71,7 @@ function DailyReportPrompt({
     <section
       className="ah-report-prompt"
       id="daily-report-prompt"
+      data-tour="generate"
       aria-labelledby={id + "-title"}
       onPointerOver={(event) => {
         if (
@@ -940,6 +941,7 @@ export function MorningView({
       >
         <section
           id="reality-check"
+          data-tour="reality"
           className="daily-reality-check"
           aria-label="Reality check"
         >
@@ -948,6 +950,7 @@ export function MorningView({
         {!veiled && reportSuggestion ? (
           <section
             className="daily-protect-space"
+            data-tour="tonight"
             aria-labelledby="protect-space-title"
           >
             <header className="view-head">
@@ -967,6 +970,7 @@ export function MorningView({
         ) : !veiled ? (
           <section
             className="daily-protect-space"
+            data-tour="tonight"
             aria-labelledby="protect-space-title"
           >
             <header className="view-head">

@@ -128,6 +128,7 @@ export function WeeklyWrittenReport({
   return (
     <section
       data-page-section="Weekly report"
+      data-tour="weekly-report"
       ref={section}
       className="weekly-written-report written-report"
       tabIndex={-1}

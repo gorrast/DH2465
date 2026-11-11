@@ -152,7 +152,7 @@ export function WeekView({ end: endParam }: { end?: string }) {
         </WeeklyReveal>
 
       </>}
-      <section data-page-section="Your recurring patterns" id="weekly-patterns" className="weekly-patterns" aria-labelledby="weekly-patterns-title">
+      <section data-page-section="Your recurring patterns" data-tour="patterns" id="weekly-patterns" className="weekly-patterns" aria-labelledby="weekly-patterns-title">
         <header className="weekly-section-heading"><div><span className="eyebrow">Find what works for you</span><h2 id="weekly-patterns-title">Your recurring patterns</h2></div><p>Explore patterns by activity and compare<br />their effect on your sleep.</p></header>
         <HabitsView />
       </section>

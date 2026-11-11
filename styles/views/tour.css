@@ -1,54 +1,221 @@
-.tour-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  pointer-events: none;
+/* Presenter tour (components/tour/Tour.tsx): a scrim with a spotlight cut out of it, and one card that glides
+   between steps. Positions are set with transforms from the component; this file only styles them. */
+:root {
+  --tour-scrim: rgba(6, 9, 22, 0.66);
+  --tour-ring: rgb(255 255 255 / 0.9);
 }
+:root[data-theme="light"] {
+  --tour-scrim: rgba(30, 38, 34, 0.5);
+  --tour-ring: rgb(255 255 255 / 0.95);
+}
+
+/* keep anchors clear of the sticky top bar when the tour scrolls to them */
+[data-tour] {
+  scroll-margin-top: 96px;
+  scroll-margin-bottom: 24px;
+}
+
 .tour-spot {
   position: fixed;
-  z-index: 61;
-  border-radius: 16px;
-  box-shadow:
-    0 0 0 9999px rgba(8, 10, 28, 0.62),
-    0 0 0 3px var(--accent);
+  left: 0;
+  top: 0;
+  z-index: 60;
+  border-radius: 18px;
   pointer-events: none;
-  transition: all 0.3s ease;
+  box-shadow:
+    0 0 0 2px var(--tour-ring),
+    0 0 0 8px rgb(255 255 255 / 0.08),
+    0 0 0 200vmax var(--tour-scrim);
+  animation: tour-in 0.4s ease both;
 }
-.tour-spot.nospot {
-  left: 50%;
-  top: 50%;
-  width: 0;
-  height: 0;
-  box-shadow: 0 0 0 9999px rgba(8, 10, 28, 0.62);
+.tour-spot.is-empty {
+  box-shadow: 0 0 0 200vmax var(--tour-scrim);
 }
+
 .tour-card {
   position: fixed;
+  left: 0;
+  top: 0;
   z-index: 62;
-  width: 420px;
+  width: 400px;
   max-width: calc(100vw - 32px);
+  padding: 22px 24px 18px;
+  border-radius: 20px;
+  background: var(--card);
+  border: 1px solid var(--hairline);
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.04) inset,
+    0 24px 60px -12px rgb(0 0 0 / 0.45),
+    0 4px 14px rgb(0 0 0 / 0.18);
+  color: var(--ink-primary);
 }
+.tour-card.is-opener {
+  width: 520px;
+  padding: 32px 32px 24px;
+  text-align: left;
+}
+
+.tour-mark {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 20px;
+  border-radius: 14px;
+  color: var(--accent-ink);
+  background: var(--accent);
+  box-shadow: 0 8px 24px -6px var(--accent);
+}
+
+.tour-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-right: 28px;
+  margin-bottom: 10px;
+}
+.tour-card.is-opener .tour-meta {
+  padding-right: 0;
+}
+.tour-chapter {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.tour-count {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-muted);
+}
+
 .tour-card h3 {
-  font-size: 20px;
-  margin: 4px 0 8px;
+  margin: 0 0 8px;
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+.tour-card.is-opener h3 {
+  font-size: 34px;
+  margin-bottom: 12px;
 }
 .tour-card p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.55;
   color: var(--ink-secondary);
+  text-wrap: pretty;
 }
-.tour-dots {
+.tour-card.is-opener p {
+  font-size: 16px;
+}
+
+.tour-progress {
   display: flex;
-  gap: 5px;
-  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
 }
-.tour-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--card-3);
+.tour-progress-chapter {
+  display: flex;
+  flex: 1;
+  gap: 3px;
 }
-.tour-dot.on {
+.tour-progress-chapter:first-child {
+  flex: 2;
+}
+.tour-progress-step {
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--hairline);
+  transition: background-color 0.35s ease;
+}
+.tour-progress-step.is-done {
   background: var(--accent);
-  transform: scale(1.3);
 }
-.tour-dot.done {
-  background: var(--ink-muted);
+
+.tour-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 18px;
+}
+.tour-card.is-opener .tour-actions {
+  margin-top: 28px;
+}
+.tour-buttons {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.tour-keys {
+  font-size: 12px;
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+.tour-keys kbd {
+  margin-right: 2px;
+}
+
+.tour-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+.tour-close:hover {
+  background: var(--hairline);
+  color: var(--ink-primary);
+}
+.tour-close:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+@keyframes tour-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (max-width: 639px) {
+  .tour-card,
+  .tour-card.is-opener {
+    width: calc(100vw - 32px);
+    padding: 18px 18px 14px;
+  }
+  .tour-card h3 {
+    font-size: 21px;
+  }
+  .tour-card.is-opener h3 {
+    font-size: 27px;
+  }
+  .tour-card p {
+    font-size: 14px;
+  }
+  .tour-keys {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tour-spot {
+    animation: none;
+  }
 }

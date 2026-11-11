@@ -407,8 +407,8 @@ a.site-card:hover {
   transform: translateY(3px) scale(1.12);
   transform-origin: center bottom;
 }
-.site-member[data-portrait^="nima-"] .site-member-avatar img {
-  transform: none;
+.site-member[data-portrait="Namnlös_design-removebg-preview.png"] .site-member-avatar img {
+  transform: translateY(3px) scale(1.03);
 }
 .site-member[data-portrait^="hugo-ankarcrona"] .site-member-avatar img {
   transform: translateY(3px) scale(1.04);

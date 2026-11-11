@@ -16,8 +16,8 @@ const TEAM = [
   },
   {
     name: "Nima Tehranchi",
-    title: "Chief of Dentistry",
-    photo: "nima-dentist-nobg.png",
+    title: "Human Resources Responsible",
+    photo: "Namnlös_design-removebg-preview.png",
     backdrop: "#ffcc00",
     backdropEnd: "#ff9f00",
   },
@@ -70,10 +70,12 @@ export default function TeamPage() {
               key={name}
               className="site-member"
               data-portrait={photo}
-              style={{
-                "--portrait-background": backdrop,
-                "--portrait-background-end": backdropEnd,
-              } as CSSProperties}
+              style={
+                {
+                  "--portrait-background": backdrop,
+                  "--portrait-background-end": backdropEnd,
+                } as CSSProperties
+              }
             >
               <span className="site-member-avatar" aria-hidden="true">
                 {hasPhoto ? (

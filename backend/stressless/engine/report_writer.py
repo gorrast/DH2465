@@ -37,7 +37,7 @@ going with better sleep).
 - days: the day before (daily) or each day of the week (weekly), with tags describing what happened.
 - metrics: measured values next to the person's usual (baseline). Context only: the app's pages already show them \
 (sleep score, HRV, resting heart rate and the rest), so a metric is never a finding of its own.
-- suggestions: ready-made suggestions, best first.
+- suggestions: ready-made suggestions, best first, on things the person has control over to implement.
 - notes: gaps and caveats that must be respected.
 - calendar: every event in the person's calendar, with all its fields (title, start, end, type, location_hint, \
 attendees, recurring_key, source, attended, notes, id).

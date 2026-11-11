@@ -1,4 +1,4 @@
-"""Concrete, calendar-ready suggestions derived from causes and habits (SPEC §7.7)."""
+"""Concrete, calendar-ready suggestions derived from causes and habits (PROTOTYPE1_SPEC §7.7)."""
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone

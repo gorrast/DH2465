@@ -1,4 +1,4 @@
-"""Simulator tests: determinism, ranges, showcase guarantees, truth bookkeeping (SPEC §10)."""
+"""Simulator tests: determinism, ranges, showcase guarantees, truth bookkeeping (PROTOTYPE1_SPEC §10)."""
 import json
 import statistics
 import unittest

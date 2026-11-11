@@ -1,4 +1,4 @@
-"""FastAPI app: the JSON API (SPEC §8.2). Same routes and payloads as the original localhost server, per signed-in user.
+"""FastAPI app: the JSON API, per signed-in user.
 
 Run locally with ``uvicorn api.index:app --port 8000``; on Vercel ``api/index.py`` serves it under /api.
 """

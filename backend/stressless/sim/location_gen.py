@@ -1,4 +1,4 @@
-"""Google-Maps-like location history for the digital twin (SPEC §5.3)."""
+"""Google-Maps-like location history for the digital twin (PROTOTYPE1_SPEC §5.3)."""
 from __future__ import annotations
 
 import random

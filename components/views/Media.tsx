@@ -1990,7 +1990,7 @@ export function MediaView() {
         <p>
           Your collection, at a glance.
           <span>
-            Your media records. No AI analysis or health correlations.
+            Your media records.
           </span>
         </p>
       </footer>

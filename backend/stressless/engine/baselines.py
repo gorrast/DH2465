@@ -1,4 +1,4 @@
-"""Personal baselines: robust medians over the person's own recent nights (SPEC §7.2)."""
+"""Personal baselines: robust medians over the person's own recent nights (PROTOTYPE1_SPEC §7.2)."""
 from __future__ import annotations
 
 import math

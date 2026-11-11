@@ -1,4 +1,4 @@
-"""Per-user state behind one interface (SPEC §6.2).
+"""Per-user state behind one interface (PROTOTYPE1_SPEC §6.2).
 
 The dataset itself is never stored: it is regenerated deterministically from the user's profile (persona, seed,
 anchor date). Only the user's own deltas — reality-check answers, events they added, accepted suggestions and cached

@@ -1,5 +1,5 @@
 "use client";
-/* Reality check inbox: ask only when calendar, Maps and the body disagree (SPEC §9.4). */
+/* Reality check inbox: ask only when calendar, Maps and the body disagree (PROTOTYPE1_SPEC §9.4). */
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { api } from "@/lib/api";

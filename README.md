@@ -1,7 +1,5 @@
 # StressLess — DH2465
 
-# StressLess
-
 > Wearables give you a score. They don't tell you why.
 
 Your watch tells you that you slept badly and that your HRV is down. It does not tell you that it happens after
@@ -300,11 +298,6 @@ or proof of stress. Its mean-RHR baseline is different from the recovery cards' 
 “bpm variation” shown in flow/music cards is standard deviation of bpm samples, **not beat-to-beat HRV
 in milliseconds**.
 
-Implementation: [app aggregation](components/views/useAppStatistics.ts),
-[statistics card presentation](components/views/FunStatistics.tsx), and the versioned
-[Supabase SQL functions](supabase/migrations/) (`20261027000002`–`20261027000008`; apply in order so the
-latest function definitions are used).
-
 ## Written reports and Claude
 
 Daily reports describe the preceding night/day. The weekly written report covers the **last complete
@@ -325,6 +318,10 @@ ANTHROPIC_API_KEY=your_api_key
 # STRESSLESS_DAILY_MODEL=your_model_id
 # STRESSLESS_WEEKLY_MODEL=your_model_id
 # STRESSLESS_REPORT_EFFORT=medium
+```
+
+## Architecture
+
 ```
 browser ──► Next.js (app/, components/)     React views, charts, tour; Supabase Auth session in cookies
    │            proxy.ts                    refreshes the session; / → /project; signed-out → /auth/demo
@@ -367,6 +364,7 @@ Requirements: Node.js 20+, [uv](https://docs.astral.sh/uv/) (Python 3.12) and a 
 | `STRESSLESS_ANCHOR` | server | freezes "today" for every account (`YYYY-MM-DD`), for a stable demo or presentation |
 | `ENVIRONMENT` | server | `PROD` on Vercel. Anything else is a dev server, where a stored report can be generated again |
 | `STRESSLESS_REASONER`, `ANTHROPIC_API_KEY` | server | `claude` and a key let Claude write the reports; otherwise rules do. Models: `STRESSLESS_DAILY_MODEL`, `STRESSLESS_WEEKLY_MODEL`; cap on model calls per 24 h: `STRESSLESS_REPORT_DAILY_CAP` |
+| `STRESSLESS_ANONYMIZE_CALENDAR` | server | `true` replaces event titles with generic labels and drops places and notes before the report input reaches Claude. Off by default |
 | `SUPABASE_JWT_SECRET` | server | only for projects on the legacy JWT secret |
 | `LASTFM_API_KEY`, `TMDB_READ_ACCESS_TOKEN`, `STEAM_*`, `GOOGLE_*`, `APP_URL` | server | optional integrations, below |
 
@@ -383,9 +381,10 @@ above for Production and Preview; `SUPABASE_SERVICE_ROLE_KEY` is used by both th
 | Project (`/project`) | The course project: process, product and team, and the way into the demo |
 | Daily Report (`/daily`) | Last night's sleep score, stages and recovery markers (HRV, resting heart rate), similar-day patterns, the day's heart rate against the calendar, a reality check, one change for tonight, and the daily report: the links behind last night |
 | Weekly Report (`/weekly`) | The weekly report, your week in numbers (apps, events and songs by heart rate, flow, meeting hangover), the sleep calendar, sleep by meeting load, and your recurring patterns |
+| Social (`/social`) | Opt-in boards and a season standing that compare sleep, phone use and movement, partly against each person's own baseline, plus weekly challenges |
 | Connect Your Data (`/connect`) | Spotify, Netflix, YouTube and Steam histories, imports and Last.fm/Steam sync |
 | Data and Privacy (`/data`) | What is connected, which data is read and why, deleting everything |
-| My Account (`/account`) | Who is signed in, theme, leaving the demo |
+| My Account (`/account`) | Who is signed in, theme, sign-out |
 
 Press `t` for the presenter tour; `d` switches light/dark theme, `?` lists the keys.
 
@@ -413,9 +412,8 @@ features with leave-one-out validation) are shown on the Daily page as similar-d
 
 On an account of your own (not on the read-only demo), Connect Your Data imports and syncs media history.
 
-The Media tab has separate Spotify, Netflix and Steam sections, with scrollable histories, library browsing,
-and the Morning view's typography and section reveals. It displays imported data without requesting media
-insights, statistical correlations, or Claude analysis.
+Connect Your Data has separate Spotify, Netflix, YouTube and Steam sections, with scrollable histories and
+library browsing.
 
 - **Spotify:** import music/podcast history JSON, including Extended Streaming History. Taste Profile,
   Your Library and Wrapped summaries are also supported. Select history files together.
@@ -495,7 +493,7 @@ Stored listening records can subsequently contribute to analysis.
 
 The configured Steam library can only be synced by `STEAM_SYNC_USER_ID`. The API key is sent to Steam in
 the `x-webapi-key` header, never returned to the browser or persisted in `media_documents`. No service-role
-key, Claude key, statistical-engine connection or scheduler is required. This is a personal server-side
+key, Claude key or scheduler is required. This is a personal server-side
 configuration; other users can continue to import their own files. Both `media_events` and `media_documents`
 remain in use. Steam sync updates its snapshot in `media_documents` without changing Spotify or Netflix data.
 
@@ -524,12 +522,6 @@ queries are sent to TMDB, without viewing dates or profile filenames. Requests a
 on the server. **Fetch missing posters** resumes interrupted work; no metadata lookup starts just by opening
 the page. Network/API failures do not discard imported history. TMDB attribution is displayed under Netflix.
 
-The original health and calendar importers already exist and are tested
-(`backend/stressless/connectors/`): Apple Health (Settings → Health → Export All Health Data), Google
-Calendar (Settings → Import & export → Export) and Google Maps (Google Takeout → Location History, both the
-monthly Semantic Location History files and the newer `Timeline.json`). Note that Vercel limits request
-bodies to 4.5 MB, so large Apple Health exports will need direct-to-storage uploads.
-
 ### YouTube watch-history import
 
 YouTube imports default to the last 90 days, with a choice of 30 days or all history. Every choice is capped
@@ -551,7 +543,7 @@ entries are deduplicated, while repeat views at different timestamps are retaine
 The backend accepts up to 32 MB total for YouTube JSON (other sources remain 4 MB). Your hosting provider
 may enforce a smaller request-body limit; if so, split a large JSON array into valid smaller arrays and
 select the parts together within that deployment's limit. Larger histories exceeding the deployment's
-combined limit will need a future chunked-upload flow. No AI or statistical analysis is connected.
+combined limit will need a future chunked-upload flow.
 
 ## Scripts
 

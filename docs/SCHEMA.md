@@ -13,9 +13,8 @@ web app never queries tables directly.
 | Topic | Decision |
 |---|---|
 | Scope | The whole app (Morning, Week, Replay, Reality, Planner, Habits, reports) runs on real data. The simulated personas stay for development only, behind an environment flag on the API. |
-| Analysis | The per-night engine plus LLM-written reports. No per-event before/during/after statistics. |
-| Sources now | Google Calendar (OAuth, server pull), Health Connect (Android app) and HealthKit (iOS app). |
-| Sources later | Spotify/Netflix, screen time and manual check-ins, added without schema redesign (see [Adding a source](#adding-a-source)). |
+| Analysis | The per-night engine plus LLM-written reports. |
+| Sources | Google Calendar (OAuth, server pull), Health Connect and screen time (Android app), Apple Health and Screen Time exports (`tools/apple-data`), media imports and syncs, and check-ins. |
 | Out of scope | Location (raw pings and visits). Very sensitive, and visits need clustering plus a place lookup. |
 | Ingestion | The phone app posts raw records to FastAPI with the user's Supabase access token (Supabase login inside the app). The API validates, deduplicates, stores and summarises. |
 | Writes | Only the API writes data tables, using the service role. Users can read their own rows through RLS, as a safety net. |
@@ -25,7 +24,7 @@ web app never queries tables directly.
 | Overlapping apps | Picked automatically per data type. The user can pin a preferred app (`profiles.preferred_origins`). |
 | Devices | One connection per phone install. One calendar source per user, enforced in code. |
 | Consent | One timestamp, `profiles.consented_at`, set from a sign-up checkbox. While it is null, the API accepts no uploads and makes no Claude calls. |
-| Deletion | "Delete account" removes the auth user, and every table cascades, reports included. Disconnecting Google removes its events, as already built. |
+| Deletion | "Delete all data" (`stressless_clear_state`) removes every row the user has, reports and connections included. Disconnecting Google removes its events. |
 | Suggestions | Stored in StressLess only, as a `calendar_events` row with provider `stressless`, plus the .ics download. Google stays read-only. |
 | Sync tokens | Health Connect changes tokens and HealthKit anchors stay on the phone. A reinstall re-reads everything, and the raw unique key makes that harmless. |
 | Sleep score | Always computed by StressLess when data arrives (`score_source`, `algorithm_version`). Neither platform exposes one. |
@@ -193,26 +192,8 @@ Example: Spotify listening time.
 Screen time and manual check-ins follow the same recipe. Check-ins use source `manual` and the app's own record ids.
 A view that needs time spans (a song at 23:40) reads `source_records` for that day.
 
-## Code changes this schema needs (later sessions)
-
-- `server/calendar.py`:
-  - write `connection_id` and `recurring_key` (Google `recurringEventId`)
-  - write a `calendar_event` stream row on sync
-  - mirror the changes in `tests/test_calendar.py`
-- An ingest endpoint for the phone app, with the origin rules and the summarisers.
-- A store interface for the real-data `Dataset`, alongside the report store methods.
-- An account-deletion endpoint: revoke Google tokens, then delete the auth user through the Admin API.
-- The consent checkbox and the `time_zone` setting on the web app.
-- Phone app:
-  - Supabase login and the upload calls
-  - raw sleep and workout records with stages and heart-rate timestamps
-  - the extra Health Connect permissions (HRV, resting HR, respiratory rate, SpO2, history, background)
-
 ## Open items
 
-- Whether the Reality view stays, using the watch only, now that location is out.
-- Per-event analysis, if the collaborator wants it back. It can be computed from `heart_rate_days` with no new
-  table.
 - Dropping `user_events` and `narratives` together with the simulated dataset, and the future of the media tables.
 
 ## Testing and applying
@@ -236,4 +217,4 @@ The checks cover:
 - deleting an account cascades everywhere
 
 The migrations are idempotent. Applying them for real means running the migration files in order in the SQL editor,
-or having the project owner do it. That step is separate and has not been done.
+or having the project owner do it.

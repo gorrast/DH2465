@@ -1,4 +1,4 @@
-"""Causal physiology model of the digital twin (SPEC §5.4).
+"""Causal physiology model of the digital twin (PROTOTYPE1_SPEC §5.4).
 
 Given a day's attended events, location visits, hidden factors and pre-drawn noise, produce the
 minute heart rate, activity, the night's sleep and the ground-truth contribution of every factor

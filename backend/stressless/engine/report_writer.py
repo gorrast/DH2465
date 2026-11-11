@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from ..reports import CONTENT_MODELS, DayHighlight, Finding, ReportContent, ReportInput, unknown_evidence
+from . import anonymize
 
 log = logging.getLogger("stressless.engine.report_writer")
 
@@ -37,7 +38,7 @@ going with better sleep).
 - days: the day before (daily) or each day of the week (weekly), with tags describing what happened.
 - metrics: measured values next to the person's usual (baseline). Context only: the app's pages already show them \
 (sleep score, HRV, resting heart rate and the rest), so a metric is never a finding of its own.
-- suggestions: ready-made suggestions, best first.
+- suggestions: ready-made suggestions, best first, on things the person has control over to implement.
 - notes: gaps and caveats that must be respected.
 - calendar: every event in the person's calendar, with all its fields (title, start, end, type, location_hint, \
 attendees, recurring_key, source, attended, notes, id).
@@ -124,13 +125,15 @@ def model_for(kind: str) -> str:
 
 
 def claude_enabled() -> bool:
-    """Same switch as the morning narrative: STRESSLESS_REASONER=claude and the anthropic package installed."""
+    """Same switch as the reasoner: STRESSLESS_REASONER=claude and the anthropic package installed."""
     from .reasoning import reasoning_mode
     return reasoning_mode() == "claude"
 
 
 def build_request(report_input: ReportInput, model: Optional[str] = None) -> Dict[str, Any]:
     """Keyword arguments for ``messages.parse``; also used by the try-out tool to show what is sent."""
+    if anonymize.enabled():
+        report_input = anonymize.anonymize(report_input)
     kind = report_input.kind
     model = model or model_for(kind)
     req: Dict[str, Any] = {

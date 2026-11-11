@@ -1,7 +1,6 @@
 # Apple data importer
 
-Copy this folder into your repo as `tools/apple-data/`. Run commands from
-inside it. Requires **Python 3.10+**, with no extra packages.
+Run commands from inside `tools/apple-data/`. Requires **Python 3.10+**, with no extra packages.
 
 ## Extract
 

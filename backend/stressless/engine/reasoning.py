@@ -1,4 +1,4 @@
-"""The Morning view's narrative, written by rules on the server (SPEC §7.9).
+"""The Morning view's narrative, written by rules on the server (PROTOTYPE1_SPEC §7.9).
 
 It used to have an optional Claude writer (Opus 5, one call per user per day); the generated daily and weekly
 reports replaced it, so the narrative never calls a model. ``reasoning_mode`` is still the switch for those reports.

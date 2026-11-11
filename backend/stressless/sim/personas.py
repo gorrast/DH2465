@@ -1,4 +1,4 @@
-"""The three demo personas and their design sensitivities (SPEC §5.1).
+"""The three demo personas and their design sensitivities (PROTOTYPE1_SPEC §5.1).
 
 ``Persona.sensitivities`` are *nominal* points-per-unit effects used only to scale the causal
 mechanisms in ``physiology.py`` (``ratio = sensitivities[k] / REF_TABLE[k]``). The realised effects

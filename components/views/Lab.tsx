@@ -1,5 +1,5 @@
 "use client";
-/* Under the hood: pipeline, model card, validation against planted truth, cold start, open challenges (SPEC §9.4). */
+/* Under the hood: pipeline, model card, validation against planted truth, cold start, open challenges (PROTOTYPE1_SPEC §9.4). */
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { api } from "@/lib/api";

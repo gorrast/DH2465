@@ -1,4 +1,4 @@
-"""What-if: modify a day's events and predict the night's sleep score (SPEC §7.8)."""
+"""What-if: modify a day's events and predict the night's sleep score (PROTOTYPE1_SPEC §7.8)."""
 from __future__ import annotations
 
 import copy

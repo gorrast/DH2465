@@ -1,4 +1,4 @@
-"""Reality checks: ask only when calendar, location and body disagree (SPEC §7.4).
+"""Reality checks: ask only when calendar, location and body disagree (PROTOTYPE1_SPEC §7.4).
 
 Phone data has no location visits, so a booked workout is checked against the phone's own records instead
 (``_booked_workout_real``): a logged session overlapping the booking, or a heart rate clearly above the person's usual

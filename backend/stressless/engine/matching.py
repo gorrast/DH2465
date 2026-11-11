@@ -1,4 +1,4 @@
-"""Match calendar events to the body's response: heart rate windows against a personal norm (SPEC §7.3)."""
+"""Match calendar events to the body's response: heart rate windows against a personal norm (PROTOTYPE1_SPEC §7.3)."""
 from __future__ import annotations
 
 import math

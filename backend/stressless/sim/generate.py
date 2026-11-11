@@ -1,4 +1,4 @@
-"""Dataset orchestration for the digital twin (SPEC §5.5, §5.6).
+"""Dataset orchestration for the digital twin (PROTOTYPE1_SPEC §5.5, §5.6).
 
 Order: calendar -> showcase overrides -> coverage fix-up -> location -> physiology day by day ->
 realised truth tables. Deterministic for (persona, seed, anchor).
@@ -81,7 +81,7 @@ def _shell(persona: Persona, start: date, end: date, today: date) -> Dataset:
 
 
 # --------------------------------------------------------------------------- #
-# showcase (SPEC §5.6)
+# showcase (PROTOTYPE1_SPEC §5.6)
 # --------------------------------------------------------------------------- #
 def apply_showcase(book: Book, day_kind: Dict[date, str], start: date, end: date, today: date, rng: random.Random) -> Dict[str, Any]:
     key = book.p.key
@@ -167,7 +167,7 @@ def apply_showcase(book: Book, day_kind: Dict[date, str], start: date, end: date
 
 
 # --------------------------------------------------------------------------- #
-# coverage fix-up (SPEC §5.6 f)
+# coverage fix-up (PROTOTYPE1_SPEC §5.6 f)
 # --------------------------------------------------------------------------- #
 def _active_counts(book: Book, shell: Dataset, start: date, end: date) -> Dict[str, int]:
     counts = {k: 0 for k in CALENDAR_KEYS}

@@ -16,7 +16,7 @@ const TEAM = [
   },
   {
     name: "Nima Tehranchi",
-    title: "Human Resources Responsible",
+    title: "Chief AI Officer",
     photo: "Namnlös_design-removebg-preview.png",
     backdrop: "#ffcc00",
     backdropEnd: "#ff9f00",
